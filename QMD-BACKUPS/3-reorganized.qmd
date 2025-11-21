@@ -1,0 +1,342 @@
+---
+title: "Pipeline de Data Wrangling para Conversas do WhatsApp"
+author: "Marlon"
+date: "`r Sys.Date()`"
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  echo: false
+  warning: false
+  message: false
+  fig-show: hold
+editor: visual
+---
+
+# Introdução
+
+Este projeto tem como objetivo transformar um arquivo bruto de exportação do WhatsApp (`raw-data.txt`) em um conjunto de dados estruturado, analisável e reprodutível. Neste relatório, documentarei cada etapa do processo de data wrangling, desde a leitura inicial do arquivo até a criação do DataFrame final.
+
+![](output/2025-11-21%2010.35.55.gif)
+
+> *Amostra dos dados brutos do WhatsApp.*
+
+A exportação desta conversa que vamos usar neste estudo de caso contém \~90K linhas e tem um tamanho de \~5MB, o que podemos considerar um arquivo levemente pesado. Após uma análise exploratória dos dados, vamos entender a estrutura como o WhatsApp nos entrega os registros.
+
+# Elementos Estruturais Básicos
+
+Antes de mergulharmos nos diferentes tipos de mensagens, é importante entender os elementos estruturais que compõem cada linha do arquivo exportado.
+
+## Timestamps
+
+Todas as mensagens iniciam com um timestamp no formato `[DD/MM/YY, HH:MM:SS]`.
+
+::: callout-note
+💡 O formato de data e hora **pode variar** dependendo das configurações regionais do dispositivo.
+:::
+
+**Exemplo:**
+
+```         
+[12/05/23, 14:23:45] Marlon: Oi, tudo bem?
+```
+
+## Remetentes
+
+Após o timestamp, vem o nome do remetente seguido de dois pontos (`:`).
+
+::: callout-note
+💡 Alguns remetentes podem ter nomes que incluem **caracteres especiais** ou **emojis** (ex.: `Lê 🖤`).
+:::
+
+**Exemplo:**
+
+```         
+[12/05/23, 14:23:45] Lê 🖤: Olá!
+```
+
+## Caractere Invisível (`[U+200E]`)
+
+O caractere invisível `[U+200E]` (Left-to-Right Mark) aparece com frequência nos dados exportados. Esse caractere é usado para controle de direção do texto, especialmente em mensagens que misturam idiomas com direções diferentes (como inglês e árabe).
+
+**Padrões de ocorrência:**
+
+-   Aparece no início de linhas de mídia anexada ou omitida
+-   Aparece após o remetente em mensagens editadas ou deletadas
+-   Aparece em mensagens de chamadas e erros
+
+**Exemplos:**
+
+```         
+‎[19/10/24, 13:53:25] Marlon: ‎image omitted
+[12/05/23, 14:23:45] Marlon: ‎This message was deleted
+```
+
+## Linhas de Continuação
+
+Mensagens longas podem se estender por várias linhas. **Linhas que não começam com um timestamp** são continuações da mensagem anterior.
+
+**Exemplo:**
+
+```         
+[24/10/24, 09:21:38] Marlon: Se tiver muito absurdo dá pra vc ver se não tem sua trupe daí também que tope ir, sla 
+Mais tarde te dou um salve dnv
+```
+
+# Taxonomia de Mensagens
+
+Agora que conhecemos os elementos estruturais básicos, vamos explorar os diferentes tipos de mensagens presentes no arquivo.
+
+## Mensagens de Texto
+
+As mensagens de texto são o tipo mais comum e podem apresentar diversas combinações de conteúdo.
+
+### Texto Puro
+
+Mensagens contendo apenas texto simples, sem emojis ou links.
+
+**Exemplo:**
+
+```         
+[12/05/23, 14:23:45] Lê 🖤: Oi, tudo bem?
+```
+
+### Texto com Emojis
+
+Mensagens podem conter emojis sozinhos ou combinados com texto.
+
+**Exemplos:**
+
+```         
+[12/05/23, 14:23:45] Lê 🖤: Olha que fofo esse cachorro! 🐶❤
+[12/05/23, 14:23:45] Marlon: 😂🤣😍
+```
+
+### Texto com Links
+
+Links podem aparecer sozinhos ou incorporados em mensagens de texto.
+
+**Exemplos:**
+
+```         
+[12/05/23, 14:23:45] Lê 🖤: https://another-example.com
+[12/05/23, 14:23:45] Marlon: Olha esse site incrível: https://example.com
+```
+
+### Sinais com Caracteres (Emoticons)
+
+Representações de expressões usando caracteres ASCII, como `:))`, `:D`, `:P`.
+
+**Exemplos:**
+
+```         
+[21/08/25, 21:37:58] Marlon: :))
+[12/05/23, 14:23:45] Marlon: :P 😂
+```
+
+### Combinações Múltiplas
+
+Mensagens podem combinar texto, emojis, sinais e links simultaneamente.
+
+**Exemplos:**
+
+```         
+[12/05/23, 14:23:45] Lê 🖤: :D Estou tão feliz hoje! 😂
+[12/05/23, 14:23:45] Marlon: :P 😂 Veja isso: https://funny-video.com
+[12/05/23, 14:23:45] Marlon: Confira este vídeo incrível! 😂 https://video-example.com
+```
+
+## Mensagens de Mídia
+
+As mensagens de mídia podem ter sido **omitidas** ou **anexadas** durante o processo de exportação.
+
+### Mídias Omitidas
+
+Quando a exportação não inclui os arquivos de mídia, o WhatsApp indica o tipo de mídia que foi enviado.
+
+::: callout-note
+💡 Todas as mídias omitidas são precedidas pelo caractere invisível `[U+200E]`.
+:::
+
+**Tipos de mídia omitida:**
+
+-   **Áudio:** `‎audio omitted`
+-   **Imagem:** `‎image omitted`
+-   **Vídeo:** `‎video omitted`
+-   **Vídeo Note:** `‎video note omitted`
+-   **Sticker:** `‎sticker omitted`
+-   **GIF:** `‎GIF omitted`
+-   **Documento:** `NOME_ARQUIVO.pdf • ‎42 pages ‎document omitted`
+
+**Exemplos:**
+
+```         
+‎[12/04/22, 15:33:29] Marlon: ‎audio omitted
+‎[12/05/23, 14:23:45] Marlon: ‎sticker omitted
+‎[12/05/23, 14:23:45] Marlon: CARTA IMAGINA JUNTOS DISTRIBUIÇÃO (PJ).pdf • ‎42 pages ‎document omitted
+```
+
+### Mídias Anexadas
+
+Quando a exportação inclui os arquivos de mídia, eles são referenciados com o padrão `<attached: filename.ext>`.
+
+::: callout-note
+💡 Os nomes dos arquivos geralmente seguem o padrão: `NÚMERO-TIPO-DATA-HORA.extensão`
+:::
+
+**Tipos de mídia anexada:**
+
+-   **Áudio:** `<attached: -0000015-AUDIO-2025-08-21-21-31-39.opus>`
+-   **Imagem:** `<attached: 00000001-PHOTO-2025-08-21-22-06-35.jpg>`
+-   **Vídeo:** `<attached: 00001238-VIDEO-2025-09-03-13-50-07.mp4>`
+-   **Sticker:** `<attached: 00000298-STICKER-2025-08-25-09-10-40.webp>`
+
+**Exemplos:**
+
+```         
+‎[03/01/25, 21:09:56] Lê 🖤: ‎<attached: -0000015-AUDIO-2025-08-21-21-31-39.opus>
+‎[03/01/25, 21:09:56] Marlon: ‎<attached: 00000001-PHOTO-2025-08-21-22-06-35.jpg>
+```
+
+### Múltiplas Mídias em Sequência
+
+Quando múltiplas mídias são enviadas de uma vez, a mensagem inicial fica **vazia**, seguida por várias linhas de anexos.
+
+::: callout-important
+Este padrão é crucial para o processamento: mensagens vazias podem indicar o envio de múltiplos anexos.
+:::
+
+**Exemplo:**
+
+```         
+[24/08/25, 16:38:36] Lê 🖤:
+‎[24/08/25, 16:38:37] Lê 🖤: ‎<attached: 00000282-PHOTO-2025-08-24-16-38-38.jpg>
+‎[24/08/25, 16:38:38] Lê 🖤: ‎<attached: 00000283-PHOTO-2025-08-24-16-38-39.jpg>
+‎[24/08/25, 16:38:38] Lê 🖤: ‎<attached: 00000284-PHOTO-2025-08-24-16-38-39.jpg>
+```
+
+### Contatos Anexados
+
+Contatos compartilhados são salvos como arquivos `.vcf`.
+
+**Exemplos:**
+
+```         
+‎[09/12/24, 12:50:13] Marlon: ‎<attached: -0001788-Lu mãe.vcf>
+‎[09/12/24, 12:50:13] Marlon: ‎<attached: -0052176-‎The Plug and 2 other contacts.vcf>
+```
+
+## Mensagens Especiais
+
+Certas mensagens têm características únicas que as diferenciam das mensagens convencionais.
+
+### Mensagens Editadas
+
+Mensagens que foram editadas após o envio são marcadas com `<This message was edited>` no final.
+
+::: callout-note
+💡 O caractere invisível `[U+200E]` aparece **após o remetente** em mensagens editadas.
+:::
+
+**Exemplo:**
+
+```         
+[12/05/23, 14:23:45] Marlon: ‎Sample Text....<This message was edited>
+```
+
+### Mensagens Deletadas
+
+Mensagens deletadas são substituídas pelo texto `This message was deleted`.
+
+**Exemplo:**
+
+```         
+[12/04/22, 15:33:29] Marlon: ‎This message was deleted
+```
+
+### Chamadas de Voz e Vídeo
+
+Chamadas são registradas no histórico com informações sobre o status.
+
+**Tipos de registro:**
+
+-   **Chamada perdida:**
+
+    ```         
+    [12/04/22, 15:33:29] Lê 🖤: ‎Missed voice call. ‎Click to call back
+    ```
+
+-   **Chamada atendida em outro dispositivo:**
+
+    ```         
+    [12/04/22, 15:33:29] Lê 🖤: ‎Voice call. ‎Answered on other device
+    ```
+
+### Erros de Exibição
+
+Algumas mensagens não podem ser exibidas e geram um aviso.
+
+**Exemplo:**
+
+```         
+‎This message can't be displayed here. Please open ‎WhatsApp on your phone to view the message.
+```
+
+# Resumo dos Padrões Identificados
+
+Esta seção consolida todos os padrões encontrados para referência rápida durante o desenvolvimento do pipeline.
+
+## Checklist de Elementos Estruturais
+
+-   [ ] **Timestamps** no formato `[DD/MM/YY, HH:MM:SS]`
+-   [ ] **Remetentes** seguidos de `:`
+-   [ ] **Caracteres especiais e emojis** nos nomes dos remetentes
+-   [ ] **Caractere invisível** `[U+200E]` em diversos contextos
+-   [ ] **Linhas de continuação** sem timestamp
+-   [ ] **Formato regional** de data/hora pode variar
+
+## Checklist de Tipos de Mensagem
+
+### Mensagens de Texto
+
+-   [ ] Texto puro
+-   [ ] Texto com emojis
+-   [ ] Texto com links
+-   [ ] Emoticons (`:))`, `:D`, `:P`)
+-   [ ] Combinações múltiplas (texto + emoji + link)
+
+### Mensagens de Mídia
+
+-   [ ] Áudio omitido/anexado
+-   [ ] Imagem omitida/anexada
+-   [ ] Vídeo omitido/anexado
+-   [ ] Vídeo note omitido
+-   [ ] Sticker omitido/anexado
+-   [ ] GIF omitido
+-   [ ] Documento omitido
+-   [ ] Contatos anexados (`.vcf`)
+-   [ ] Múltiplas mídias em sequência (mensagem vazia seguida de anexos)
+
+### Mensagens Especiais
+
+-   [ ] Mensagens editadas (`<This message was edited>`)
+-   [ ] Mensagens deletadas (`This message was deleted`)
+-   [ ] Chamadas de voz (perdidas/atendidas)
+-   [ ] Chamadas de vídeo
+-   [ ] Erros de exibição de mensagem
+
+## Considerações para o Pipeline
+
+::: callout-tip
+## Pontos de atenção para o processamento
+
+1.  **Nomes de arquivos de mídia** contêm metadados úteis (tipo, data, hora)
+2.  **Mensagens vazias** precedem múltiplos anexos
+3.  **Caractere invisível** tem comportamento diferente entre mídias e mensagens editadas/deletadas
+4.  **Linhas de continuação** precisam ser agregadas à mensagem original
+5.  **Formato de data** pode variar regionalmente - considerar flexibilidade no parser
+:::

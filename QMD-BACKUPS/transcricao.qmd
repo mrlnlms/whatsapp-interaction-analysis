@@ -1,0 +1,284 @@
+Perfeito! Vamos criar um sistema **inteligente** que:
+1. ✅ Verifica se já tem transcrições prontas
+2. ✅ Só processa o que falta
+3. ✅ Exibe resultados mesmo sem processar
+
+---
+
+## 📝 ESTRUTURA DO DOCUMENTO REFATORADO:
+
+```{python}
+#| label: setup
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import os
+
+# Configurações
+INPUT_FILE = Path("output/for_transcription.csv")
+PROGRESS_FILE = Path("output/for_transcription_progress.csv")
+COMPLETE_FILE = Path("output/for_transcription_complete.csv")
+MEDIA_FOLDER = Path("/Users/mosx/Desktop/local-workbench/whats-le/_sources/WhatsAppFiles")
+OUTPUT_FOLDER = Path("output")
+OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+print("📂 CARREGANDO DADOS")
+print("=" * 70)
+
+# Verificar qual arquivo usar (prioridade: complete > progress > original)
+if COMPLETE_FILE.exists():
+    print("✅ Encontrado arquivo COMPLETO! Usando transcrições prontas.")
+    df_transcription = pd.read_csv(COMPLETE_FILE)
+    SKIP_PROCESSING = True
+elif PROGRESS_FILE.exists():
+    print("⚠️  Encontrado arquivo de PROGRESSO. Continuando de onde parou.")
+    df_transcription = pd.read_csv(PROGRESS_FILE)
+    SKIP_PROCESSING = False
+else:
+    print("🆕 Nenhum progresso encontrado. Começando do zero.")
+    df_transcription = pd.read_csv(INPUT_FILE)
+    SKIP_PROCESSING = False
+
+# Garantir que colunas necessárias existem
+if 'error_message' not in df_transcription.columns:
+    df_transcription['error_message'] = None
+
+print(f"\n📊 Status atual:")
+print(f"   Total de arquivos: {len(df_transcription):,}")
+print(f"   ✅ Completos: {(df_transcription['transcription_status'] == 'completed').sum():,}")
+print(f"   ❌ Erros: {(df_transcription['transcription_status'] == 'error').sum():,}")
+print(f"   ⏳ Pendentes: {(df_transcription['transcription_status'] == 'pending').sum():,}")
+print("=" * 70)
+```
+
+---
+
+```{python}
+#| label: setup-groq-api
+#| eval: !expr "!SKIP_PROCESSING"
+
+import os
+
+# Só carregar API se for processar
+try:
+    from groq import Groq
+except ImportError:
+    import subprocess
+    subprocess.check_call(['pip', 'install', 'groq', '--break-system-packages'])
+    from groq import Groq
+
+GROQ_API_KEY = 'REDACTED'
+
+client = Groq(api_key=GROQ_API_KEY)
+print("✅ Groq API configurada!")
+
+# Teste rápido
+try:
+    test = client.chat.completions.create(
+        messages=[{"role": "user", "content": "Diga: API OK"}],
+        model="llama-3.3-70b-versatile",
+    )
+    print(f"✅ Teste bem-sucedido: {test.choices[0].message.content}")
+except Exception as e:
+    print(f"❌ Erro: {e}")
+```
+
+---
+
+```{python}
+#| label: transcription-function
+#| eval: !expr "!SKIP_PROCESSING"
+
+def transcribe_audio(file_path, media_folder):
+    """Transcreve áudio/vídeo usando Groq Whisper"""
+    try:
+        full_path = media_folder / file_path
+        
+        if not full_path.exists():
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': 'Arquivo não encontrado'
+            }
+        
+        # Verificar extensão
+        supported_formats = ['.opus', '.mp3', '.wav', '.mp4', '.m4a', '.webm', '.mpeg', '.mpga']
+        if full_path.suffix.lower() not in supported_formats:
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': f'Formato não suportado: {full_path.suffix}'
+            }
+        
+        # Verificar tamanho (limite: 25MB)
+        file_size_mb = full_path.stat().st_size / (1024 * 1024)
+        if file_size_mb > 25:
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': f'Arquivo muito grande: {file_size_mb:.1f}MB'
+            }
+        
+        # Transcrever
+        with open(full_path, 'rb') as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=(full_path.name, audio_file.read()),
+                model="whisper-large-v3",
+                language="pt",
+                response_format="verbose_json",
+                temperature=0.0
+            )
+        
+        return {
+            'text': transcription.text.strip(),
+            'language': transcription.language,
+            'status': 'completed',
+            'error_message': None
+        }
+    
+    except Exception as e:
+        return {
+            'text': '',
+            'language': None,
+            'status': 'error',
+            'error_message': str(e)
+        }
+
+print("✅ Função de transcrição definida!")
+```
+
+---
+
+```{python}
+#| label: processing-decision
+
+if SKIP_PROCESSING:
+    print("""
+::: {.callout-note icon=true}
+## ⏭️ Processamento Pulado
+
+As transcrições já foram realizadas anteriormente!
+
+Este bloco só executa **UMA VEZ** para gerar o arquivo `for_transcription_complete.csv`.
+
+Para **reprocessar**, delete os arquivos:
+- `output/for_transcription_complete.csv`
+- `output/for_transcription_progress.csv`
+
+:::
+""")
+else:
+    print("""
+::: {.callout-warning icon=true}
+## 🎙️ Iniciando Processamento
+
+Transcrições serão geradas agora. Este processo:
+
+- Leva ~20-40 minutos para 695 arquivos
+- Salva automaticamente a cada 10 arquivos
+- Pode ser interrompido e retomado
+
+:::
+""")
+```
+
+---
+
+```{python}
+#| label: batch-processing-smart
+#| eval: !expr "!SKIP_PROCESSING"
+
+print("🎙️ PROCESSAMENTO INTELIGENTE")
+print("=" * 70)
+
+df_pending = df_transcription[df_transcription['transcription_status'] == 'pending'].copy()
+total = len(df_pending)
+
+if total == 0:
+    print("✅ Nada para processar!")
+else:
+    print(f"📊 Arquivos pendentes: {total:,}")
+    print()
+    
+    processed = 0
+    
+    for idx, row in df_pending.iterrows():
+        result = transcribe_audio(row['file_path'], MEDIA_FOLDER)
+        
+        # Atualizar
+        df_transcription.at[idx, 'transcription'] = result['text']
+        df_transcription.at[idx, 'transcription_language'] = result['language']
+        df_transcription.at[idx, 'transcription_status'] = result['status']
+        df_transcription.at[idx, 'error_message'] = result.get('error_message')
+        
+        processed += 1
+        
+        # Salvar a cada 10
+        if processed % 10 == 0:
+            df_transcription.to_csv(PROGRESS_FILE, index=False)
+            print(f"   [{processed}/{total}] 💾 Salvamento automático")
+        
+        # Feedback a cada 50
+        if processed % 50 == 0:
+            print(f"   [{processed}/{total}] Processados...")
+    
+    # Salvar versão COMPLETA
+    df_transcription.to_csv(COMPLETE_FILE, index=False)
+    print(f"\n✅ CONCLUÍDO! {processed:,} arquivos processados")
+    print(f"💾 Salvo em: for_transcription_complete.csv")
+    print("\n⚠️  IMPORTANTE: Nas próximas renderizações, este bloco será PULADO!")
+
+print("=" * 70)
+```
+
+---
+
+```{python}
+#| label: transcription-stats-final
+
+print("\n📊 ESTATÍSTICAS FINAIS DAS TRANSCRIÇÕES")
+print("=" * 70)
+
+completed = (df_transcription['transcription_status'] == 'completed').sum()
+errors = (df_transcription['transcription_status'] == 'error').sum()
+pending = (df_transcription['transcription_status'] == 'pending').sum()
+
+print(f"\n✅ Completas: {completed:,} ({completed/len(df_transcription)*100:.1f}%)")
+print(f"❌ Erros: {errors:,}")
+print(f"⏳ Pendentes: {pending:,}")
+
+if errors > 0 and 'error_message' in df_transcription.columns:
+    print(f"\n⚠️  Arquivos com erro:")
+    error_df = df_transcription[df_transcription['transcription_status'] == 'error']
+    for _, row in error_df[['file_path', 'error_message']].head(5).iterrows():
+        print(f"   - {row['file_path']}: {row['error_message']}")
+
+# Línguas detectadas
+print(f"\n🌍 Línguas detectadas:")
+if completed > 0:
+    langs = df_transcription[df_transcription['transcription_status'] == 'completed']['transcription_language'].value_counts()
+    for lang, count in langs.items():
+        print(f"   {lang}: {count:,}")
+
+print("\n" + "=" * 70)
+```
+
+---
+
+## 🎯 Como funciona:
+
+1. **Primeira execução:** Processa tudo, salva `for_transcription_complete.csv`
+2. **Próximas execuções:** Detecta arquivo completo, **pula processamento**, mostra estatísticas
+3. **Se interromper:** Usa `for_transcription_progress.csv`, continua de onde parou
+
+Agora pode rodar **quantas vezes quiser** sem reprocessar! 🚀
+
+Teste:
+
+```{bash}
+quarto render transcricao.qmd
+```

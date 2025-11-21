@@ -1,0 +1,275 @@
+---
+title: "Pipeline de Transcrição: Audio & Video → Texto"
+subtitle: "Enriquecendo o dataset com transcrições automáticas"
+author: "Marlon"
+date: today
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: false
+    number-sections: true
+    code-fold: true
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: true  # ← ADICIONAR ISSO!
+---
+
+```{python}
+#| label: setup
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import os
+
+# Configurações
+INPUT_FILE = Path("output/for_transcription.csv")
+MEDIA_FOLDER = Path("/Users/mosx/Desktop/local-workbench/whats-le/_sources/WhatsAppFiles")
+OUTPUT_FOLDER = Path("output")
+OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+# Carregar tabela de transcrição
+df_transcription = pd.read_csv(INPUT_FILE)
+
+print(f"✅ Carregado: {len(df_transcription):,} arquivos para transcrever")
+```
+
+# Introdução
+
+Este pipeline processa automaticamente as transcrições de áudios e vídeos identificados no dataset de conversas do WhatsApp.
+
+**Estratégia** - Usar **Groq API** (Whisper-large-v3) para transcrições rápidas e gratuitas - Processar em lotes para otimizar tempo - Salvar progresso incremental (evitar reprocessamento)
+
+------------------------------------------------------------------------
+
+# PARTE I: Configuração da API?
+
+```{python}
+#| label: setup-groq-api
+
+import os
+
+# Instalar biblioteca (se necessário)
+try:
+    from groq import Groq
+except ImportError:
+    import subprocess
+    subprocess.check_call(['pip', 'install', 'groq', '--break-system-packages'])
+    from groq import Groq
+
+# CORREÇÃO: Atribuir a chave DIRETAMENTE
+GROQ_API_KEY = 'REDACTED'
+
+if not GROQ_API_KEY:
+    print("⚠️  GROQ_API_KEY não definida!")
+    print("   Configure: export GROQ_API_KEY='sua-chave'")
+else:
+    client = Groq(api_key=GROQ_API_KEY)
+    print("✅ Groq API configurada!")
+    
+    # Teste rápido
+    try:
+        test = client.chat.completions.create(
+            messages=[{"role": "user", "content": "Diga apenas: API OK"}],
+            model="llama-3.3-70b-versatile",
+        )
+        print(f"✅ Teste bem-sucedido: {test.choices[0].message.content}")
+    except Exception as e:
+        print(f"❌ Erro: {e}")
+```
+
+------------------------------------------------------------------------
+
+# PARTE II: Função de Transcrição
+
+```{python}
+#| label: transcription-function-improved
+
+def transcribe_audio(file_path, media_folder):
+    """
+    Transcreve um arquivo de áudio/vídeo usando Groq Whisper.
+    Suporta: .opus, .mp3, .wav, .mp4, .m4a, .webm
+    """
+    try:
+        full_path = media_folder / file_path
+        
+        if not full_path.exists():
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': 'Arquivo não encontrado'
+            }
+        
+        # Verificar extensão suportada
+        supported_formats = ['.opus', '.mp3', '.wav', '.mp4', '.m4a', '.webm', '.mpeg', '.mpga']
+        if full_path.suffix.lower() not in supported_formats:
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': f'Formato não suportado: {full_path.suffix}'
+            }
+        
+        # Verificar tamanho (Groq tem limite de 25MB)
+        file_size_mb = full_path.stat().st_size / (1024 * 1024)
+        if file_size_mb > 25:
+            return {
+                'text': '',
+                'language': None,
+                'status': 'error',
+                'error_message': f'Arquivo muito grande: {file_size_mb:.1f}MB (limite: 25MB)'
+            }
+        
+        # Abrir e transcrever
+        with open(full_path, 'rb') as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=(full_path.name, audio_file.read()),  # ← Melhor forma
+                model="whisper-large-v3",
+                language="pt",
+                response_format="verbose_json",
+                temperature=0.0  # Mais determinístico
+            )
+        
+        return {
+            'text': transcription.text.strip(),
+            'language': transcription.language,
+            'status': 'completed',
+            'error_message': None
+        }
+    
+    except Exception as e:
+        return {
+            'text': '',
+            'language': None,
+            'status': 'error',
+            'error_message': str(e)
+        }
+
+print("✅ Função de transcrição MELHORADA definida!")
+```
+
+------------------------------------------------------------------------
+
+# PARTE III: Processamento em Lote
+
+```{python}
+#| label: batch-processing
+
+print("🎙️ PROCESSANDO TRANSCRIÇÕES")
+print("=" * 70)
+
+# Filtrar apenas pendentes
+df_pending = df_transcription[df_transcription['transcription_status'] == 'pending'].copy()
+
+print(f"📊 Arquivos pendentes: {len(df_pending):,}")
+
+# Processar (ajustar limite conforme necessário)
+BATCH_SIZE = 10  # Começar com 10 para teste
+
+for idx, row in df_pending.head(BATCH_SIZE).iterrows():
+    print(f"\n[{idx+1}/{min(BATCH_SIZE, len(df_pending))}] Processando: {row['file_path']}")
+    
+    result = transcribe_audio(row['file_path'], MEDIA_FOLDER)
+    
+    # Atualizar DataFrame
+    df_transcription.at[idx, 'transcription'] = result['text']
+    df_transcription.at[idx, 'transcription_language'] = result['language']
+    df_transcription.at[idx, 'transcription_status'] = result['status']
+    
+    if result['status'] == 'completed':
+        print(f"   ✅ Sucesso! Texto: {result['text'][:80]}...")
+    else:
+        print(f"   ❌ Erro: {result['error_message']}")
+
+# Salvar progresso
+df_transcription.to_csv(OUTPUT_FOLDER / 'for_transcription_progress.csv', index=False)
+print(f"\n💾 Progresso salvo!")
+
+print("\n" + "=" * 70)
+```
+
+------------------------------------------------------------------------
+
+**Continua...**
+
+# Processar TODOS os arquivos (não só 10):
+
+```{python}
+
+#| label: batch-processing-full
+
+print("🎙️ PROCESSAMENTO COMPLETO")
+print("=" * 70)
+
+# Filtrar apenas pendentes
+df_pending = df_transcription[df_transcription['transcription_status'] == 'pending'].copy()
+
+total = len(df_pending)
+print(f"📊 Total para processar: {total:,}")
+
+# Processar em lotes de 50 (para ver progresso)
+BATCH_SIZE = 50
+processed = 0
+
+for i in range(0, total, BATCH_SIZE):
+    batch = df_pending.iloc[i:i+BATCH_SIZE]
+    
+    print(f"\n🔄 Lote {i//BATCH_SIZE + 1} ({i+1}-{min(i+BATCH_SIZE, total)} de {total})")
+    
+    for idx, row in batch.iterrows():
+        result = transcribe_audio(row['file_path'], MEDIA_FOLDER)
+        
+        # Atualizar
+        df_transcription.at[idx, 'transcription'] = result['text']
+        df_transcription.at[idx, 'transcription_language'] = result['language']
+        df_transcription.at[idx, 'transcription_status'] = result['status']
+        
+        processed += 1
+        
+        # Feedback a cada 10
+        if processed % 10 == 0:
+            print(f"   [{processed}/{total}] Processado: {row['file_path'][:40]}...")
+    
+    # Salvar a cada lote
+    df_transcription.to_csv(OUTPUT_FOLDER / 'for_transcription_progress.csv', index=False)
+    print(f"   💾 Lote salvo!")
+
+print(f"\n✅ CONCLUÍDO! {processed:,} arquivos processados")
+print("=" * 70)
+
+```
+
+# Ver estatisticas das transcrições
+
+```{python}
+#| label: transcription-stats
+
+print("\n📊 ESTATÍSTICAS DAS TRANSCRIÇÕES")
+print("=" * 70)
+
+completed = (df_transcription['transcription_status'] == 'completed').sum()
+errors = (df_transcription['transcription_status'] == 'error').sum()
+pending = (df_transcription['transcription_status'] == 'pending').sum()
+
+print(f"\n✅ Completas: {completed:,} ({completed/len(df_transcription)*100:.1f}%)")
+print(f"❌ Erros: {errors:,}")
+print(f"⏳ Pendentes: {pending:,}")
+
+if errors > 0:
+    print(f"\n⚠️  Arquivos com erro:")
+    error_samples = df_transcription[df_transcription['transcription_status'] == 'error'][['file_path', 'error_message']].head(5)
+    for _, row in error_samples.iterrows():
+        print(f"   - {row['file_path']}: {row['error_message']}")
+
+# Línguas detectadas
+print(f"\n🌍 Línguas detectadas:")
+langs = df_transcription[df_transcription['transcription_status'] == 'completed']['transcription_language'].value_counts()
+for lang, count in langs.items():
+    print(f"   {lang}: {count:,}")
+
+print("\n" + "=" * 70)
+```

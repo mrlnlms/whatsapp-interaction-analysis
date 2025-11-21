@@ -1,0 +1,1724 @@
+
+```{python}
+
+import re
+import matplotlib.pyplot as plt
+import os
+
+# Garantir que a pasta output exista
+output_dir = "output"
+os.makedirs(output_dir, exist_ok=True)
+
+# Caminho do arquivo
+file_path = "data-wrangling/data/raw-data.txt"
+
+# Regex para capturar timestamps
+timestamp_pattern = re.compile(r'‎?\[(\d{2}/\d{2}/\d{2}, \d{1,2}:\d{2}:\d{2})\]')
+
+# Contagem
+message_count = 0
+line_count = 0
+
+with open(file_path, 'r', encoding='utf-8') as f:
+    for line in f:
+        line_count += 1
+        if timestamp_pattern.search(line):
+            message_count += 1
+
+# Dados para o gráfico
+labels = ['Linhas no arquivo', 'Mensagens reais']
+sizes = [line_count, message_count]
+colors = ['#6c757d', '#28a745']
+
+# Plotar
+plt.figure(figsize=(6, 4))
+bars = plt.bar(labels, sizes, color=colors)
+plt.title('Comparação: Linhas do Arquivo vs. Mensagens Reais')
+plt.ylabel('Quantidade')
+plt.xticks(rotation=0)
+
+# Adicionar os valores nas barras
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2., height + 500,
+             f'{int(height):,}', ha='center', va='bottom')
+
+plt.tight_layout()
+
+# 👇 Salvar o gráfico
+plot_path = os.path.join(output_dir, "message_count.png")
+plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+# plt.close()  # Libera memória
+```
+
+O arquivo possui `{python} line_count` linhas, das quais `{python} message_count` foram identificadas como mensagens reais.
+
+Isso significa que existem `{python} line_count - message_count` linhas que não iniciam uma nova mensagem, geralmente partes de mensagens longas, que usam a quebra de linha, mensagens copiadas de outros lugares etc.
+
+------------------------------------------------------------------------
+
+## 🛠️ Etapa 2: Extração e Estruturação dos Dado
+
+```{python}
+import re
+import pandas as pd
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+# Regex principal: identifica início de mensagem (agora SEM U+200E)
+msg_start = re.compile(r'^\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?): (.*)$')
+
+messages = []
+current_msg = None
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for line in f:
+
+        # Remove apenas o caractere invisível U+200E
+        raw_line = line.rstrip("\n").replace("\u200e", "")
+
+        # Checa início de mensagem
+        start_match = msg_start.match(raw_line)
+
+        if start_match:
+            # Se houver mensagem em andamento -> salva
+            if current_msg:
+                messages.append(current_msg)
+
+            date, time, sender, text = start_match.groups()
+            current_msg = {
+                "timestamp": f"{date} {time}",
+                "sender": sender,
+                "message": text,
+            }
+
+        else:
+            # Linhas que não começam com timestamp são continuação
+            if current_msg:
+                current_msg["message"] += "\n" + raw_line
+
+# Adiciona a última mensagem
+if current_msg:
+    messages.append(current_msg)
+
+df = pd.DataFrame(messages)
+df.info()
+```
+
+```{python}
+import re
+import pandas as pd
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+# Regex principal: identifica início de mensagem
+msg_start = re.compile(r'^‎?\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?): (.*)$')
+
+messages = []  # lista final
+current_msg = None  # estrutura temporária
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for line in f:
+        
+        # Remover \n apenas no fim (mantém tudo dentro)
+        raw_line = line.rstrip("\n")
+
+        # Verifica se a linha é início de nova mensagem
+        start_match = msg_start.match(raw_line)
+
+        if start_match:
+            # Se existe uma mensagem em andamento, salva
+            if current_msg:
+                messages.append(current_msg)
+
+            date, time, sender, text = start_match.groups()
+            current_msg = {
+                "timestamp": f"{date} {time}",
+                "sender": sender,
+                "message": text,     # começa aqui
+            }
+
+        else:
+            # Linha de continuação → preserva usando quebra de linha original
+            if current_msg:
+                current_msg["message"] += "\n" + raw_line
+            else:
+                # Caso raro: arquivo começa com linha sem timestamp
+                pass
+
+# Adicionar última mensagem
+if current_msg:
+    messages.append(current_msg)
+
+# Dataframe final
+df = pd.DataFrame(messages)
+df.head()
+```
+
+Agora temos um DataFrame `df` com colunas básicas: `timestamp`, `sender` e `message`, vamos verificar se tudo foi extraído corretamente.
+
+```{python}
+df.info()
+```
+
+O DataFrame contém `{python} df.shape[0]` mensagens extraídas corretamente do arquivo bruto.
+
+------------------------------------------------------------------------
+
+## 🧹 Etapa 3: Limpeza e Enriquecimento dos Dados
+
+```{python}
+import pandas as pd
+import re
+from urllib.parse import urlparse
+# Função para identificar tipo de mensagem
+def classify_message(msg):
+    if re.search(r'<Mídia não está disponível>', msg):
+        return 'media_unavailable'
+    elif re.search(r'http[s]?://', msg):
+        return 'link'
+    elif re.search(r'<Arquivo de mídia>', msg):
+        return 'media'
+    else:
+        return 'text'
+# Função para contar palavras
+def count_words(msg):
+    return len(re.findall(r'\b\w+\b', msg))
+# Função para verificar presença de links
+def contains_link(msg):
+    return bool(re.search(r'http[s]?://', msg))
+# Aplicar funções ao DataFrame
+df['message_type'] = df['message'].apply(classify_message)
+df['word_count'] = df['message'].apply(count_words)
+df['contains_link'] = df['message'].apply(contains_link)
+df.head()
+```
+
+Agora o DataFrame `df` foi enriquecido com novas colunas:
+
+-   `message_type`: Classificação da mensagem (texto, mídia, link, mídia indisponível)
+
+-   `word_count`: Contagem de palavras na mensagem
+
+-   `contains_link`: Indicador booleano de presença de links na mensagem
+
+```{python}
+df.info()
+```
+
+O DataFrame agora contém `{python} df.shape[0]` mensagens com informações adicionais para análise.
+
+------------------------------------------------------------------------
+
+## 💾 Etapa 4: Salvando o Conjunto de Dados Final
+
+```{python}
+import os
+# Garantir que a pasta output exista
+output_dir = "output"
+os.makedirs(output_dir, exist_ok=True)
+# Caminho do arquivo final
+final_path = os.path.join(output_dir, "whatsapp_cleaned_data.csv")
+# Salvar como CSV
+df.to_csv(final_path, index=False, encoding='utf-8-sig')
+```
+
+O conjunto de dados final foi salvo em `{python} final_path` e está pronto para análise posterior.
+
+------------------------------------------------------------------------
+
+# Conclusão
+
+Este pipeline de data wrangling transformou um arquivo bruto de exportação do WhatsApp em um conjunto de dados estruturado e enriquecido, pronto para análise. As etapas incluíram a contagem de mensagens reais, extração e estruturação dos dados, limpeza e enriquecimento com novas variáveis, e finalmente o salvamento do conjunto de dados final. O processo é reprodutível e pode ser adaptado para outros conjuntos de dados semelhantes no futuro.
+
+## 🔎 Debug do U+200E (temporário)
+
+```{python}
+import re
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+# Mesmo padrão da Etapa 1
+timestamp_pattern = re.compile(r'‎?\[(\d{2}/\d{2}/\d{2}, \d{1,2}:\d{2}:\d{2})\]')
+
+# Mesmo padrão da Etapa 2 (sem mexer)
+msg_start = re.compile(r'^‎?\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?): (.*)$')
+
+u200e = "\u200e"
+
+total_u200e = 0
+u200e_com_timestamp = 0
+u200e_timestamp_e_inicio = 0
+
+linhas_suspeitas = []
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for i, line in enumerate(f, start=1):
+        raw = line.rstrip("\n")
+        
+        if u200e in raw:
+            total_u200e += 1
+            has_ts = bool(timestamp_pattern.search(raw))
+            is_start = bool(msg_start.match(raw))
+            
+            if has_ts:
+                u200e_com_timestamp += 1
+            if has_ts and not is_start:
+                linhas_suspeitas.append((i, raw))
+
+print("Total de linhas com U+200E:", total_u200e)
+print("Linhas com U+200E + timestamp:", u200e_com_timestamp)
+print("Linhas com U+200E + timestamp que NÃO viram início de msg:", len(linhas_suspeitas))
+
+# Se quiser inspecionar algumas:
+for i, raw in linhas_suspeitas[:10]:
+    print(f"{i}: {raw}")
+```
+
+## 🔎 Debug (temporário)
+
+```{python}
+import re
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+timestamp_pattern = re.compile(r'^\s*‎?\[(\d{2}/\d{2}/\d{2}, \d{1,2}:\d{2}:\d{2})\]')
+msg_start = re.compile(r'^‎?\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?): (.*)$')
+
+linhas_com_ts = []
+linhas_inicio_msg = []
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for i, line in enumerate(f, start=1):
+        raw = line.rstrip("\n")
+        if timestamp_pattern.match(raw):
+            linhas_com_ts.append((i, raw))
+        if msg_start.match(raw):
+            linhas_inicio_msg.append((i, raw))
+
+print("Total com timestamp:", len(linhas_com_ts))
+print("Total reconhecidas como início:", len(linhas_inicio_msg))
+
+print("Diferença real:", len(linhas_com_ts) - len(linhas_inicio_msg))
+
+# Listar as linhas problemáticas:
+suspeitas = set(linhas_com_ts) - set(linhas_inicio_msg)
+
+suspeitas_list = list(suspeitas)
+print("Total suspeitas:", len(suspeitas_list))
+
+suspeitas_list[:20]  # Mostra as 20 primeiras
+
+
+## 🔎 Quais as linhas problemáticas? (temporário)?
+import re
+import pandas as pd
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+timestamp_pattern = re.compile(r'^\s*‎?\[(\d{2}/\d{2}/\d{2}, \d{1,2}:\d{2}:\d{2})\]')
+msg_start = re.compile(r'^‎?\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?): (.*)$')
+
+linhas_com_ts = []
+linhas_inicio_msg = []
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for i, line in enumerate(f, start=1):
+        raw = line.rstrip("\n")
+
+        # Etapa 1: só timestamp
+        if timestamp_pattern.match(raw):
+            linhas_com_ts.append((i, raw))
+
+        # Etapa 2: regex completa
+        if msg_start.match(raw):
+            linhas_inicio_msg.append((i, raw))
+
+# Conversão para sets para encontrar diferença
+suspeitas = set(linhas_com_ts) - set(linhas_inicio_msg)
+
+# Converter para lista ordenada por número da linha
+suspeitas_list = sorted(list(suspeitas), key=lambda x: x[0])
+
+print("Total suspeitas:", len(suspeitas_list))
+for linha, conteudo in suspeitas_list:
+    print(f"{linha}: {conteudo}")
+
+# Salvar como CSV para inspeção manual
+df_suspeitas = pd.DataFrame(suspeitas_list, columns=["line_number", "raw_line"])
+df_suspeitas.to_csv("output/linhas_suspeitas_whatsapp.csv", index=False, encoding="utf-8-sig")
+```
+
+```{python}
+import re
+import pandas as pd
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+# Remove o U+200E (left-to-right mark) por segurança
+def clean_line(line):
+    return line.replace("\u200e", "")
+
+# Regex para detectar início de mensagem,
+# incluindo mensagens vazias, mas EXCLUINDO attach como mensagem nova.
+msg_start = re.compile(
+    r'^\[(\d{2}/\d{2}/\d{2}), (\d{1,2}:\d{2}:\d{2})\] (.*?):(?: (.*))?$'
+)
+
+# Regex para identificar linhas <attached: ...>
+attach_pattern = re.compile(r'^<attached: .*?>$', re.IGNORECASE)
+
+messages = []
+current_msg = None
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for line in f:
+        raw = clean_line(line.rstrip("\n"))
+
+        # Tenta bater com início de mensagem
+        start_match = msg_start.match(raw)
+
+        if start_match:
+            date, time, sender, text = start_match.groups()
+
+            # TEXT == None → mensagem vazia
+            is_empty_message = (text is None or text.strip() == "")
+
+            # Caso 1: início de mensagem normal (com texto)
+            if not is_empty_message:
+                if current_msg:
+                    messages.append(current_msg)
+
+                current_msg = {
+                    "timestamp": f"{date} {time}",
+                    "sender": sender.strip(),
+                    "message": text.strip()
+                }
+                continue
+
+            # Caso 2: mensagem vazia
+            # Começa um bloco de mídia
+            if is_empty_message:
+                if current_msg:
+                    messages.append(current_msg)
+
+                current_msg = {
+                    "timestamp": f"{date} {time}",
+                    "sender": sender.strip(),
+                    "message": ""  # pai vazio
+                }
+                continue
+
+        # ---------------------------------------------------------------------
+        # Se não é início de mensagem:
+        # Pode ser <attached> ou continuação normal
+        # ---------------------------------------------------------------------
+
+        if current_msg:
+
+            # Caso: linha é <attached> e a mensagem anterior É vazia
+            if attach_pattern.match(raw) and current_msg["message"] == "":
+                # Continuação do lote de mídias
+                current_msg["message"] += raw
+                continue
+
+            # Caso: linha é <attached> mas anterior NÃO é vazia → mensagem nova
+            if attach_pattern.match(raw) and current_msg["message"] != "":
+                messages.append(current_msg)
+                current_msg = {
+                    "timestamp": current_msg["timestamp"],  # o WhatsApp não diferencia nos attachments
+                    "sender": current_msg["sender"],
+                    "message": raw
+                }
+                continue
+
+            # Continuação comum
+            if current_msg["message"] == "":
+                current_msg["message"] = raw
+            else:
+                current_msg["message"] += "\n" + raw
+
+# Adiciona a última mensagem
+if current_msg:
+    messages.append(current_msg)
+
+df = pd.DataFrame(messages)
+df.head()
+df.shape[0]
+```
+
+## 🛠️ Etapa 2: Parser Final (Extração Estruturada do WhatsApp)
+
+```{python}
+import re
+import pandas as pd
+
+file_path = "data-wrangling/data/raw-data.txt"
+
+def clean_line(line):
+    return line.replace("\u200e", "")
+
+msg_start = re.compile(
+    r'^$begin:math:display$\(\\d\{2\}\/\\d\{2\}\/\\d\{2\}\)\, \(\\d\{1\,2\}\:\\d\{2\}\:\\d\{2\}\)$end:math:display$ (.*?):(?: (.*))?$'
+)
+
+attach_pattern = re.compile(r'^<attached: .*?>$', re.IGNORECASE)
+
+messages = []
+current_msg = None
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for line in f:
+        raw = clean_line(line.rstrip("\n"))
+
+        start_match = msg_start.match(raw)
+
+        if start_match:
+            date, time, sender, text = start_match.groups()
+            is_empty_message = (text is None or text.strip() == "")
+
+            if not is_empty_message:
+                if current_msg:
+                    messages.append(current_msg)
+                current_msg = {
+                    "timestamp": f"{date} {time}",
+                    "sender": sender.strip(),
+                    "message": text.strip()
+                }
+                continue
+
+            if is_empty_message:
+                if current_msg:
+                    messages.append(current_msg)
+                current_msg = {
+                    "timestamp": f"{date} {time}",
+                    "sender": sender.strip(),
+                    "message": ""
+                }
+                continue
+
+        if current_msg:
+            if attach_pattern.match(raw) and current_msg["message"] == "":
+                current_msg["message"] += raw
+                continue
+
+            if attach_pattern.match(raw) and current_msg["message"] != "":
+                messages.append(current_msg)
+                current_msg = {
+                    "timestamp": current_msg["timestamp"],
+                    "sender": current_msg["sender"],
+                    "message": raw
+                }
+                continue
+
+            if current_msg["message"] == "":
+                current_msg["message"] = raw
+            else:
+                current_msg["message"] += "\n" + raw
+
+if current_msg:
+    messages.append(current_msg)
+
+df = pd.DataFrame(messages)
+df.head()
+df.shape[0]
+```
+
+Agora eu fico na duvida se devo exluiros 44 linhas agrupando os attachments ou deleto as linhas dos attachments e deixo as só a mensagem agrupadora.
+
+
+
+
+
+
+-------------------------------------
+
+
+
+
+
+
+
+
+
+
+```{python}
+#| label: match-attached
+
+# Filtrar mensagens de mídia
+media_messages_df = df_messages[df_messages['message_type'] == 'media'].copy()
+
+print(f"📊 Mensagens de mídia encontradas no texto: {len(media_messages_df):,}")
+print(f"📂 Arquivos físicos encontrados: {len(df_media_inventory):,}")
+print()
+
+# Separar por fonte
+attached_messages = media_messages_df[media_messages_df['media_source'] == 'attached'].copy()
+omitted_messages = media_messages_df[media_messages_df['media_source'] == 'omitted'].copy()
+
+print(f"📎 Mensagens 'attached': {len(attached_messages):,}")
+print(f"🚫 Mensagens 'omitted': {len(omitted_messages):,}")
+print()
+
+# ============================================
+# ETAPA 1: Match para 'attached' (direto por nome)
+# ============================================
+
+if len(df_media_inventory) > 0 and len(attached_messages) > 0:
+    # Criar dicionário para lookup rápido
+    file_lookup = set(df_media_inventory['filename'].values)
+    
+    def match_attached_file(file_path):
+        """Match direto por nome de arquivo"""
+        if pd.isna(file_path) or not file_path:
+            return None
+        return file_path if file_path in file_lookup else None
+    
+    attached_messages['matched_file'] = attached_messages['file_path'].apply(match_attached_file)
+    
+    # Estatísticas
+    attached_with_match = attached_messages['matched_file'].notna().sum()
+    attached_without_match = attached_messages['matched_file'].isna().sum()
+    attached_match_rate = (attached_with_match / len(attached_messages) * 100) if len(attached_messages) > 0 else 0
+    
+    print(f"✅ Mensagens 'attached' com arquivo físico: {attached_with_match:,} ({attached_match_rate:.1f}%)")
+    print(f"❌ Mensagens 'attached' SEM arquivo físico: {attached_without_match:,}")
+    
+    if attached_without_match > 0:
+        print()
+        print("⚠️  ATENÇÃO: Encontramos mensagens 'attached' sem arquivo!")
+        print("   Exemplos de arquivos faltantes:")
+        missing = attached_messages[attached_messages['matched_file'].isna()][['file_path', 'media_type']].head(5)
+        for idx, row in missing.iterrows():
+            print(f"   - {row['file_path']} (tipo: {row['media_type']})")
+else:
+    attached_messages['matched_file'] = None
+    attached_with_match = 0
+    attached_without_match = 0
+    print("⚠️  Sem dados para processar 'attached'")
+
+print()
+
+# ============================================
+# ETAPA 2: Match para 'omitted' (por timestamp + tipo)
+# ============================================
+
+# Função para extrair timestamp e converter para ISO 8601
+def extract_message_timestamp_iso(raw_text):
+    """Extrai timestamp e converte para ISO 8601 com timezone"""
+    match = re.match(r'\[(\d{2})/(\d{2})/(\d{2}),\s(\d{2}):(\d{2}):(\d{2})\]', raw_text)
+    if match:
+        day, month, year, hour, minute, second = match.groups()
+        full_year = f"20{year}"
+        # Retornar em ISO 8601 com timezone (igual ao df_media_inventory)
+        return f"{full_year}-{month}-{day}T{hour}:{minute}:{second}-03:00"
+    return None
+
+# Extrair timestamps para omitted
+omitted_messages['extracted_timestamp'] = omitted_messages['raw_text'].apply(extract_message_timestamp_iso)
+
+if len(df_media_inventory) > 0 and len(omitted_messages) > 0:
+    
+    # Mapeamento de tipos (mensagem → arquivo)
+    type_mapping = {
+        'photo': 'photo',
+        'audio': 'audio',
+        'video': 'video',
+        'video_note': 'video',      # ← video_note é salvo como VIDEO
+        'sticker': 'sticker',
+        'gif': 'photo',              # ← GIF pode ser salvo como PHOTO
+        'document': 'document',
+        'contact': 'contact'
+    }
+    
+    def match_omitted_file(row):
+        """
+        Busca arquivo físico para mensagem omitted.
+        Estratégia:
+        1. Match exato por timestamp e tipo
+        2. Match com tolerância de ±3 segundos
+        """
+        if pd.isna(row['extracted_timestamp']) or pd.isna(row['media_type']):
+            return None
+        
+        msg_timestamp = row['extracted_timestamp']
+        msg_type = row['media_type']
+        
+        # Mapear tipo da mensagem para tipo do arquivo
+        mapped_type = type_mapping.get(msg_type, msg_type)
+        
+        # Tentativa 1: Match exato
+        exact_matches = df_media_inventory[
+            (df_media_inventory['media_type'] == mapped_type) &
+            (df_media_inventory['timestamp'] == msg_timestamp)
+        ]
+        
+        if len(exact_matches) > 0:
+            return exact_matches.iloc[0]['filename']
+        
+        # Tentativa 2: Match com tolerância de tempo
+        try:
+            from datetime import datetime, timedelta
+            
+            msg_dt = datetime.fromisoformat(msg_timestamp)
+            
+            # Filtrar por tipo
+            type_matches = df_media_inventory[
+                df_media_inventory['media_type'] == mapped_type
+            ].copy()
+            
+            if len(type_matches) == 0:
+                return None
+            
+            # Converter timestamps para datetime
+            type_matches['timestamp_dt'] = pd.to_datetime(
+                type_matches['timestamp'], 
+                format='ISO8601',
+                errors='coerce'
+            )
+            
+            # Calcular diferença em segundos
+            type_matches['time_diff'] = abs(
+                (type_matches['timestamp_dt'] - msg_dt).dt.total_seconds()
+            )
+            
+            # Buscar o mais próximo (dentro de 3 segundos)
+            closest = type_matches[type_matches['time_diff'] <= 3].sort_values('time_diff')
+            
+            if len(closest) > 0:
+                return closest.iloc[0]['filename']
+        
+        except Exception as e:
+            # Se der erro no parsing, ignorar
+            pass
+        
+        return None
+    
+    omitted_messages['matched_file'] = omitted_messages.apply(match_omitted_file, axis=1)
+    
+    # Estatísticas
+    omitted_with_match = omitted_messages['matched_file'].notna().sum()
+    omitted_without_match = omitted_messages['matched_file'].isna().sum()
+    omitted_match_rate = (omitted_with_match / len(omitted_messages) * 100) if len(omitted_messages) > 0 else 0
+    
+    print(f"✅ Mensagens 'omitted' com arquivo encontrado: {omitted_with_match:,} ({omitted_match_rate:.1f}%)")
+    print(f"❌ Mensagens 'omitted' sem arquivo: {omitted_without_match:,}")
+    
+    if omitted_with_match > 0:
+        print()
+        print(f"🎉 SURPRESA: {omitted_with_match:,} mensagens 'omitted' TÊM arquivo físico!")
+        print("   Isso invalida parcialmente a hipótese.")
+else:
+    omitted_messages['matched_file'] = None
+    omitted_with_match = 0
+    omitted_without_match = 0
+    print("⚠️  Sem dados para processar 'omitted'")
+
+print()
+
+# ============================================
+# COMBINAR RESULTADOS
+# ============================================
+
+media_messages_df = pd.concat([attached_messages, omitted_messages], ignore_index=True)
+
+total_with_match = media_messages_df['matched_file'].notna().sum()
+total_without_match = media_messages_df['matched_file'].isna().sum()
+
+print("=" * 60)
+print(f"📊 TOTAL GERAL:")
+print(f"✅ Mensagens com arquivo correspondente: {total_with_match:,}")
+print(f"❌ Mensagens sem arquivo correspondente: {total_without_match:,}")
+print("=" * 60)
+```
+
+
+```{python}
+#| label: match-omitted-smart
+
+print("🔄 Refazendo match com lógica de proximidade temporal")
+print("=" * 70)
+
+if len(df_media_inventory) > 0 and len(omitted_messages) > 0:
+    
+    # Converter timestamps para datetime para comparação
+    df_media_inventory['timestamp_dt'] = pd.to_datetime(
+        df_media_inventory['timestamp'], 
+        format='ISO8601',
+        errors='coerce'
+    )
+    
+    omitted_messages['timestamp_dt'] = pd.to_datetime(
+        omitted_messages['extracted_timestamp'],
+        format='ISO8601', 
+        errors='coerce'
+    )
+    
+    # Mapeamento de tipos
+    type_mapping = {
+        'photo': 'photo',
+        'audio': 'audio',
+        'video': 'video',
+        'video_note': 'video',
+        'sticker': 'sticker',
+        'gif': 'photo',
+        'document': 'document',
+        'contact': 'contact'
+    }
+    
+    def smart_match(row):
+        """
+        Match inteligente por proximidade temporal:
+        1. Mesmo tipo de mídia
+        2. Mesmo dia (ignorando ano se necessário)
+        3. Hora próxima (±15 minutos)
+        """
+        if pd.isna(row['timestamp_dt']) or pd.isna(row['media_type']):
+            return None
+        
+        msg_dt = row['timestamp_dt']
+        msg_type = row['media_type']
+        mapped_type = type_mapping.get(msg_type, msg_type)
+        
+        # Filtrar por tipo
+        candidates = df_media_inventory[
+            df_media_inventory['media_type'] == mapped_type
+        ].copy()
+        
+        if len(candidates) == 0:
+            return None
+        
+        # Extrair componentes de data/hora
+        msg_month = msg_dt.month
+        msg_day = msg_dt.day
+        msg_hour = msg_dt.hour
+        msg_minute = msg_dt.minute
+        
+        # Filtrar por mês e dia (ignorar ano)
+        candidates['month'] = candidates['timestamp_dt'].dt.month
+        candidates['day'] = candidates['timestamp_dt'].dt.day
+        candidates['hour'] = candidates['timestamp_dt'].dt.hour
+        candidates['minute'] = candidates['timestamp_dt'].dt.minute
+        
+        same_day = candidates[
+            (candidates['month'] == msg_month) &
+            (candidates['day'] == msg_day)
+        ].copy()
+        
+        if len(same_day) == 0:
+            return None
+        
+        # Calcular diferença em minutos (só hora/minuto)
+        def time_diff_minutes(file_hour, file_minute):
+            msg_total_min = msg_hour * 60 + msg_minute
+            file_total_min = file_hour * 60 + file_minute
+            return abs(msg_total_min - file_total_min)
+        
+        same_day['time_diff_min'] = same_day.apply(
+            lambda x: time_diff_minutes(x['hour'], x['minute']),
+            axis=1
+        )
+        
+        # Buscar o mais próximo (dentro de 15 minutos)
+        closest = same_day[same_day['time_diff_min'] <= 15].sort_values('time_diff_min')
+        
+        if len(closest) > 0:
+            return closest.iloc[0]['filename']
+        
+        return None
+    
+    # Aplicar match inteligente
+    omitted_messages['matched_file'] = omitted_messages.apply(smart_match, axis=1)
+    
+    # Estatísticas
+    omitted_with_match = omitted_messages['matched_file'].notna().sum()
+    omitted_without_match = omitted_messages['matched_file'].isna().sum()
+    omitted_match_rate = (omitted_with_match / len(omitted_messages) * 100) if len(omitted_messages) > 0 else 0
+    
+    print(f"✅ Mensagens 'omitted' com arquivo encontrado: {omitted_with_match:,} ({omitted_match_rate:.1f}%)")
+    print(f"❌ Mensagens 'omitted' sem arquivo: {omitted_without_match:,}")
+    
+    # Combinar com attached
+    media_messages_df = pd.concat([attached_messages, omitted_messages], ignore_index=True)
+    
+    total_with_match = media_messages_df['matched_file'].notna().sum()
+    total_without_match = media_messages_df['matched_file'].isna().sum()
+    
+    print()
+    print("=" * 60)
+    print(f"📊 TOTAL GERAL:")
+    print(f"✅ Mensagens com arquivo: {total_with_match:,}")
+    print(f"❌ Mensagens sem arquivo: {total_without_match:,}")
+    print("=" * 60)
+    
+else:
+    print("⚠️  Sem dados suficientes para processar")
+```
+
+
+```{python}
+#| label: match-omitted-dynamic
+
+print("🔄 Match dinâmico: Mensagens ↔ Arquivos")
+print("=" * 70)
+
+if len(df_media_inventory) > 0 and len(omitted_messages) > 0:
+    
+    # Identificar período de sobreposição
+    msg_min = omitted_messages['timestamp_dt'].min()
+    msg_max = omitted_messages['timestamp_dt'].max()
+    file_min = df_media_inventory['timestamp_dt'].min()
+    file_max = df_media_inventory['timestamp_dt'].max()
+    
+    overlap_start = max(msg_min, file_min)
+    overlap_end = min(msg_max, file_max)
+    
+    print(f"📅 Período de sobreposição:")
+    print(f"   De: {overlap_start.date()}")
+    print(f"   Até: {overlap_end.date()}")
+    print()
+    
+    # Filtrar apenas mensagens no período de sobreposição
+    omitted_overlap = omitted_messages[
+        (omitted_messages['timestamp_dt'] >= overlap_start) &
+        (omitted_messages['timestamp_dt'] <= overlap_end)
+    ].copy()
+    
+    omitted_no_overlap = omitted_messages[
+        ~omitted_messages.index.isin(omitted_overlap.index)
+    ].copy()
+    
+    print(f"📊 Mensagens no período de sobreposição: {len(omitted_overlap):,}")
+    print(f"📊 Mensagens fora do período: {len(omitted_no_overlap):,}")
+    print()
+    
+    # Mapeamento de tipos
+    type_mapping = {
+        'photo': 'photo',
+        'audio': 'audio',
+        'video': 'video',
+        'video_note': 'video',
+        'sticker': 'sticker',
+        'gif': 'photo',
+        'document': 'document',
+        'contact': 'contact'
+    }
+    
+    def match_by_date_time(row):
+        """Match por data exata + hora próxima"""
+        if pd.isna(row['timestamp_dt']) or pd.isna(row['media_type']):
+            return None, None, None
+        
+        msg_dt = row['timestamp_dt']
+        msg_type = row['media_type']
+        mapped_type = type_mapping.get(msg_type, msg_type)
+        
+        # Filtrar por tipo E data exata
+        candidates = df_media_inventory[
+            (df_media_inventory['media_type'] == mapped_type) &
+            (df_media_inventory['timestamp_dt'].dt.date == msg_dt.date())
+        ].copy()
+        
+        if len(candidates) == 0:
+            return None, None, None
+        
+        # Calcular diferença em segundos
+        candidates['time_diff_seconds'] = abs(
+            (candidates['timestamp_dt'] - msg_dt).dt.total_seconds()
+        )
+        
+        # Pegar o mais próximo (dentro de 1 hora)
+        closest = candidates[
+            candidates['time_diff_seconds'] <= 3600
+        ].sort_values('time_diff_seconds')
+        
+        if len(closest) > 0:
+            best_match = closest.iloc[0]
+            return (
+                best_match['filename'],
+                best_match['timestamp_dt'],
+                best_match['time_diff_seconds']
+            )
+        
+        return None, None, None
+    
+    # Garantir nomes de colunas únicos em ambos os DataFrames antes do concat
+    def uniquify_columns(df):
+        """
+        Torna as colunas únicas, adicionando sufixos .1, .2, ... quando necessário.
+        Retorna uma cópia do DataFrame com colunas renomeadas.
+        """
+        cols = list(df.columns)
+        new_cols = []
+        seen = {}
+        for c in cols:
+            if c in seen:
+                seen[c] += 1
+                new_cols.append(f"{c}.{seen[c]}")
+            else:
+                seen[c] = 0
+                new_cols.append(c)
+        df_copy = df.copy()
+        df_copy.columns = new_cols
+        return df_copy
+
+    # Aplicar somente se houver duplicatas
+    if not omitted_overlap.columns.is_unique:
+        omitted_overlap = uniquify_columns(omitted_overlap)
+
+    if not omitted_no_overlap.columns.is_unique:
+        omitted_no_overlap = uniquify_columns(omitted_no_overlap)
+
+    # Alinhar colunas — garantir que ambas tenham as mesmas colunas antes de concatenar
+    all_cols = list(dict.fromkeys(list(omitted_no_overlap.columns) + list(omitted_overlap.columns)))
+    omitted_no_overlap = omitted_no_overlap.reindex(columns=all_cols)
+    omitted_overlap = omitted_overlap.reindex(columns=all_cols)
+
+    # Agora concatena com segurança
+    omitted_messages = pd.concat([omitted_no_overlap, omitted_overlap], ignore_index=True)
+    
+    # Estatísticas
+    omitted_with_match = omitted_messages['matched_file'].notna().sum()
+    omitted_without_match = omitted_messages['matched_file'].isna().sum()
+    omitted_match_rate = (omitted_with_match / len(omitted_messages) * 100)
+    
+    print()
+    print(f"✅ Mensagens 'omitted' com arquivo encontrado: {omitted_with_match:,} ({omitted_match_rate:.1f}%)")
+    print(f"❌ Mensagens 'omitted' sem arquivo: {omitted_without_match:,}")
+    
+    # Combinar com attached
+    # Adicionar colunas de match em attached (já têm o arquivo)
+    attached_messages['matched_timestamp'] = None
+    attached_messages['time_diff_seconds'] = 0.0
+    
+    media_messages_df = pd.concat([attached_messages, omitted_messages], ignore_index=True)
+    
+    total_with_match = media_messages_df['matched_file'].notna().sum()
+    total_without_match = media_messages_df['matched_file'].isna().sum()
+    
+    print()
+    print("=" * 60)
+    print(f"📊 TOTAL GERAL:")
+    print(f"✅ Mensagens com arquivo: {total_with_match:,}")
+    print(f"❌ Mensagens sem arquivo: {total_without_match:,}")
+    print("=" * 60)
+
+else:
+    print("⚠️  Sem dados suficientes")
+```
+
+```{python}
+#| label: tbl-media-inventory-sample
+#| tbl-cap: "Amostra do inventário de arquivos físicos"
+
+if len(df_media_inventory) > 0:
+    df_media_inventory.head(10)
+else:
+    print("Nenhum arquivo de mídia encontrado.")
+```
+
+```{python}
+#| label: analyze-from-files-perspective
+
+print("📂 ANÁLISE: Do ponto de vista dos ARQUIVOS FÍSICOS")
+print("=" * 70)
+
+# Total de arquivos físicos
+total_files = len(df_media_inventory)
+print(f"\n1️⃣ ARQUIVOS FÍSICOS NA PASTA: {total_files:,}")
+
+# Arquivos que foram referenciados em mensagens 'attached'
+attached_files = set(attached_messages['file_path'].dropna().unique())
+print(f"\n2️⃣ ARQUIVOS REFERENCIADOS EM 'ATTACHED': {len(attached_files):,}")
+
+# Arquivos que foram encontrados no match de 'omitted'
+omitted_matched_files = set(omitted_messages['matched_file'].dropna().unique())
+print(f"3️⃣ ARQUIVOS ENCONTRADOS NO MATCH 'OMITTED': {len(omitted_matched_files):,}")
+
+# Total de arquivos que aparecem no df_final
+all_matched_files = attached_files.union(omitted_matched_files)
+print(f"\n✅ TOTAL DE ARQUIVOS COM REFERÊNCIA NO TEXTO: {len(all_matched_files):,}")
+
+# Arquivos órfãos (existem fisicamente mas não têm referência)
+all_files_set = set(df_media_inventory['filename'].unique())
+orphan_files = all_files_set - all_matched_files
+
+print(f"❌ ARQUIVOS ÓRFÃOS (sem referência no texto): {len(orphan_files):,}")
+print(f"\n📊 PROPORÇÃO:")
+print(f"   - Com referência: {len(all_matched_files)/total_files*100:.1f}%")
+print(f"   - Órfãos: {len(orphan_files)/total_files*100:.1f}%")
+
+# Criar DataFrame de arquivos órfãos
+if len(orphan_files) > 0:
+    df_orphans = df_media_inventory[
+        df_media_inventory['filename'].isin(orphan_files)
+    ].copy()
+    
+    print(f"\n🔍 DETALHAMENTO DOS ARQUIVOS ÓRFÃOS:")
+    print(f"\n   Por tipo:")
+    orphan_by_type = df_orphans['media_type'].value_counts()
+    for media_type, count in orphan_by_type.items():
+        print(f"      - {media_type}: {count:,} arquivos")
+    
+    print(f"\n   Por extensão:")
+    orphan_by_ext = df_orphans['extension'].value_counts()
+    for ext, count in orphan_by_ext.items():
+        print(f"      - .{ext}: {count:,} arquivos")
+    
+    print(f"\n   Tamanho total dos órfãos: {df_orphans['size_mb'].sum():.2f} MB")
+    
+    # Salvar lista de órfãos
+    df_orphans.to_csv(OUTPUT_FOLDER / 'orphan_files.csv', index=False)
+    print(f"\n💾 Lista de órfãos salva em: orphan_files.csv")
+
+print("\n" + "=" * 70)
+```
+
+
+```{python}
+
+
+#| label: check-orphan-timestamps
+
+print("🔍 VERIFICANDO TIMESTAMPS DOS ÓRFÃOS")
+print("=" * 70)
+
+# Pegar amostra de órfãos
+orphan_sample = df_remaining_orphans.head(10)
+
+print("\n1️⃣ AMOSTRA DE ÓRFÃOS:")
+for idx, row in orphan_sample.iterrows():
+    print(f"\nArquivo: {row['filename']}")
+    print(f"  timestamp (string): {row['timestamp']}")
+    print(f"  timestamp_dt (datetime): {row['timestamp_dt']}")
+    print(f"  Tipo de timestamp: {type(row['timestamp'])}")
+    print(f"  Tipo de timestamp_dt: {type(row['timestamp_dt'])}")
+
+# Comparar com arquivos que TÊM referência
+matched_files_sample = df_media_inventory[
+    df_media_inventory['filename'].isin(attached_files)
+].head(5)
+
+print("\n\n2️⃣ AMOSTRA DE ARQUIVOS COM MATCH (para comparação):")
+for idx, row in matched_files_sample.iterrows():
+    print(f"\nArquivo: {row['filename']}")
+    print(f"  timestamp (string): {row['timestamp']}")
+    print(f"  timestamp_dt (datetime): {row['timestamp_dt']}")
+
+# Verificar se há NaN ou tipos inconsistentes
+print("\n\n3️⃣ VERIFICAÇÃO DE INTEGRIDADE:")
+print(f"Órfãos com timestamp NULL: {df_remaining_orphans['timestamp'].isna().sum()}")
+print(f"Órfãos com timestamp_dt NULL: {df_remaining_orphans['timestamp_dt'].isna().sum()}")
+
+print(f"\nArquivos matched com timestamp NULL: {df_media_inventory[df_media_inventory['filename'].isin(attached_files)]['timestamp'].isna().sum()}")
+
+# Verificar formato string
+print("\n\n4️⃣ FORMATO DOS TIMESTAMPS (string):")
+print(f"\nÓrfãos - primeiros 3:")
+for ts in df_remaining_orphans['timestamp'].head(3):
+    print(f"  '{ts}' (len: {len(str(ts)) if pd.notna(ts) else 'N/A'})")
+
+print(f"\nMatched - primeiros 3:")
+for ts in matched_files_sample['timestamp'].head(3):
+    print(f"  '{ts}' (len: {len(str(ts)) if pd.notna(ts) else 'N/A'})")
+
+# Verificar se a conversão para datetime está funcionando
+print("\n\n5️⃣ TESTE DE CONVERSÃO:")
+test_orphan = df_remaining_orphans.iloc[0]
+print(f"Órfão teste: {test_orphan['filename']}")
+print(f"  timestamp original: '{test_orphan['timestamp']}'")
+
+try:
+    converted = pd.to_datetime(test_orphan['timestamp'], format='ISO8601')
+    print(f"  Conversão bem-sucedida: {converted}")
+except Exception as e:
+    print(f"  ERRO na conversão: {e}")
+
+
+```
+
+```{python}
+
+#| label: analyze-messages-without-files
+
+print("\n🔍 ANÁLISE INVERSA: Mensagens que deveriam ter arquivo mas não têm")
+print("=" * 70)
+
+# Mensagens 'attached' SEM arquivo físico (problema crítico!)
+attached_missing = attached_messages[attached_messages['matched_file'].isna()]
+
+if len(attached_missing) > 0:
+    print(f"\n⚠️ CRÍTICO: {len(attached_missing):,} mensagens 'attached' sem arquivo físico!")
+    print(f"\nExemplos:")
+    for idx, row in attached_missing[['file_path', 'media_type']].head(5).iterrows():
+        print(f"   - {row['file_path']} (tipo: {row['media_type']})")
+else:
+    print(f"\n✅ Todas as mensagens 'attached' têm arquivo físico!")
+
+# Mensagens 'omitted' no período de sobreposição mas sem match
+omitted_overlap_no_match = omitted_messages[
+    (omitted_messages['timestamp_dt'] >= overlap_start) &
+    (omitted_messages['timestamp_dt'] <= overlap_end) &
+    (omitted_messages['matched_file'].isna())
+]
+
+print(f"\n📊 Mensagens 'omitted' no período de sobreposição sem match: {len(omitted_overlap_no_match):,}")
+
+if len(omitted_overlap_no_match) > 0:
+    print(f"\n   Por tipo:")
+    no_match_by_type = omitted_overlap_no_match['media_type'].value_counts()
+    for media_type, count in no_match_by_type.items():
+        print(f"      - {media_type}: {count:,} mensagens")
+    
+    print(f"\n💡 Essas mensagens estão no período onde há arquivos,")
+    print(f"    mas não conseguimos encontrar correspondência.")
+    print(f"    Possíveis razões:")
+    print(f"    1. Timestamp muito diferente (>1 hora)")
+    print(f"    2. Tipo de mídia mapeado incorretamente")
+    print(f"    3. Arquivo realmente não foi exportado")
+
+```
+
+
+```{python}
+
+#| label: aggressive-matching
+
+print("🔥 MATCHING AGRESSIVO: Tentando parear órfãos com omitted")
+print("=" * 70)
+
+# Pegar apenas mensagens omitted que ainda não têm match
+omitted_no_match = omitted_messages[
+    (omitted_messages['matched_file'].isna()) &
+    (omitted_messages['timestamp_dt'] >= overlap_start) &
+    (omitted_messages['timestamp_dt'] <= overlap_end)
+].copy()
+
+print(f"📊 Mensagens omitted sem match: {len(omitted_no_match):,}")
+print(f"📊 Arquivos órfãos disponíveis: {len(orphan_files):,}")
+print()
+
+# Criar DataFrame apenas com órfãos
+df_orphans_available = df_media_inventory[
+    df_media_inventory['filename'].isin(orphan_files)
+].copy()
+
+# Mapeamento mais agressivo de tipos
+type_mapping_aggressive = {
+    'photo': ['photo'],
+    'audio': ['audio'],
+    'video': ['video'],
+    'video_note': ['video'],  # video_note → video
+    'sticker': ['sticker'],
+    'gif': ['photo'],  # gif → photo
+    'document': ['document'],
+    'contact': ['contact']
+}
+
+def aggressive_match(row):
+    """
+    Match agressivo:
+    1. Mesmo tipo (com mapeamento flexível)
+    2. Mesmo MÊS (não precisa ser mesmo dia)
+    3. Tolerância de 24 horas
+    """
+    if pd.isna(row['timestamp_dt']) or pd.isna(row['media_type']):
+        return None, None
+    
+    msg_dt = row['timestamp_dt']
+    msg_type = row['media_type']
+    
+    # Mapear tipo
+    possible_types = type_mapping_aggressive.get(msg_type, [msg_type])
+    
+    # Filtrar órfãos por tipo
+    candidates = df_orphans_available[
+        df_orphans_available['media_type'].isin(possible_types)
+    ].copy()
+    
+    if len(candidates) == 0:
+        return None, None
+    
+    # Filtrar por mesmo MÊS e ANO
+    candidates_month = candidates[
+        (candidates['timestamp_dt'].dt.year == msg_dt.year) &
+        (candidates['timestamp_dt'].dt.month == msg_dt.month)
+    ].copy()
+    
+    if len(candidates_month) == 0:
+        # Se não achar no mesmo mês, tentar ±1 mês
+        candidates_month = candidates[
+            (candidates['timestamp_dt'].dt.year == msg_dt.year) &
+            (
+                (candidates['timestamp_dt'].dt.month == msg_dt.month - 1) |
+                (candidates['timestamp_dt'].dt.month == msg_dt.month) |
+                (candidates['timestamp_dt'].dt.month == msg_dt.month + 1)
+            )
+        ].copy()
+    
+    if len(candidates_month) == 0:
+        return None, None
+    
+    # Calcular diferença em segundos
+    candidates_month['time_diff'] = abs(
+        (candidates_month['timestamp_dt'] - msg_dt).dt.total_seconds()
+    )
+    
+    # Pegar o mais próximo (dentro de 24 horas = 86400 segundos)
+    closest = candidates_month[
+        candidates_month['time_diff'] <= 86400
+    ].sort_values('time_diff')
+    
+    if len(closest) > 0:
+        best_match = closest.iloc[0]
+        return best_match['filename'], best_match['time_diff']
+    
+    return None, None
+
+print("🔍 Processando matching agressivo...")
+match_results = omitted_no_match.apply(aggressive_match, axis=1, result_type='expand')
+match_results.columns = ['aggressive_matched_file', 'aggressive_time_diff']
+
+omitted_no_match = pd.concat([omitted_no_match, match_results], axis=1)
+
+# Contar novos matches
+new_matches = omitted_no_match['aggressive_matched_file'].notna().sum()
+match_rate = (new_matches / len(omitted_no_match) * 100)
+
+print()
+print(f"✅ NOVOS MATCHES ENCONTRADOS: {new_matches:,} ({match_rate:.1f}%)")
+print(f"❌ Ainda sem match: {len(omitted_no_match) - new_matches:,}")
+
+# Estatísticas de qualidade
+if new_matches > 0:
+    matched_subset = omitted_no_match[omitted_no_match['aggressive_matched_file'].notna()]
+    
+    avg_diff_hours = matched_subset['aggressive_time_diff'].mean() / 3600
+    median_diff_hours = matched_subset['aggressive_time_diff'].median() / 3600
+    max_diff_hours = matched_subset['aggressive_time_diff'].max() / 3600
+    
+    print(f"\n📊 QUALIDADE DOS MATCHES:")
+    print(f"   - Diferença média: {avg_diff_hours:.1f} horas")
+    print(f"   - Diferença mediana: {median_diff_hours:.1f} horas")
+    print(f"   - Diferença máxima: {max_diff_hours:.1f} horas")
+    
+    # Por tipo
+    print(f"\n   Por tipo de mídia:")
+    matches_by_type = matched_subset.groupby('media_type').size()
+    for media_type, count in matches_by_type.items():
+        print(f"      - {media_type}: {count:,} matches")
+
+# Atualizar coluna matched_file com os novos matches
+omitted_no_match['matched_file'] = omitted_no_match['matched_file'].fillna(
+    omitted_no_match['aggressive_matched_file']
+)
+
+# Combinar com o restante das mensagens omitted que já tinham match
+omitted_with_previous_match = omitted_messages[
+    omitted_messages['matched_file'].notna()
+]
+
+omitted_outside_overlap = omitted_messages[
+    ~(
+        (omitted_messages['timestamp_dt'] >= overlap_start) &
+        (omitted_messages['timestamp_dt'] <= overlap_end)
+    )
+]
+
+# Atualizar omitted_messages completo
+omitted_messages = pd.concat([
+    omitted_with_previous_match,
+    omitted_no_match,
+    omitted_outside_overlap
+], ignore_index=True)
+
+# Recalcular totais
+total_omitted_matched = omitted_messages['matched_file'].notna().sum()
+total_matches = len(attached_files) + total_omitted_matched
+
+print("\n" + "=" * 70)
+print(f"📊 TOTAL GERAL ATUALIZADO:")
+print(f"✅ Arquivos com referência: {total_matches:,} / {total_files:,} ({total_matches/total_files*100:.1f}%)")
+print(f"❌ Órfãos restantes: {total_files - total_matches:,}")
+print("=" * 70)
+
+```
+
+
+```{python}
+
+#| label: investigate-mismatch
+
+print("🔬 INVESTIGAÇÃO: Por que não conseguimos mais matches?")
+print("=" * 70)
+
+# 1. Comparar distribuição de TIPOS
+print("\n1️⃣ DISTRIBUIÇÃO DE TIPOS:")
+print("\nMensagens omitted sem match:")
+no_match_types = omitted_no_match[
+    omitted_no_match['matched_file'].isna()
+]['media_type'].value_counts()
+print(no_match_types)
+
+print("\nArquivos órfãos restantes:")
+# Arquivos que ainda são órfãos
+used_files = set(omitted_messages['matched_file'].dropna().unique())
+remaining_orphans = orphan_files - used_files
+df_remaining_orphans = df_media_inventory[
+    df_media_inventory['filename'].isin(remaining_orphans)
+]
+orphan_types = df_remaining_orphans['media_type'].value_counts()
+print(orphan_types)
+
+# 2. Comparar períodos temporais
+print("\n\n2️⃣ COMPARAÇÃO TEMPORAL:")
+
+print("\nMensagens omitted sem match:")
+msgs_no_match = omitted_no_match[omitted_no_match['matched_file'].isna()]
+print(f"   Período: {msgs_no_match['timestamp_dt'].min().date()} a {msgs_no_match['timestamp_dt'].max().date()}")
+print(f"   Por mês:")
+msgs_by_month = msgs_no_match['timestamp_dt'].dt.to_period('M').value_counts().sort_index()
+for month, count in msgs_by_month.head(10).items():
+    print(f"      {month}: {count:,} mensagens")
+
+print("\nArquivos órfãos restantes:")
+print(f"   Período: {df_remaining_orphans['timestamp_dt'].min().date()} a {df_remaining_orphans['timestamp_dt'].max().date()}")
+print(f"   Por mês:")
+files_by_month = df_remaining_orphans['timestamp_dt'].dt.to_period('M').value_counts().sort_index()
+for month, count in files_by_month.head(10).items():
+    print(f"      {month}: {count:,} arquivos")
+
+# 3. Verificar se há sobreposição de datas específicas
+print("\n\n3️⃣ SOBREPOSIÇÃO DE DATAS:")
+
+msg_dates = set(msgs_no_match['timestamp_dt'].dt.date)
+file_dates = set(df_remaining_orphans['timestamp_dt'].dt.date)
+overlap_dates = msg_dates.intersection(file_dates)
+
+print(f"   Datas com mensagens: {len(msg_dates)}")
+print(f"   Datas com arquivos: {len(file_dates)}")
+print(f"   Datas em comum: {len(overlap_dates)}")
+
+if len(overlap_dates) > 0:
+    print(f"\n   Primeiras 10 datas em comum:")
+    for date in sorted(overlap_dates)[:10]:
+        msgs_on_date = msgs_no_match[msgs_no_match['timestamp_dt'].dt.date == date]
+        files_on_date = df_remaining_orphans[df_remaining_orphans['timestamp_dt'].dt.date == date]
+        print(f"      {date}: {len(msgs_on_date)} mensagens vs {len(files_on_date)} arquivos")
+        
+        # Detalhar tipos nessa data
+        if len(msgs_on_date) > 0 and len(files_on_date) > 0:
+            print(f"         Msgs: {msgs_on_date['media_type'].value_counts().to_dict()}")
+            print(f"         Files: {files_on_date['media_type'].value_counts().to_dict()}")
+
+# 4. Testar match manual em uma data específica
+print("\n\n4️⃣ TESTE MANUAL EM UMA DATA ESPECÍFICA:")
+
+if len(overlap_dates) > 0:
+    test_date = sorted(overlap_dates)[0]
+    print(f"\n   Testando em: {test_date}")
+    
+    msgs_test = msgs_no_match[msgs_no_match['timestamp_dt'].dt.date == test_date]
+    files_test = df_remaining_orphans[df_remaining_orphans['timestamp_dt'].dt.date == test_date]
+    
+    print(f"   Mensagens nesse dia: {len(msgs_test)}")
+    print(f"   Arquivos nesse dia: {len(files_test)}")
+    
+    if len(msgs_test) > 0 and len(files_test) > 0:
+        print(f"\n   Primeira mensagem:")
+        first_msg = msgs_test
+
+```
+
+
+```{python}
+#| label: add-temporal-columns
+
+print("📅 ADICIONANDO COLUNAS TEMPORAIS DETALHADAS")
+print("=" * 70)
+
+# ============================================
+# 1. df_media_inventory (arquivos físicos)
+# ============================================
+print("\n1️⃣ Enriquecendo df_media_inventory...")
+
+df_media_inventory['year'] = df_media_inventory['timestamp_dt'].dt.year
+df_media_inventory['month'] = df_media_inventory['timestamp_dt'].dt.month
+df_media_inventory['day'] = df_media_inventory['timestamp_dt'].dt.day
+df_media_inventory['hour'] = df_media_inventory['timestamp_dt'].dt.hour
+df_media_inventory['minute'] = df_media_inventory['timestamp_dt'].dt.minute
+df_media_inventory['second'] = df_media_inventory['timestamp_dt'].dt.second
+df_media_inventory['date'] = df_media_inventory['timestamp_dt'].dt.date
+df_media_inventory['year_month'] = df_media_inventory['timestamp_dt'].dt.to_period('M').astype(str)
+df_media_inventory['day_of_week'] = df_media_inventory['timestamp_dt'].dt.day_name()
+
+print(f"   ✓ Colunas adicionadas: year, month, day, hour, minute, second, date, year_month, day_of_week")
+
+# ============================================
+# 2. omitted_messages (mensagens sem arquivo)
+# ============================================
+print("\n2️⃣ Enriquecendo omitted_messages...")
+
+omitted_messages['year'] = omitted_messages['timestamp_dt'].dt.year
+omitted_messages['month'] = omitted_messages['timestamp_dt'].dt.month
+omitted_messages['day'] = omitted_messages['timestamp_dt'].dt.day
+omitted_messages['hour'] = omitted_messages['timestamp_dt'].dt.hour
+omitted_messages['minute'] = omitted_messages['timestamp_dt'].dt.minute
+omitted_messages['second'] = omitted_messages['timestamp_dt'].dt.second
+omitted_messages['date'] = omitted_messages['timestamp_dt'].dt.date
+omitted_messages['year_month'] = omitted_messages['timestamp_dt'].dt.to_period('M').astype(str)
+omitted_messages['day_of_week'] = omitted_messages['timestamp_dt'].dt.day_name()
+
+print(f"   ✓ Colunas adicionadas: year, month, day, hour, minute, second, date, year_month, day_of_week")
+
+# ============================================
+# 3. Atualizar órfãos e mensagens sem match
+# ============================================
+print("\n3️⃣ Atualizando subsets...")
+
+# Atualizar órfãos
+df_remaining_orphans = df_media_inventory[
+    df_media_inventory['filename'].isin(remaining_orphans)
+].copy()
+
+# Atualizar mensagens sem match
+msgs_no_match = omitted_messages[omitted_messages['matched_file'].isna()].copy()
+
+print(f"   ✓ df_remaining_orphans atualizado: {len(df_remaining_orphans):,} arquivos")
+print(f"   ✓ msgs_no_match atualizado: {len(msgs_no_match):,} mensagens")
+
+print("\n" + "=" * 70)
+
+```
+
+
+```{python}
+#| label: comparative-analysis
+
+print("\n📊 ANÁLISE COMPARATIVA COM COLUNAS TEMPORAIS")
+print("=" * 70)
+
+# ============================================
+# 1. Por mês e ano
+# ============================================
+print("\n1️⃣ DISTRIBUIÇÃO POR MÊS/ANO:")
+
+print("\n   Mensagens sem match:")
+msg_by_month = msgs_no_match.groupby(['year', 'month']).size().reset_index(name='count')
+msg_by_month['year_month'] = msg_by_month['year'].astype(str) + '-' + msg_by_month['month'].astype(str).str.zfill(2)
+for _, row in msg_by_month.head(12).iterrows():
+    print(f"      {row['year_month']}: {row['count']:,} mensagens")
+
+print("\n   Arquivos órfãos:")
+file_by_month = df_remaining_orphans.groupby(['year', 'month']).size().reset_index(name='count')
+file_by_month['year_month'] = file_by_month['year'].astype(str) + '-' + file_by_month['month'].astype(str).str.zfill(2)
+for _, row in file_by_month.iterrows():
+    print(f"      {row['year_month']}: {row['count']:,} arquivos")
+
+# ============================================
+# 2. Datas específicas em comum
+# ============================================
+print("\n\n2️⃣ DATAS ESPECÍFICAS EM COMUM:")
+
+msg_dates_detailed = msgs_no_match.groupby(['year', 'month', 'day']).size().reset_index(name='msg_count')
+file_dates_detailed = df_remaining_orphans.groupby(['year', 'month', 'day']).size().reset_index(name='file_count')
+
+# Merge para encontrar datas em comum
+common_dates = msg_dates_detailed.merge(
+    file_dates_detailed,
+    on=['year', 'month', 'day'],
+    how='inner'
+)
+
+print(f"\n   Total de datas em comum: {len(common_dates)}")
+
+if len(common_dates) > 0:
+    print(f"\n   Detalhamento:")
+    for _, row in common_dates.iterrows():
+        date_str = f"{row['year']}-{row['month']:02d}-{row['day']:02d}"
+        print(f"\n      📅 {date_str}:")
+        print(f"         Mensagens: {row['msg_count']:,}")
+        print(f"         Arquivos: {row['file_count']:,}")
+        
+        # Pegar mensagens e arquivos desse dia
+        msgs_day = msgs_no_match[
+            (msgs_no_match['year'] == row['year']) &
+            (msgs_no_match['month'] == row['month']) &
+            (msgs_no_match['day'] == row['day'])
+        ]
+        
+        files_day = df_remaining_orphans[
+            (df_remaining_orphans['year'] == row['year']) &
+            (df_remaining_orphans['month'] == row['month']) &
+            (df_remaining_orphans['day'] == row['day'])
+        ]
+        
+        # Distribuição por tipo
+        print(f"         Tipos de mensagens: {msgs_day['media_type'].value_counts().to_dict()}")
+        print(f"         Tipos de arquivos: {files_day['media_type'].value_counts().to_dict()}")
+        
+        # Distribuição por hora
+        print(f"         Horas das mensagens: {sorted(msgs_day['hour'].unique())}")
+        print(f"         Horas dos arquivos: {sorted(files_day['hour'].unique())}")
+
+# ============================================
+# 3. Verificar se há sobreposição de horas em dias comuns
+# ============================================
+if len(common_dates) > 0:
+    print("\n\n3️⃣ TENTATIVA DE MATCH EM DATAS COMUNS:")
+    
+    total_potential_matches = 0
+    
+    for _, common_date in common_dates.iterrows():
+        msgs_day = msgs_no_match[
+            (msgs_no_match['year'] == common_date['year']) &
+            (msgs_no_match['month'] == common_date['month']) &
+            (msgs_no_match['day'] == common_date['day'])
+        ]
+        
+        files_day = df_remaining_orphans[
+            (df_remaining_orphans['year'] == common_date['year']) &
+            (df_remaining_orphans['month'] == common_date['month']) &
+            (df_remaining_orphans['day'] == common_date['day'])
+        ]
+        
+        # Comparar por tipo
+        for msg_type in msgs_day['media_type'].unique():
+            # Mapear tipo
+            if msg_type == 'video_note':
+                file_type = 'video'
+            elif msg_type == 'gif':
+                file_type = 'photo'
+            else:
+                file_type = msg_type
+            
+            msgs_type = len(msgs_day[msgs_day['media_type'] == msg_type])
+            files_type = len(files_day[files_day['media_type'] == file_type])
+            
+            if files_type > 0:
+                potential = min(msgs_type, files_type)
+                total_potential_matches += potential
+                
+                if potential > 0:
+                    date_str = f"{common_date['year']}-{common_date['month']:02d}-{common_date['day']:02d}"
+                    print(f"      {date_str} - {msg_type}: {potential} matches potenciais")
+    
+    print(f"\n   🎯 TOTAL DE MATCHES POTENCIAIS: {total_potential_matches}")
+    
+    if total_potential_matches > 0:
+        print(f"\n   💡 Podemos tentar um matching mais refinado nessas datas!")
+
+print("\n" + "=" * 70)
+```
+
+
+```{python}
+
+#| label: investigate-august
+
+print("🔍 INVESTIGAÇÃO DETALHADA: AGOSTO/2025")
+print("=" * 70)
+
+# Mensagens de agosto sem match
+msgs_august = msgs_no_match[
+    (msgs_no_match['year'] == 2025) & 
+    (msgs_no_match['month'] == 8)
+]
+
+# Arquivos órfãos de agosto
+files_august = df_remaining_orphans[
+    (df_remaining_orphans['year'] == 2025) & 
+    (df_remaining_orphans['month'] == 8)
+]
+
+print(f"\n📊 AGOSTO/2025:")
+print(f"   Mensagens sem match: {len(msgs_august):,}")
+print(f"   Arquivos órfãos: {len(files_august):,}")
+print(f"   Proporção: {len(files_august) / len(msgs_august) * 100:.1f}% de cobertura")
+
+print(f"\n📅 Distribuição por DIA em Agosto:")
+print(f"\n   Mensagens:")
+msgs_by_day = msgs_august.groupby('day').size()
+for day, count in msgs_by_day.items():
+    print(f"      Dia {day:02d}: {count:,} mensagens")
+
+print(f"\n   Arquivos:")
+# Segurança: garantir que 'day' seja tratado mesmo se for float/NaN
+files_by_day = files_august.groupby('day').size()
+for day, count in files_by_day.items():
+    if pd.isna(day):
+        day_label = "??"
+    else:
+        # converter float (ex.: 21.0) para int antes de formatar
+        day_label = f"{int(day):02d}"
+    print(f"      Dia {day_label}: {count:,} arquivos")
+
+print(f"\n🎯 TIPOS em Agosto:")
+print(f"\n   Mensagens sem match:")
+print(msgs_august['media_type'].value_counts())
+
+print(f"\n   Arquivos órfãos:")
+print(files_august['media_type'].value_counts())
+
+# Verificar datas específicas com ambos
+august_msg_days = set(msgs_august['day'].unique())
+august_file_days = set(files_august['day'].unique())
+common_august_days = august_msg_days.intersection(august_file_days)
+
+print(f"\n\n📆 Dias de Agosto em comum:")
+print(f"   Total: {len(common_august_days)} dias")
+
+if len(common_august_days) > 0:
+    for day in sorted(common_august_days):
+        msgs_day = msgs_august[msgs_august['day'] == day]
+        files_day = files_august[files_august['day'] == day]
+
+        # Normalizar label do dia (tratar floats e NaN)
+        if pd.isna(day):
+            day_label = "??"
+        else:
+            try:
+                day_label = f"{int(day):02d}"
+            except Exception:
+                day_label = str(day)
+
+        print(f"\n   📅 Dia {day_label}:")
+        print(f"      Mensagens: {len(msgs_day)}")
+        print(f"      Arquivos: {len(files_day)}")
+        print(f"      Tipos msgs: {msgs_day['media_type'].value_counts().to_dict()}")
+        print(f"      Tipos files: {files_day['media_type'].value_counts().to_dict()}")
+        print(f"      Horas msgs: {sorted(msgs_day['hour'].unique())}")
+        print(f"      Horas files: {sorted(files_day['hour'].unique())}")
+
+print("\n" + "=" * 70)
+
+
+
+if len(common_august_days) > 0:
+    for day in sorted(common_august_days):
+        msgs_day = msgs_august[msgs_august['day'] == day]
+        files_day = files_august[files_august['day'] == day]
+
+        # Normalizar label do dia (tratar floats e NaN)
+        if pd.isna(day):
+            day_label = "??"
+        else:
+            try:
+                day_label = f"{int(day):02d}"
+            except Exception:
+                day_label = str(day)
+
+        print(f"\n   📅 Dia {day_label}:")
+        print(f"      Mensagens: {len(msgs_day)}")
+        print(f"      Arquivos: {len(files_day)}")
+        print(f"      Tipos msgs: {msgs_day['media_type'].value_counts().to_dict()}")
+        print(f"      Tipos files: {files_day['media_type'].value_counts().to_dict()}")
+        print(f"      Horas msgs: {sorted(msgs_day['hour'].unique())}")
+        print(f"      Horas files: {sorted(files_day['hour'].unique())}")
+
+
+```
+
+
+
+

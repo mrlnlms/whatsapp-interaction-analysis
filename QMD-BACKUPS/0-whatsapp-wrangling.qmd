@@ -1,0 +1,452 @@
+---
+title: "Pipeline de Data Wrangling para Conversas do WhatsApp"
+author: "Marlon"
+date: "`r Sys.Date()`"
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  echo: false
+  warning: false
+  message: false
+  fig-show: hold
+editor: visual
+---
+
+# Introdução
+
+Este projeto tem como objetivo transformar um arquivo bruto de exportação do WhatsApp (`raw-data.txt`) em um conjunto de dados estruturado, analisável e reprodutível. Neste relatório, documentarei cada etapa do processo de data wrangling, desde a leitura inicial do arquivo até a criação do DataFrame final.
+
+![](../assets/data-overview_2025-11-21%2010.35.55.gif)
+
+> *Amostra dos dados brutos do Whatsapp.*
+
+A exportação desta conversa que vamos usar neste estudo de caso contém \~90K linhas e tem um tamanho de \~5MB, o que podemos considerar um arquivo levemente pesado. Após uma análise exploratória dos dados, vamos a estrutura como o WhatsApp nos entrega os registros.
+
+-   **Timestamps** no formato `[DD/MM/YY, HH:MM:SS]`,
+
+    -   💡 *O formato de data e hora **pode** variar dependendo das configurações regionais do dispositivo.*
+
+-   **Remetentes** (ex.: `Marlon`, `Lê 🖤`) seguidos de `:`,
+
+    -   💡 *Alguns remetentes podem ter nomes que incluem caracteres especiais ou emojis*
+
+-   **Caracter invisível** (`[U+200E])`:
+
+    -   Você deve ter percebido que pelo arquivo há diversas ocorrências do caractere invisível `[U+200E]` (Left-to-Right Mark). Esse caractere é usado para controle de direção do texto, especialmente em mensagens que misturam idiomas com direções diferentes (como inglês e árabe, por exemplo).
+    -   Seu padrão de exibição está atrelado tanto à mensagens de mídia quanto mensagens editadas ou excluidas, como veremos adiante.
+
+-   **Mensagens**, que podem ser de texto, mídia ou links:
+
+    -   
+
+        #### **Linhas de continuação** para mensagens longas que se estendem por várias linhas. Elas não iniciam com timestamp.
+
+        -   Mensagens longas podem se estender por várias linhas, ou seja, nem toda linha representa uma mensagem única.
+            -   Linhas que não começam com um timestamp parecem serem continuações da mensagem anterior, a última linha que contém o timestamp.
+
+    -   
+
+        #### Mensagens podem conter **emojis** e **links**, **sozinhos** ou **incorporados em mensagens de texto**. Devem ser identificados e preservados para análise. Exemplos:
+
+        -   Mensagem com apenas texto:
+            -   `[12/05/23, 14:23:45] Lê 🖤: Oi, tudo bem?`
+        -   Mensagem com sinais usando caracteres:
+            -   `[21/08/25, 21:37:58] Marlon: :))`
+        -   Mensagem com emojis e texto:
+            -   `[12/05/23, 14:23:45] Lê 🖤: Olha que fofo esse cachorro! 🐶❤`
+        -   Mensagem com apenas emojis:
+            -   `[12/05/23, 14:23:45] Marlon: 😂🤣😍`
+        -   Mensagem com sinais e emojis:
+            -   `[12/05/23, 14:23:45] Marlon: :P 😂`
+        -   Mensagem com sinais, emojis e texto:
+            -   `[12/05/23, 14:23:45] Lê 🖤: :D Estou tão feliz hoje! 😂`
+        -   Mensagem com link incorporado:
+            -   `[12/05/23, 14:23:45] Marlon: Olha esse site incrível: https://example.com`
+        -   Mensagem com apenas link:
+            -   `[12/05/23, 14:23:45] Lê 🖤: https://another-example.com`
+        -   Mensagem com sinais e link:
+            -   `[12/05/23, 14:23:45] Lê 🖤: :D Veja isso: https://funny-example.com`
+        -   Mensagem com emojis e link:
+            -   `[12/05/23, 14:23:45] Marlon: Confira este vídeo incrível! 😂 https://video-example.com`
+        -   Mensagem com sinais, emojis e link:
+            -   `[12/05/23, 14:23:45] Marlon: :P 😂 Veja isso: https://funny-video.com`
+
+    -   
+
+        #### Mensagens podem ter sido **editadas** ou **excluídas**, e são indicados pelos padrões:
+
+        -   Mensagens editadas:
+            -   `[U+200E]<This message was edited>`
+        -   Mensagens deletadas:
+            -   `[U+200E]This message was deleted`
+        -   Nos dois casos, o caracter invísivel `[U+200E]` só aparece após o rementente, diferente dos casos de mensagens de mídia, como veremos a seguir. Ex.:
+            -   `[12/05/23, 14:23:45] Marlon: [U+200E] Sample Text....<This message was edited>`
+            -   `[12/04/22, 15:33:29] Marlon: [U+200E]This message was deleted`
+
+        #### Mensagens podem indicar Chamadas de Voz ou Vídeo e também alguns Erros:
+
+        -   Chamadas de voz - Perdidas:
+            -   `[12/04/22, 15:33:29] Lê 🖤: [U+200E]Missed voice call. [U+200E]Click to call back`
+        -   Chamadas de voz - Atendidas em outro dispositivo:
+            -   `[12/04/22, 15:33:29] Lê 🖤: [U+200E]Voice call. [U+200E]Answered on other device`
+        -   Erros de exibição de mensagem:
+            -   `[U+200E]This message can't be displayed here. Please open [U+200E]WhatsApp on your phone to view the message.`
+
+        #### Mensagens podem indicar o envio de mídias que foram omitidas na exportação, como:
+
+        -   Audio:
+            -   `[U+200E][12/04/22, 15:33:29] Marlon: [U+200E]audio omitted`
+        -   Sticker:
+            -   `[U+200E][12/05/23, 14:23:45] Marlon: [U+200E]sticker omitted`
+        -   GIF:
+            -   `[U+200E][12/05/23, 14:23:45] Marlon: [U+200E]GIF omitted`
+        -   Imagem:
+            -   `[U+200E][12/04/22, 15:33:29] Marlon: [U+200E]image omitted`
+        -   Vídeo Note:
+            -   `[U+200E][12/05/23, 14:23:45] Marlon: [U+200E]video note omitted`
+        -   Vídeo:
+            -   `[U+200E][12/04/22, 15:33:29] Marlon: [U+200E]video omitted`
+        -   Documento:
+            -   `[U+200E][12/05/23, 14:23:45] Marlon: CARTA IMAGINA JUNTOS DISTRIBUIÇÃO (PJ).pdf • [U+200E]42 pages [U+200E]document omitted`
+
+        #### Por outro lado, mensagens podem indicar o envio de mídias que foram anexadas na exportação, como:
+
+        -   Audio:
+            -   `[U+200E][03/01/25, 21:09:56] Lê 🖤: [U+200E]<attached: -0000015-AUDIO-2025-08-21-21-31-39.opus>`
+        -   Imagem:
+            -   `[U+200E][03/01/25, 21:09:56] Marlon: [U+200E]<attached: 00000001-PHOTO-2025-08-21-22-06-35.jpg>`
+        -   Sticker:
+            -   `[U+200E][03/01/25, 21:09:56] Lê 🖤: [U+200E]<attached: 00000298-STICKER-2025-08-25-09-10-40.webp>`
+        -   Vídeo:
+            -   `[U+200E][03/09/25, 13:50:06] Lê 🖤: [U+200E]<attached: 00001238-VIDEO-2025-09-03-13-50-07.mp4>`
+
+    -   Há também o padrão de envio de **múltiplas mídias em sequência**, onde neste caso, a mensagem inicial fica vazia, seguida por várias linhas de anexos.
+
+        -   `[24/08/25, 16:38:36] Lê 🖤:`
+        -   `[U+200E][24/08/25, 16:38:37] Lê 🖤: [U+200E]<attached: 00000282-PHOTO-2025-08-24-16-38-38.jpg>`
+        -   `[U+200E][24/08/25, 16:38:38] Lê 🖤: [U+200E]<attached: 00000283-PHOTO-2025-08-24-16-38-39.jpg>`
+        -   `[U+200E][24/08/25, 16:38:38] Lê 🖤: [U+200E]<attached: 00000284-PHOTO-2025-08-24-16-38-39.jpg>`
+
+        #### Evio de contatos anexados:
+
+        -   Um contato:
+            -   `[U+200E][09/12/24, 12:50:13] Marlon: [U+200E]<attached: -0001788-Lu mãe.vcf>`
+        -   Múltiplos contatos:
+            -   `[U+200E][09/12/24, 12:50:13] Marlon: [U+200E]<attached: -0052176-[U+200E]The Plug and 2 other contacts.vcf>`
+
+------------------------------------------------------------------------
+
+## Resumindo, os principais padrões a serem considerados são:
+
+-   **Caracter Invisível** (`[U+200E]`), que pode aparecer em várias situações, como mensagens de mídia, editadas ou excluídas.
+
+-   **Timestamps** no formato `[DD/MM/YY, HH:MM:SS]`.
+
+-   **Formato Regional de Data e Hora**, que pode variar dependendo das configurações do dispositivo.
+
+-   **Remetentes** seguidos de `:`.
+
+    -   **Caracteres Especiais nos Nomes dos Remetentes**, como emojis ou espaços, que devem ser preservados
+
+-   **Mensagens de texto**, que podem incluir emojis e links.
+
+    -   **Linhas de Continuação** que não iniciam com timestamp, indicando que fazem parte da mensagem anterior.
+
+    -   **Mensagens com Apenas Emojis ou Links**, que devem ser corretamente identificadas e classificadas.
+
+    -   **Links Incorporados** em mensagens de texto, que devem ser preservados para análise.
+
+    -   **Mensagens com Texto, Emojis e Links Combinados**, que devem ser analisadas para extrair todas as informações relevantes.
+
+    -   **Sinais Usando Caracteres**, como `:))`, `:D`, `:P`, que podem aparecer sozinhos ou junto com emojis e links.
+
+    -   **Mensagens vazias** representam o envio de mais de uma mídia de uma vez, quando seguidas por anexos;
+
+-   **Mensagens Editadas** indicadas por `[U+200E]<This message was edited>`.
+
+-   **Mensagens Deletadas** indicadas por `[U+200E]This message was deleted`.
+
+-   **Chamadas de Voz e Vídeo Omitidas** indicadas por `[U+200E]    Missed voice call. [U+200E]Click to call back`, etc.
+
+-   **Erros de Exibição de Mensagem**, indicados por `[U+200E]This message can't be displayed here. Please open [U+200E]WhatsApp on your phone to view the message.`
+
+-   **Mídias Omitidas** indicadas por `[U+200E]GIF omitted`, `[U+200E]audio omitted`, etc.
+
+-   **Mídias Anexadas** indicados por linhas como `<attached: filename.ext>`, que podem seguir mensagens vazias ou de mídia.
+
+-   **Contatos Anexados** indicados por linhas como `<attached: filename.vcf>`.
+
+-   **Múltiplas Mídias em Sequência**, onde uma mensagem vazia é seguida por várias linhas de anexos.
+
+-   **Nomes de Arquivos de Mídia**, que podem indicar o tipo de mídia (ex.: `PHOTO`, `VIDEO`, `AUDIO`, `STICKER`, etc.) e devem ser considerados na classificação das mensagens.
+
+------------------------------------------------------------------------
+
+# Notas
+
+-   O caracter invísivel pode ser um meio de identificar linhas/ mensagens especiais, podendo ser removido após a extração. Ou seja, ele pode ser usado como um marcador para identificar mensagens de mídia, editadas ou excluídas, e depois limpado do documento final para análise.
+    -   💡 *No entanto, é importante notar que o caractere invísivel `[U+200E]` não aparece em todas as mensagens de mídia, editadas ou excluídas. Portanto, confiar exclusivamente nele pode levar a erros de classificação. É recomendável usar uma combinação de padrões para garantir uma identificação mais precisa.*
+    -   💡 *Além disso, o caractere invísivel `[U+200E]` pode aparecer em outros contextos além de mídia, edição ou exclusão. Portanto, é essencial analisar o contexto completo da mensagem para evitar classificações incorretas.*
+-   Mensagens de mídia são indicadas de formas variadas. Aqui a hipótese é a seguinte: no momento da exportação dos dados do Whatsapp, talvez ele não baixe todos os arquivos de mídia, por algum motivo. Diante disso, arquivos de mídia que não foram baixados, podem estar sendo sinalizados como `ommited`, como os exemplos.
+    -   Já os arquivos que foram baixados, são sinalizados como `attached`, com o nome do arquivo.
+    -   Dessa forma, podemos classificar as mensagens de mídia em dois grupos: `media_ommited` e `media_attached`.
+    -   Além disso, há casos de mensagens de mídia que não possuem nem o `ommited`, nem o `attached`, mas que possuem um padrão diferente, como no caso dos documentos, onde aparece o nome do arquivo, o número de páginas e a indicação de `document omitted`. Esses casos podem ser classificados como `media_ommited` também.
+    -   Por fim, há casos de mídia que não possuem nem o `ommited`, nem o `attached`, como no caso dos áudios e imagens. Esses casos podem ser classificados como `media_unknown`, ou algo do tipo.
+    -   Assim, podemos criar uma coluna `message_type` com valores como `text`, `media_attached`, `media_ommited`, `media_unknown`, `link`, etc.
+-   Podemos notar que os nomes dos arquivos são indicadores do tipo de mídia, seria interessante extrair essa informação da pasta com osarquivos de mídia exportados, para enriquecer a análise e relacionar arquivo \<\> mensagem.
+    -   Ex.: `00000001-PHOTO-2025-08-21-22-06-35.jpg` → tipo `PHOTO`
+    -   Ex.: `-0000015-AUDIO-2025-08-21-21-31-39.opus` → tipo `AUDIO`
+    -   Ex.: `00000298-STICKER-2025-08-25-09-10-40.webp` → tipo `STICKER`
+    -   Ex.: `00001238-VIDEO-2025-09-03-13-50-07.mp4` → tipo `VIDEO`
+    -   Ex.: `-0001788-Lu mãe.vcf` → tipo `VCF` (contato)
+    -   Ex.: `-0052176-[U+200E]The Plug and 2 other contacts.vcf` → tipo `VCF` (contatos)
+    -   Dessa forma, podemos criar uma coluna `media_type` com valores como `PHOTO`, `AUDIO`, `STICKER`, `VIDEO`, `VCF`, etc.
+    -   Essa informação pode ser extraída do nome do arquivo, que está entre os sinais `<attached: ...>`.
+    -   Essa coluna pode ser preenchida apenas para mensagens do tipo `media_attached`.
+    -   Para mensagens do tipo `media_ommited`, podemos tentar extrair o tipo de mídia a partir do texto da mensagem, como `audio omitted`, `image omitted`, etc.
+    -   Para mensagens do tipo `media_unknown`, essa coluna pode ficar vazia ou com valor `unknown`.
+    -   Exemplo de valores para a coluna `media_type`:
+        -   `PHOTO`
+        -   `AUDIO`
+        -   `STICKER`
+        -   `VIDEO`
+        -   `VCF`
+        -   `DOCUMENT`
+        -   `unknown`
+    -   Essa coluna pode ser útil para análises futuras, como contagem de tipos de mídia enviados/ recebidos, análise de padrões de comunicação, etc.
+    -   Essa informação pode ser extraída usando expressões regulares para capturar o padrão do nome do arquivo.
+    -   Exemplo de regex para capturar o tipo de mídia:
+        -   `r'<attached: .*?-(PHOTO|AUDIO|STICKER|VIDEO|VCF|DOCUMENT)-.*?>'`
+        -   Essa regex captura o tipo de mídia entre os sinais `<attached: ...>` e o hífen que segue o nome do arquivo.
+        -   O grupo capturado pode ser usado para preencher a coluna `media_type`.
+    -   Essa abordagem pode ser implementada na etapa de extração e estruturação dos dados, onde podemos adicionar uma lógica para identificar o tipo de mídia a partir do nome do arquivo.
+    -   Essa lógica pode ser aplicada apenas para mensagens do tipo `media_attached`, onde o nome do arquivo está presente.
+    -   Para mensagens do tipo `media_ommited`, podemos usar uma lógica diferente para tentar extrair o tipo de mídia a partir do texto da mensagem.
+    -   Para mensagens do tipo `media_unknown`, essa coluna pode ficar vazia ou com valor `unknown`.
+    -   Essa abordagem pode enriquecer o conjunto de dados final, permitindo análises mais detalhadas sobre os tipos de mídia compartilhados na conversa.
+-   Creio que podemos tratar os grupos de ommited junto com os attached, como se fossem o mesmo objeto. Porém, os ommited sem um atributo attached true, e também sem o file.path, como nos casos do csv, alguns áudios, imagens etc.
+    -   além disso, os ommited podem ser classificados como mídia indisponível, enquanto os attached são mídias disponíveis.
+    -   Dessa forma, podemos criar uma coluna `message_type` com valores como `text`, `media`, `media_unavailable`, `link`, etc.
+    -   Essa abordagem pode simplificar a análise, agrupando todas as mensagens de mídia em uma única categoria, enquanto ainda permite distinguir entre mídias disponíveis e indisponíveis.
+    -   Essa classificação pode ser útil para entender o comportamento de compartilhamento de mídia na conversa, como a frequência de envio de mídias disponíveis versus indisponíveis.
+    -   Além disso, essa abordagem pode facilitar a análise de padrões de comunicação, como a preferência por enviar mídias disponíveis ou indisponíveis em diferentes contextos.
+
+### Minha ideia para a pipeline é a seguinte:
+
+Parte 1 - quantas mensagens reais temos (no sentido de mensagens que podem ocupar mais de uma linha): 1. Ler o arquivo bruto linha por linha. 2. Apresentar o número total de linhas no arquivo. 3. Identificar linhas que começam com timestamp para marcar o início de uma nova mensagem. 3.1. Concatenar linhas de continuação às mensagens anteriores. 3.2. Considerar excluir as \~44 linhas identificadas como agrupadores dos attachments (ou seja, as mensagens vazias. Irá ser considerado que essas linhas não representam mensagens reais, mas sim cada anexo que vem depois) 4. Contar o número total de mensagens reais extraídas. 5. Apresentar um gráfico funil mostrando a redução do número de linhas para o número de mensagens reais.
+
+Parte 2 - Verificar as tipologias de mensagens (quantas mensagens de texto, mídia, links, editadas, excluídas, etc.): 1. Verificar se o `[U+200E]` é um possível indicador de mensagens especiais (mídia, editadas, excluídas); 1.1. Comparar com outros tipos possíveis de contagens de mídias.
+
+```         
+2. Analisar os padrões das mensagens para identificar tipos (texto, mídia, link, editada, excluída, etc.).
+3. Contar o número de mensagens por tipo.
+4. Apresentar um gráfico de barras mostrando a distribuição dos tipos de mensagens.
+
+-   A pipeline detalhada seria:
+    1. Ler o arquivo bruto linha por linha.
+    2.  Apresentar o número total de linhas no arquivo.
+    3.  Identificar linhas que começam com timestamp para marcar o início de uma nova mensagem.
+    4.  Extrair timestamp, remetente e conteúdo da mensagem usando expressões regulares.
+    5.  Classificar o tipo de mensagem (texto, mídia, link, editada, excluída, etc.) com base nos padrões identificados.
+    6.  Contar o número de mensagens por tipo.
+    7.  Apresentar um gráfico de barras mostrando a distribuição dos tipos de mensagens.
+```
+
+Parte 3 - Relacionamento entre os attachments e seus arquivo reais.
+
+1.  Analisar os padrões dos attachments para identificar os arquivos reais.
+
+2.  Contar o número de attachments por tipo de mídia.
+
+3.  Apresentar um gráfico de barras mostrando a distribuição dos tipos de mídia dos attachments.
+
+4.  A pipeline detalhada seria:
+
+    1.  Ler o arquivo bruto linha por linha.
+    2.  Apresentar o número total de linhas no arquivo.
+    3.  Identificar linhas que começam com timestamp para marcar o início de uma nova mensagem.
+    4.  Extrair timestamp, remetente e conteúdo da mensagem usando expressões regulares.
+    5.  Identificar mensagens que indicam attachments.
+    6.  Extrair o nome do arquivo do attachment.
+
+    Verificar em cada attachment se há um arquivo real correspondente na pasta de mídia exportada. Verificar o nome do arquivo do attachment no documento com os nomes dos arquivos na pasta de mídia exportada. Contar o número de arquivos reais encontrados para os attachments. Contar o número de attachments sem arquivos reais correspondentes. Listar os nomes dos arquivos reais encontrados para os attachments. Listar os nomes dos attachments sem arquivos reais correspondentes. Verificar se os itens `ommited` possuem arquivos reais correspondentes na pasta de mídia exportada, ou se comprova-se que esses arquivos não foram exportados, dada a hipotese levantada anteriormente. A ideia é que os arquivos `ommited` não possuem arquivos reais correspondentes, enquanto os `attached` possuem. Para isso, será necessário cruzar os nomes dos arquivos `ommited` com os nomes dos arquivos na pasta de mídia exportada, uma parte do nome do arquivo, uma vez que ele é composto por um prefixo numérico, o tipo de mídia, a data e hora, e a extensão do arquivo. Exemplo:
+
+    -   Nome do arquivo `ommited`: `audio omitted`
+
+    -   Nome do arquivo na pasta de mídia exportada: `00007252-AUDIO-2025-10-20-11-00-46.opus`
+
+    -   Nome do arquivo `ommited`: `image omitted`
+
+    -   Nome do arquivo na pasta de mídia exportada: `00007257-PHOTO-2025-10-20-11-31-49.jpg`
+
+    -   Nome do arquivo `ommited`: `video omitted`
+
+    -   Nome do arquivo na pasta de mídia exportada: `00007258-VIDEO-2025-10-20-11-31-51.mp4`
+
+    -   Nome do arquivo `ommited`: `sticker omitted`
+
+    -   Nome do arquivo na pasta de mídia exportada: `00007276-STICKER-2025-10-20-14-36-22.webp`
+
+    -   Nome do arquivo `ommited`: `document omitted`
+
+    -   Nome do arquivo na pasta de mídia exportada: `CARTA IMAGINA JUNTOS DISTRIBUIÇÃO (PJ).pdf • 42 pages`
+
+    Iremos precisar extrair dos nomes dos arquivos apenas a data e hora, e cruzar com esses mesmos dados contidos na linha do arquivo analisado (`raw-data.txt`), para fazer a correspondência correta.
+
+------------------------------------------------------------------------
+
+````         
+7.  Classificar o tipo de mídia do attachment com base no nome do arquivo e relacionar ao arquivo real da 
+    1.  Este arquivo está presente na pasta de mídia exportada (`~/Desktop/local-workbench/whats-le/_sources/WhatsappFiles`). A nomeação dos arquivos possuí uma estrutura consistente:
+
+        ``` markdown
+        ├── 00007252-AUDIO-2025-10-20-11-00-46.opus
+        ├── 00007253-AUDIO-2025-10-20-11-01-39.opus
+        ├── 00007257-PHOTO-2025-10-20-11-31-49.jpg
+        ├── 00007258-VIDEO-2025-10-20-11-31-51.mp4
+        ├── 00007262-PHOTO-2025-10-20-12-28-58.jpg
+        ├── 00007263-PHOTO-2025-10-20-12-29-01.jpg
+        ├── 00007265-VIDEO-2025-10-20-12-29-53.mp4
+        ├── 00007276-STICKER-2025-10-20-14-36-22.webp
+        ├── 00007285-VIDEO-2025-10-20-14-43-35.mp4
+        ├── 00007286-VIDEO-2025-10-20-14-44-11.mp4
+        ├── 00007287-VIDEO-2025-10-20-14-44-39.mp4
+        ├── 00007288-PHOTO-2025-10-20-14-54-42.jpg
+        ├── 00007293-AUDIO-2025-10-20-15-10-13.opus
+        ├── 00007294-PHOTO-2025-10-20-15-10-54.jpg
+        ├── 00007295-PHOTO-2025-10-20-15-10-56.jpg
+        ├── 00007300-PHOTO-2025-10-20-15-21-14.jpg
+        ├── 00007303-VIDEO-2025-10-20-15-22-37.mp4
+        ├── 00007310-AUDIO-2025-10-20-15-25-50.opus
+        ```
+````
+
+8.  Contar o número de attachments por tipo de mídia.
+9.  Apresentar um gráfico de barras mostrando a distribuição dos tipos de mídia dos attachments..
+
+Parte 4 - Redução do conjunto de dados para análise:
+
+1.  Padronizar as linhas especiais de mídia, editadas e excluídas, usando o caractere invisível `[U+200E]` como marcador, se necessário (fazer outras verificações se necessário). 1.1. o padrão irá juntarr todas as variações de mensagens de mídia (ommited, attached, etc.) em um único padrão. Esse padrão será usado para identificar mensagens de mídia na etapa de extração e estruturação dos dados. A visão do banco de dados será da seguinte forma:
+
+-   `timestamp` (data e hora da mensagem)
+-   `sender` (remetente da mensagem)
+-   `message` (conteúdo da mensagem)
+-   `message_type`:
+    -   `text`
+    -   `media`:
+    -   `edited`
+    -   `deleted`
+    -   `empty` (para mensagens vazias que indicam múltiplos attachments)
+-   `media_type`:
+    -   `photo`
+    -   `video`
+    -   `audio`
+    -   `sticker`
+    -   `document`
+    -   `contact`
+-   `source`:
+    -   `attached`
+    -   `ommited`
+    -   `unknown` (para mídias sem indicação clara de attached ou ommited)
+-   `source-file` (nome do arquivo, se disponível) - para mensagens de mídia do tipo `attached`, o nome do arquivo será extraído do padrão `<attached: filename.ext>`. Para mensagens de mídia do tipo `ommited`, o nome do arquivo será extraído do texto da mensagem, como `audio omitted`, `image omitted`, etc. Para mensagens de mídia do tipo `unknown`, essa coluna ficará vazia ou com valor `unknown`.
+
+Após ter esse mapeamento, seria interessante fazer o FIND/REPLACE em um novo arquivo, mais limpo, digamos assim. A ideia seria transpor o arquivo bruto para um arquivo mais limpo, onde todas as variações de mensagens de mídia, editadas e excluídas seriam padronizadas para um único padrão, usando o caractere invisível `[U+200E]` como marcador. Isso em tese reduziria um pouco a complexidade do arquivo bruto, além de remover os caracteres especiais, e reduzindo a quantidade de caracteres, impactando no seu tamanho final.
+
+Eu gostaria de remover os Caracteres Invisíveis (`[U+200E]`), mas não sei exatamente se isso seria interessante, uma vez que eles podem ser usados como marcadores para identificar mensagens especiais. Talvez seja melhor mantê-los na etapa de extração e estruturação dos dados, e depois removê-los do DataFrame final, e também para o arquivo mais limpo.
+
+Após esse processo de FIND/REPLACE, poderíamos seguir com as seguintes etapas de limpeza e preparação dos dados:
+
+1.  Filtrar caracteres invisiveis
+2.  Filtrar mensagens irrelevantes (ex.: mensagens de sistema, erros, chamadas, vazias, etc.).
+3.  Sinalizar e Padronizar / ocultar os nomes dos remetentes (ex.: remover espaços extras, caracteres especiais, etc."P1, P2")<opcional>.
+4.  Normalizar formatos de data e hora. A sugestão é usar o formato ISO 8601 (`YYYY-MM-DDTHH:MM:SS`). 4.1. Converter todos os timestamps para o fuso horário UTC. 4.2. Converter todos os timestamps para o formato ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`). 4.3. Converter todos os timestamps para o fuso horário local (ex.: America/Sao_Paulo). 4.4 Converter todos os timestamps para o formato ISO 8601 (`YYYY-MM-DDTHH:MM:SS-03:00`). 4.5 O resultado final deve ser um conjunto de dados com timestamps padronizados no formato ISO 8601, no fuso horário local (America/Sao_Paulo). Já enquanto os dados em si, um exemplo:
+
+Essa seria uma amostra de como quero o resultado do raw_data.txt para o cleaned_data.txt:
+
+```         
+    2023-05-12T14:23:45-03:00 Lê 🖤: Oi, tudo bem?
+    2023-05-12T14:25:10-03:00 Marlon: :))
+    2023-05-12T14:30:00-03:00 Lê 🖤: 
+    Olha que fofo esse cachorro! 🐶❤
+    2023-05-12T14:35:20-03:00 Marlon: 😂🤣😍
+    2023-05-12T14:40:00-03:00 Marlon: :P 😂
+    2023-05-12T14:45:15-03:00 Lê 🖤: :D Estou tão feliz hoje! 😂
+    2023-05-12T14:50:30-03:00 Marlon: Olha esse site incrível: https://example.com
+    2023-05-12T14:55:45-03:00 Lê 🖤: https://another-example.com
+    2023-05-12T15:00:00-03:00 Lê 🖤::D Veja isso: https://funny-example.com
+    2023-05-12T15:05:15-03:00 Marlon: Confira este vídeo incrível! 😂 https://video-example.com
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-audio] ommited
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-sticker] ommited
+    2023-05-12T15:00:00-03:00 Marlon: [media-gif] ommited
+    2023-05-12T15:00:00-03:00 Marlon: [media-image] ommited
+    2023-05-12T15:00:00-03:00 Marlon: [media-video-note] ommited
+    2023-05-12T15:00:00-03:00 Marlon: [media-video] ommited
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-document] ommited
+    2023-05-12T15:00:00-03:00 Marlon: [media-audio] -0075742-AUDIO-2025-01-03-21-10-34.opus
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-image] 00000001-PHOTO-2025-08-21-22-06-35.jpg
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-sticker] 00000037-STICKER-2025-08-21-23-09-17.webp
+    2023-05-12T15:00:00-03:00 Lê 🖤: [media-video-note] 00000778-VIDEO-2025-08-28-11-52-20.mp4
+    2023-05-12T15:00:00-03:00 Marlon: [media-video] 
+    2023-05-12T15:00:00-03:00 Marlon: [contact-attached] -0001788-Lu mãe.vcf
+    2023-05-12T15:00:00-03:00 Lê 🖤: [contacts-attached] -0052176-[U+200E]
+    2023-05-12T15:00:00-03:00 Marlon: [message-edited] Sample Text....
+    2023-05-12T15:00:00-03:00 Marlon: [message-deleted]
+    2023-05-12T15:00:00-03:00 Lê 🖤: [missed-voice-call]
+    2023-05-12T15:00:00-03:00 Lê 🖤: [voice-call-answered-on-other-device]
+    2023-05-12T15:00:00-03:00 Marlon: [display-error]
+    
+```
+
+> Especialmente nos casos onde \[media-any\] ommited, estes só são ommited no cleaned-data.txt, pois passaram por verificação na etapa anterior, onde confirmamos que esses arquivos não possuem arquivos reais correspondentes na pasta de mídia exportada. Portanto, mantemos o marcador \[media-x\] ommited para indicar que essa mensagem é de mídia, mas o arquivo não está disponível.
+
+Só fico na dúvida se mantemos ou não o edited enquanto um marcador para essa mensagem. Talvez seja interessante manter, para análises futuras. Neste sentido, para exportar o arquivo limpo, poderíamos fazer o seguinte: - manter o edited como marcador, conforme o exemplo acima. - para deleted, missed-voice-call, voice-call-answered-on-other-device e display-error, poderíamos substituir pelo marcador correspondente, conforme o exemplo acima. - para as mídias, poderíamos substituir pelo marcador correspondente, conforme o exemplo acima. - para as mensagens de texto, manter o conteúdo original da mensagem. - para as mensagens vazias que indicam múltiplos attachments, removeriamos a linha vazia, já que não representa uma mensagem real, e está sendo representada pelas linhas de attachments que seguem.
+
+Assim, teriamos um arquivo mais limpo, com todas as mensagens padronizadas e prontas para análise.
+
+5.  Salvar o conjunto de dados limpo em um novo arquivo (`cleaned-data.txt`). 5.1. Comparar o tamanho do arquivo limpo com o arquivo bruto. 5.2. Comparar o número de linhas do arquivo limpo com o arquivo bruto. 5.3. Apresentar um gráfico comparativo (barras ou pizza) mostrando a redução do tamanho e número de linhas do arquivo bruto para o arquivo limpo. 5.4. Apresentar um gráfico de barras mostrando a contagem de mensagens por remetente no conjunto de dados limpo. 5.5. Apresentar um gráfico de linhas mostrando a distribuição de mensagens ao longo do tempo no conjunto de dados limpo. 5.6. Apresentar um gráfico de barras mostrando a contagem de mensagens por tipo no conjunto de dados limpo.
+
+6.  Criar um dataframe inicial com todas as mensagens brutas. Neste caso em especial, vamos remover do corpo da mensagem os caracteres invisíveis `[U+200E]`, uma vez que eles não agregam valor para a análise dos dados em si, e podem atrapalhar na hora de extrair as informações relevantes. Dessa forma, o DataFrame inicial terá as seguintes colunas:
+
+-   `raw_line`: linha bruta do arquivo, sem alterações.
+-   `cleaned_line`: linha limpa, com os caracteres invisíveis `[U+200E]` removidos.
+-   `line_number`: número da linha no arquivo original.
+-   `is_timestamp`: indicador booleano se a linha começa com um timestamp.
+-   `is_continuation`: indicador booleano se a linha é uma continuação da mensagem anterior.
+-   `is_attachment`: indicador booleano se a linha indica um attachment.
+-   `is_media`: indicador booleano se a linha indica uma mídia (ommited ou attached).
+-   `is_edited`: indicador booleano se a linha indica uma mensagem editada.
+-   `is_deleted`: indicador booleano se a linha indica uma mensagem deletada.
+-   `is_system_message`: indicador booleano se a linha indica uma mensagem de sistema (chamada, erro, etc.).
+-   `is_empty`: indicador booleano se a linha está vazia (indica múltiplos attachments).
+-   `sender`: remetente da mensagem (extraído se a linha começar com timestamp).
+-   `timestamp`: timestamp da mensagem (extraído se a linha começar com timestamp).
+-   `message`: conteúdo da mensagem (extraído se a linha começar com timestamp).
+-   `message_type`: tipo da mensagem (texto, mídia, link, editada, excluída, etc.) (extraído se a linha começar com timestamp).
+
+7.  salvar o DataFrame inicial em um arquivo CSV (`initial_dataframe.csv`).
+8.  Reduzir arquivo cleaned-data.txt ainda mais, agora considerando apenas as mensagens relevantes para análise textual (evitando mensagens de sistema, chamadas, erros, etc, inclusive os anexos) 8.1. Mostrar a redução em termos de linha e de arquivo. 8.2. Pensar em visualizações interessantes para esse conjunto de dados reduzido (wordcloud, sentiment analysis, frequência de palavras, etc).
+
+------------------------------------------------------------------------
+
+#### Parte 5 - Enriquecimento dos dados para analise:
+
+Apresentar um resumo estatístico do conjunto de dados limpo. Pensar em visualizações interessantes para o conjunto de dados limpo (wordcloud, sentiment analysis, frequência de palavras, etc). 1. Propor visualizações graficas de temporais, distribuições, correlações, etc. 2. Criar colunas adicionais para análise (contagem de palavras, presença de links, tipo de mídia, etc). 3. Montar o DataFrame final com todas as mensagens estruturadas.
+
+------------------------------------------------------------------------
+
+# Pipeline de Data Wrangling
+
+O desafio é **extrair cada mensagem real** — mesmo quando ela ocupa múltiplas linhas — e transformá-la em um DataFrame com colunas como: `timestamp`, `sender`, `message`, `message_type`, `word_count`, `contains_link`, etc.
+
+Este relatório documenta todo o processo, passo a passo, com código executável e resultados visuais.
+
+------------------------------------------------------------------------
+
+## 🔍 Etapa 1: Contagem de Mensagens Reais
+
+O primeiro passo é entender **quantas mensagens reais existem** no arquivo, e não apenas quantas linhas.
