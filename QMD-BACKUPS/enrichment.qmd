@@ -1,0 +1,147 @@
+---
+title: "Enriquecimento do Dataset: Merge com Transcrições"
+subtitle: "Unindo mensagens estruturadas com áudios/vídeos transcritos"
+author: "Marlon"
+date: today
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: false
+    number-sections: true
+    code-fold: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{python}
+#| label: setup
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Configurações
+OUTPUT_FOLDER = Path("output")
+
+print("📂 CARREGANDO DATASETS")
+print("=" * 70)
+
+# Carregar datasets
+df_final = pd.read_csv(OUTPUT_FOLDER / 'final_dataframe.csv', parse_dates=['timestamp'])
+df_transcriptions = pd.read_csv(OUTPUT_FOLDER / 'for_transcription_complete.csv')
+
+print(f"✅ Dataset final carregado: {len(df_final):,} registros")
+print(f"✅ Transcrições carregadas: {len(df_transcriptions):,} registros")
+print()
+
+# Estatísticas
+print("📊 Estatísticas das transcrições:")
+print(f"   Completas: {(df_transcriptions['transcription_status'] == 'completed').sum():,}")
+print(f"   Erros: {(df_transcriptions['transcription_status'] == 'error').sum():,}")
+
+print("\n" + "=" * 70)
+```
+
+# Merge Final dos Datasets (Enriquecimento da Base)
+
+## Introdução
+
+Este pipeline realiza o merge final entre:
+
+1.  Dataset estruturado (*final_dataframe.csv*) - **`{python} len(df_final)`** mensagens
+2.  Transcrições processadas (*for_transcription_complete.csv*) - **`{python} len(df_transcriptions)`** áudios/vídeos
+
+**Objetivo**: Criar dataset enriquecido com conteúdo textual de todas as mídias transcritas.
+
+```{python}
+#| label: prepare-data
+
+print("🔧 PREPARANDO DADOS PARA MERGE")
+print("=" * 70)
+
+# 1. Criar dicionário de transcrições (file_path -> texto)
+transcription_map = {}
+language_map = {}
+
+for _, row in df_transcriptions.iterrows():
+    if row['transcription_status'] == 'completed' and pd.notna(row['file_path']):
+        transcription_map[row['file_path']] = row['transcription']
+        language_map[row['file_path']] = row['transcription_language']
+
+print(f"✅ Mapeamento criado: {len(transcription_map):,} transcrições válidas")
+print()
+
+# 2. Verificar se df_final tem a coluna file_path
+if 'file_path' not in df_final.columns:
+    print("❌ ERRO: Coluna 'file_path' não encontrada em df_final!")
+    print(f"   Colunas disponíveis: {list(df_final.columns)}")
+else:
+    # Contar quantas mensagens têm file_path
+    with_file = df_final['file_path'].notna().sum()
+    print(f"✅ Mensagens com file_path: {with_file:,}")
+    
+    # Quantas dessas têm transcrição disponível?
+    files_in_df = set(df_final['file_path'].dropna().unique())
+    files_with_transcription = files_in_df.intersection(set(transcription_map.keys()))
+    
+    print(f"✅ Arquivos que terão transcrição: {len(files_with_transcription):,}")
+
+print("\n" + "=" * 70)
+
+```
+
+```{python}
+#| label: merge-transcriptions
+
+print("🔗 REALIZANDO MERGE")
+print("=" * 70)
+
+# Adicionar colunas de transcrição no df_final
+df_final['transcription'] = df_final['file_path'].map(transcription_map)
+df_final['transcription_language'] = df_final['file_path'].map(language_map)
+
+# Criar coluna enriquecida: message + transcription
+def enrich_message(row):
+    """Combina message original com transcrição quando disponível"""
+    
+    # Se tem transcrição
+    if pd.notna(row.get('transcription')):
+        prefix = ""
+        if row['media_type'] == 'audio':
+            prefix = "🎙️ [ÁUDIO TRANSCRITO]"
+        elif row['media_type'] == 'video':
+            prefix = "🎥 [VÍDEO TRANSCRITO]"
+        elif row['media_type'] == 'video_note':
+            prefix = "🎬 [VIDEO NOTE TRANSCRITO]"
+        
+        return f"{prefix} {row['transcription']}"
+    
+    # Se não tem transcrição, manter mensagem original
+    return row.get('message', '')
+
+df_final['message_enriched'] = df_final.apply(enrich_message, axis=1)
+
+# Estatísticas
+enriched_count = df_final['transcription'].notna().sum()
+
+print(f"✅ Merge concluído!")
+print(f"   Total de registros: {len(df_final):,}")
+print(f"   Com transcrição: {enriched_count:,} ({enriched_count/len(df_final)*100:.1f}%)")
+print()
+
+# Exemplos
+print("📋 Exemplos de mensagens enriquecidas:")
+samples = df_final[df_final['transcription'].notna()].sample(min(3, enriched_count))
+
+for idx, row in samples.iterrows():
+    print(f"\n   [{row['timestamp']}] {row['sender']}:")
+    print(f"   Arquivo: {row['file_path']}")
+    print(f"   Transcrição: {row['transcription'][:100]}...")
+
+print("\n" + "=" * 70)
+```

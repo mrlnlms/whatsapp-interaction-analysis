@@ -1,0 +1,122 @@
+---
+title: "WhatsApp Data Wrangling: Transformando Conversas em Dados Estruturados"
+author: "Marlon"
+date: today
+format:
+  html:
+    code-fold: false
+    toc: false
+    toc-depth: 3
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+  echo: false
+---
+
+# Introdução
+
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas.
+
+Como estudante de ciência de dados e interessado em análises qualitativas e aprendizado de novas ferramentas, fazer um projeto de data-wrangling com Python nestes dados, incluindo transcrição de mídias e enriquecimento da base, ou seja, dos dados brutos, documentando todo processo usando Quarto (.qmd) parece uma abordagem desafiadora e profissional.
+
+Desta forma este projeto tem como objetivo transformar um arquivo bruto de exportação do WhatsApp (`raw-data.txt`) em um conjunto de dados estruturado, analisável e reprodutível. Neste relatório, documentarei cada etapa do processo de data wrangling, desde a leitura inicial do arquivo até a criação do DataFrame final.
+
+::: callout-note
+## Contexto do Estudo de Caso
+
+Como estudo de caso, vou utilizar o histórico de \~1 ano de mensagens entre minha namorada e eu. Essa escolha se deu por conta de um desejo de fazer algumas análises textuais sobre nosso 1 ano de namoro que está muito próximo.
+:::
+
+::: {.callout-tip collapse="true"}
+## Possibilidades Futuras
+
+Uma possibilidade que vejo após ter os dados aqui tratados, é criar outras bases, como:
+
+-   Datas de viagens
+-   Fotos tiradas e seus locais (via API do Google Photos, se possível)
+-   Timeline completa do namoro
+
+Seria interessante ter uma visualização integrada de todos esses momentos!
+:::
+
+------------------------------------------------------------------------
+
+# Anatomia dos Dados Brutos
+
+## A Fonte de Dados - Formato WhatsApp
+
+Antes de qualquer processamento, precisamos entender **com o que estamos lidando**. Ao exportar uma conversa, o WhatsApp gera um arquivo `.txt` com um formato semi-estruturado:
+
+```         
+[DD/MM/YY, HH:MM:SS] Remetente: Mensagem
+```
+
+### Estrutura Básica
+
+Cada mensagem segue um padrão:
+
+1.  **Timestamp**: `[DD/MM/YY, HH:MM:SS]` - Data e hora da mensagem
+2.  **Remetente**: Nome do usuário que enviou a mensagem
+3.  **Separador**: `:` (dois pontos)
+4.  **Conteúdo**: Texto da mensagem ou indicação de mídia
+
+### Desafios do Formato
+
+-   Mensagens podem se estender por múltiplas linhas
+-   Mensagens do sistema (entrou no grupo, mudou foto, etc.)
+-   Mídias anexadas aparecem como `<Arquivo de mídia oculto>`
+-   Emojis e caracteres especiais
+-   Timestamps podem ter variações de formato
+
+## Carregando os Dados Brutos
+
+Antes de mais nada precisamos carregar os dados brutos no sistema, assim conseguimos ver alguns indicadores e métricas sobre o arquivo no qual vamos trabalhar.
+
+```{python}
+from load_raw_data import analyze_raw_data, print_metrics
+
+# Carrega e analisa os dados brutos
+metrics = analyze_raw_data('raw-data.txt')
+
+# Exibe as métricas
+# print_metrics(metrics)
+```
+
+### Interpretação das Métricas
+
+Com base nas métricas acima, podemos observar:
+
+```{python}
+# Cálculo de algumas estatísticas adicionais
+total_lines = metrics['total_lines']
+file_size_mb = metrics['file_size_bytes'] / (1024 * 1024)
+
+print(f"📊 Densidade de dados:")
+print(f"   • Média de bytes por linha: {metrics['file_size_bytes'] / total_lines:.2f}")
+# print(f"   • Proporção de linhas vazias: {(metrics['empty_lines'] / total_lines * 100):.2f}%")
+```
+
+::: callout-important
+## Observação Importante
+
+O número total de linhas no arquivo **não corresponde** ao número de mensagens, já que:
+
+1.  Mensagens podem ocupar múltiplas linhas
+2.  Existem linhas vazias
+3.  Mensagens do sistema também contam como linhas
+
+Na próxima etapa, faremos o parsing adequado para identificar mensagens individuais.
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+1.  **Identificação de Padrões**: Usar regex para identificar início de mensagens
+2.  **Parsing de Mensagens**: Extrair timestamp, remetente e conteúdo
+3.  **Tratamento de Mensagens Multilinha**: Agregar linhas que pertencem à mesma mensagem
+4.  **Identificação de Mídias**: Catalogar mídias anexadas
+5.  **Criação do DataFrame**: Estruturar dados em formato tabular
+6.  **Transcrição de Mídias**: Processar áudios e vídeos
+7.  **Análises Exploratórias**: Gerar insights dos dados estruturados

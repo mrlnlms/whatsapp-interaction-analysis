@@ -1,0 +1,218 @@
+---
+title: "WhatsApp Data Wrangling: Transformando Conversas em Dados Estruturados"
+author: "Marlon"
+date: today
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas.
+
+Como estudante de ciência de dados e interessado em análises qualitativas e aprendizado de novas ferramentas, fazer um projeto de data-wrangling com Python nestes dados, incluindo transcrição de mídias e enriquecimento da base, ou seja, dos dados brutos, documentando todo processo usando Quarto (.qmd) parece uma abordagem desafiadora e profissional.
+
+Desta forma este projeto tem como objetivo transformar um arquivo bruto de exportação do WhatsApp (`raw-data.txt`) em um conjunto de dados estruturado, analisável e reprodutível. Neste relatório, documentarei cada etapa do processo de data wrangling, desde a leitura inicial do arquivo até a criação do DataFrame final.
+
+::: callout-note
+## Contexto do Estudo de Caso
+
+Como estudo de caso, vou utilizar o histórico de \~1 ano de mensagens entre minha namorada e eu. Essa escolha se deu por conta de um desejo de fazer algumas análises textuais sobre nosso 1 ano de namoro que está muito próximo.
+:::
+
+::: {.callout-tip collapse="true"}
+## Possibilidades Futuras
+
+Uma possibilidade que vejo após ter os dados aqui tratados, é criar outras bases, como:
+
+-   Datas de viagens
+-   Fotos tiradas e seus locais (via API do Google Photos, se possível)
+-   Timeline completa do namoro
+
+Seria interessante ter uma visualização integrada de todos esses momentos!
+:::
+
+------------------------------------------------------------------------
+
+# Anatomia dos Dados Brutos
+
+## A Fonte de Dados - Formato WhatsApp
+
+Antes de qualquer processamento, precisamos entender **com o que estamos lidando**. Ao exportar uma conversa, o WhatsApp gera um arquivo `.txt` com um formato semi-estruturado:
+
+```         
+[DD/MM/YY, HH:MM:SS] Remetente: Mensagem
+```
+
+### Estrutura Básica
+
+Cada mensagem segue um padrão:
+
+1.  **Timestamp**: `[DD/MM/YY, HH:MM:SS]` - Data e hora da mensagem
+2.  **Remetente**: Nome do usuário que enviou a mensagem
+3.  **Separador**: `:` (dois pontos)
+4.  **Conteúdo**: Texto da mensagem ou indicação de mídia
+
+### Desafios do Formato
+
+-   Mensagens podem se estender por múltiplas linhas
+-   Mensagens do sistema (entrou no grupo, mudou foto, etc.)
+-   Mídias anexadas aparecem como `<Arquivo de mídia oculto>`
+-   Emojis e caracteres especiais
+-   Timestamps podem ter variações de formato
+
+## Fase 1: Análise de Metadados
+
+Antes de abrir e processar o conteúdo, vamos extrair informações básicas do arquivo usando apenas metadados do sistema operacional e contagem eficiente de linhas.
+
+```{python}
+from file_metadata import print_file_overview, interpret_statistics
+
+# Análise básica sem processar conteúdo
+metadata, line_stats = print_file_overview('raw-data.txt')
+```
+
+### Interpretação Contextual
+
+Agora que temos os dados básicos, vamos interpretar o que eles significam:
+
+```{python}
+# Interpretação automática das estatísticas
+if metadata and line_stats:
+    interpret_statistics(metadata, line_stats)
+```
+
+::: callout-note
+## Por que Média, Mediana e Moda?
+
+-   **Média**: Dá uma noção geral do tamanho típico das linhas
+-   **Mediana**: Menos sensível a outliers (linhas muito longas/curtas)
+-   **Moda**: Mostra o tamanho de linha mais frequente
+
+A diferença entre esses valores indica a **variabilidade** dos dados. Se média \>\> mediana, há muitas linhas muito longas puxando a média para cima.
+:::
+
+------------------------------------------------------------------------
+
+## Fase 2: Inspeção do Conteúdo
+
+Agora sim vamos olhar para **dentro** do arquivo. Como são \~90K linhas, precisamos de uma forma inteligente de visualizar.
+
+### Preview Multi-Posição
+
+Vamos visualizar amostras em diferentes pontos do arquivo para entender a estrutura e variações:
+
+```{python}
+from content_preview import multi_position_preview
+
+# Visualiza 5 linhas em 5 posições diferentes
+multi_position_preview(
+    file_path='raw-data.txt',
+    n_lines=5,
+    positions=[0, 25, 50, 75, 100],
+    truncate_at=120
+)
+```
+
+::: callout-tip
+## Por que Múltiplas Posições?
+
+Conversas do WhatsApp evoluem ao longo do tempo. Ver diferentes pontos nos permite:
+
+-   Detectar mudanças no padrão de mensagens
+-   Identificar se há períodos de maior/menor atividade
+-   Verificar consistência do formato de exportação
+-   Encontrar anomalias que podem precisar de tratamento especial
+:::
+
+### Análise de Complexidade
+
+Vamos quantificar a complexidade do conteúdo:
+
+```{python}
+from content_preview import print_complexity_analysis
+
+# Analisa complexidade em uma amostra de 200 linhas
+complexity = print_complexity_analysis('raw-data.txt')
+```
+
+### Preview Customizado
+
+Você também pode fazer previews personalizados conforme necessário:
+
+```{python}
+from content_preview import preview_content
+
+# Exemplo: ver 10 linhas no meio do arquivo
+preview_content(
+    file_path='raw-data.txt',
+    n_lines=10,
+    position=50,
+    show_line_numbers=True,
+    truncate_at=150
+)
+```
+
+------------------------------------------------------------------------
+
+## Discussão: Peso e Conversão para Base de Dados
+
+### O Desafio da Conversão
+
+O arquivo de texto bruto tem vantagens e desvantagens:
+
+**Vantagens do formato .txt:** - Leve e portátil - Legível por humanos - Fácil de compartilhar - Não requer software especial
+
+**Desvantagens para análise:** - Não estruturado (mensagens multilinha) - Difícil de fazer queries - Sem tipagem de dados - Difícil de relacionar com outras bases
+
+### Conversão para DataFrame/Database
+
+Ao converter para um formato estruturado (Pandas DataFrame, SQLite, etc.), teremos:
+
+```         
+┌──────────────┬─────────────────────┬───────────┬──────────────────────┐
+│  timestamp   │     remetente       │   tipo    │      conteudo        │
+├──────────────┼─────────────────────┼───────────┼──────────────────────┤
+│ 2023-11-22   │ Marlon              │ texto     │ Bom dia amor!        │
+│ 10:30:15     │                     │           │                      │
+├──────────────┼─────────────────────┼───────────┼──────────────────────┤
+│ 2023-11-22   │ Namorada            │ texto     │ Bom diaaa! Dormiu... │
+│ 10:32:45     │                     │           │                      │
+├──────────────┼─────────────────────┼───────────┼──────────────────────┤
+│ 2023-11-22   │ Marlon              │ midia     │ <imagem>             │
+│ 10:36:01     │                     │           │                      │
+└──────────────┴─────────────────────┴───────────┴──────────────────────┘
+```
+
+**Estimativa de overhead:** - Arquivo .txt: \~{metadata\['size_formatted'\] if metadata else 'X MB'} - DataFrame em memória: \~2-3x o tamanho do .txt - Arquivo .parquet: \~0.3-0.5x o tamanho do .txt (comprimido) - Banco SQLite: \~0.8-1.2x o tamanho do .txt
+
+::: callout-important
+## Observação Importante
+
+O número total de linhas no arquivo **não corresponde** ao número de mensagens, já que:
+
+1.  Mensagens podem ocupar múltiplas linhas
+2.  Existem linhas vazias
+3.  Mensagens do sistema também contam como linhas
+
+Na próxima etapa, faremos o parsing adequado para identificar mensagens individuais.
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+1.  **Identificação de Padrões**: Usar regex para identificar início de mensagens
+2.  **Parsing de Mensagens**: Extrair timestamp, remetente e conteúdo
+3.  **Tratamento de Mensagens Multilinha**: Agregar linhas que pertencem à mesma mensagem
+4.  **Identificação de Mídias**: Catalogar mídias anexadas
+5.  **Criação do DataFrame**: Estruturar dados em formato tabular
+6.  **Transcrição de Mídias**: Processar áudios e vídeos
+7.  **Análises Exploratórias**: Gerar insights dos dados estruturados

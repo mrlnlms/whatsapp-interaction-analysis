@@ -1,0 +1,1946 @@
+---
+title: "Final III - Da Bagunça ao Insight: Pipeline de Data Wrangling para Conversas do WhatsApp"
+subtitle: "Uma jornada de transformação de dados não estruturados em conhecimento analisável"
+author: "Marlon"
+date: today
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: false
+    toc-depth: 3
+    toc-location: left
+    number-sections: false
+    code-fold: true
+    code-tools: true
+    df-print: paged
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+editor: visual
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+# Importações
+import pandas as pd
+import numpy as np
+import re
+from pathlib import Path
+from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+# Configurações
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_colwidth', 100)
+
+# Caminhos (ajustar conforme sua estrutura)
+RAW_DATA_PATH = Path("/Users/mosx/Desktop/local-workbench/whats-le/data-wrangling/data/raw-data.txt")
+MEDIA_FOLDER = Path("/Users/mosx/Desktop/local-workbench/whats-le/_sources/WhatsAppFiles")
+OUTPUT_FOLDER = Path("output")
+OUTPUT_FOLDER.mkdir(exist_ok=True)
+```
+
+# Introdução {.unnumbered}
+
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas...
+
+Este documento narra a **jornada de transformação** de um arquivo bruto de exportação do WhatsApp (\~90K linhas, \~5MB) em um conjunto de dados limpo, estruturado e pronto para análise.
+
+::: callout-note
+## Sobre os dados
+
+-   **Fonte:** Exportação de conversa privada do WhatsApp
+-   **Período:** \[inserir período dos dados\]
+-   **Participantes:** 2 pessoas
+-   **Tamanho original:** \~90.000 linhas, \~5MB
+-   **Desafios:** Formatos inconsistentes, caracteres especiais, mensagens fragmentadas
+:::
+
+## O que você encontrará aqui
+
+Este relatório está estruturado como uma **pipeline progressiva**, onde cada etapa:
+
+1.  **Discute** o problema encontrado
+2.  **Propõe** uma solução técnica
+3.  **Implementa** o código necessário
+4.  **Visualiza** os resultados
+5.  **Avalia** o impacto da transformação
+
+Ao final, teremos três artefatos principais:
+
+-   `cleaned-data.txt` → Versão padronizada com marcadores
+-   `text_only_data.txt` → Versão ultra-limpa para análise textual
+-   `final_dataframe.csv` → Dataset estruturado para análise quantitativa
+
+------------------------------------------------------------------------
+
+# PARTE I: Anatomia dos Dados Brutos
+
+Antes de qualquer processamento, precisamos entender **com o que estamos lidando**.
+
+## O Formato WhatsApp
+
+Ao exportar uma conversa, o WhatsApp gera um arquivo `.txt` com um formato semi-estruturado:
+
+```         
+[DD/MM/YY, HH:MM:SS] Remetente: Mensagem
+```
+
+Parece simples, certo? **Não exatamente.**
+
+```{python}
+#| label: raw-sample
+#| echo: true
+
+# Vamos ler as primeiras 20 linhas para ver a realidade
+with open(RAW_DATA_PATH, 'r', encoding='utf-8') as f:
+    raw_lines = f.readlines()
+
+print(f"Total de linhas no arquivo: {len(raw_lines):,}")
+print("\n=== Primeiras 20 linhas ===\n")
+for i, line in enumerate(raw_lines[:20], 1):
+    print(f"{i:3d} | {line.rstrip()}")
+```
+
+## Padrões Identificados
+
+Após análise exploratória, identificamos os seguintes padrões:
+
+::: panel-tabset
+## Elementos Estruturais
+
+-   **Timestamps:** `[DD/MM/YY, HH:MM:SS]`
+-   **Remetentes:** Nome seguido de `:`
+-   **Caractere invisível:** `[U+200E]` em contextos específicos
+-   **Linhas de continuação:** Sem timestamp, continuam mensagem anterior
+
+## Tipos de Mensagem
+
+-   **Texto puro:** Mensagens normais
+-   **Mídia omitida:** `audio omitted`, `image omitted`, etc.
+-   **Mídia anexada:** `<attached: filename.ext>`
+-   **Editadas:** Marcadas com `<This message was edited>`
+-   **Deletadas:** `This message was deleted`
+-   **Sistema:** Chamadas, erros, etc.
+
+## Desafios
+
+1.  **Mensagens multi-linha** → Precisam ser agregadas
+2.  **Caracteres especiais** → Nomes com emojis, texto bidirecional
+3.  **Mídias inconsistentes** → Às vezes omitidas, às vezes anexadas
+4.  **Mensagens vazias** → Indicam múltiplos anexos
+5.  **Timestamps variáveis** → Formato pode mudar por região
+:::
+
+```{python}
+#| label: estatisticas-basicas
+
+# Estatísticas básicas do arquivo bruto
+import os
+file_size_mb = os.path.getsize(RAW_DATA_PATH) / (1024 * 1024)
+total_lines = len(raw_lines)
+total_chars = sum(len(line) for line in raw_lines)
+
+# Contar linhas com timestamp
+timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2},\s\d{2}:\d{2}:\d{2}\]'
+lines_with_timestamp = sum(1 for line in raw_lines if re.match(timestamp_pattern, line))
+continuation_lines = total_lines - lines_with_timestamp
+
+# Criar visualização
+stats_data = {
+    'Métrica': ['Total de Linhas', 'Linhas com Timestamp', 'Linhas de Continuação', 'Tamanho do Arquivo'],
+    'Valor': [f'{total_lines:,}', f'{lines_with_timestamp:,}', f'{continuation_lines:,}', f'{file_size_mb:.2f} MB']
+}
+
+stats_df = pd.DataFrame(stats_data)
+```
+
+::: callout-important
+## Estatísticas do Arquivo Bruto
+
+```{python}
+#| label: tbl-stats-raw
+#| tbl-cap: "Características do arquivo raw-data.txt"
+
+stats_df
+```
+
+**Observação crítica:** Temos `{python} f"{continuation_lines:,}"` linhas de continuação (\~`{python} f"{(continuation_lines/total_lines)*100:.1f}%"`) que precisam ser agregadas às suas mensagens originais.
+:::
+
+------------------------------------------------------------------------
+
+# PARTE II: Da Linha ao Registro
+
+## O Problema das Continuações
+
+Nem toda linha representa uma mensagem única. Quando alguém envia uma mensagem longa, o WhatsApp pode quebrá-la em múltiplas linhas no arquivo exportado:
+
+```         
+[24/10/24, 09:21:38] Marlon: Se tiver muito absurdo dá pra vc ver
+se não tem sua trupe daí também que tope ir, sla 
+Mais tarde te dou um salve dnv
+```
+
+As duas últimas linhas **não têm timestamp**, indicando que são continuações da primeira.
+
+## Estratégia de Agregação
+
+Nossa estratégia:
+
+1.  Identificar linhas que começam com timestamp → **nova mensagem**
+2.  Linhas sem timestamp → **anexar à mensagem anterior**
+3.  Acumular texto até encontrar próximo timestamp
+4.  Resultado: cada "mensagem real" em um único registro
+
+```{python}
+#| label: aggregation-function
+
+def aggregate_messages(lines):
+    """
+    Agrega linhas de continuação às suas mensagens originais.
+    
+    Returns:
+        list of dict: [{
+            'line_number': int,
+            'raw_text': str,
+            'is_message_start': bool
+        }]
+    """
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2},\s\d{2}:\d{2}:\d{2}\]'
+    
+    aggregated = []
+    current_message = None
+    current_line_number = None
+    
+    for i, line in enumerate(lines, 1):
+        line = line.rstrip('\n')
+        
+        if re.match(timestamp_pattern, line):
+            # Nova mensagem - salvar a anterior se existir
+            if current_message is not None:
+                aggregated.append({
+                    'line_number_start': current_line_number,
+                    'line_number_end': i - 1,
+                    'raw_text': current_message,
+                    'is_message_start': True,
+                    'continuation_count': (i - 1) - current_line_number
+                })
+            
+            # Iniciar nova mensagem
+            current_message = line
+            current_line_number = i
+        else:
+            # Linha de continuação
+            if current_message is not None:
+                current_message += '\n' + line
+    
+    # Adicionar última mensagem
+    if current_message is not None:
+        aggregated.append({
+            'line_number_start': current_line_number,
+            'line_number_end': len(lines),
+            'raw_text': current_message,
+            'is_message_start': True,
+            'continuation_count': len(lines) - current_line_number
+        })
+    
+    return aggregated
+
+# Executar agregação
+aggregated_messages = aggregate_messages(raw_lines)
+```
+
+## Resultado da Agregação
+
+```{python}
+#| label: fig-aggregation-funnel
+#| fig-cap: "Redução de linhas para mensagens reais"
+
+# Preparar dados para o gráfico funil
+total_lines = len(raw_lines)
+total_messages = len(aggregated_messages)
+reduction = total_lines - total_messages
+
+funnel_data = pd.DataFrame({
+    'Etapa': ['Linhas Originais', 'Mensagens Reais'],
+    'Quantidade': [total_lines, total_messages],
+    'Percentual': [100, (total_messages/total_lines)*100]
+})
+
+fig = go.Figure(go.Funnel(
+    y = funnel_data['Etapa'],
+    x = funnel_data['Quantidade'],
+    textposition = "inside",
+    textinfo = "value+percent initial",
+    marker = {"color": ["lightblue", "darkblue"]},
+    connector = {"line": {"color": "royalblue", "width": 3}}
+))
+
+fig.update_layout(
+    title="Pipeline de Agregação: De Linhas a Mensagens",
+    height=400
+)
+
+fig.show()
+```
+
+::: callout-tip
+## Impacto da Agregação
+
+-   **Linhas originais:** `{python} f"{total_lines:,}"`
+-   **Mensagens reais:** `{python} f"{total_messages:,}"`
+-   **Redução:** `{python} f"{reduction:,}"` linhas (`{python} f"{(reduction/total_lines)*100:.1f}%"`)
+::: 
+
+Cada "mensagem real" agora está em um único registro, independente de quantas linhas ocupava no arquivo original.
+
+
+```{python}
+#| label: tbl-continuation-stats
+#| tbl-cap: "Estatísticas de linhas de continuação"
+
+# Análise de continuações
+messages_with_continuation = sum(1 for msg in aggregated_messages if msg['continuation_count'] > 0)
+max_continuations = max(msg['continuation_count'] for msg in aggregated_messages)
+
+continuation_stats = pd.DataFrame({
+    'Métrica': [
+        'Mensagens com continuação',
+        'Mensagens sem continuação',
+        'Máximo de linhas de continuação',
+        'Média de linhas por mensagem'
+    ],
+    'Valor': [
+        f"{messages_with_continuation:,}",
+        f"{total_messages - messages_with_continuation:,}",
+        f"{max_continuations:,}",
+        f"{total_lines / total_messages:.2f}"
+    ]
+})
+
+continuation_stats
+```
+
+------------------------------------------------------------------------
+
+# PARTE III: Taxonomia das Mensagens
+
+Agora que temos mensagens agregadas, precisamos **classificá-las** por tipo.
+
+## Estratégia de Classificação
+
+Cada mensagem será classificada em uma das seguintes categorias:
+
+| Tipo | Descrição | Padrão de Identificação |
+|-------------------|-------------------|----------------------------------|
+| `text` | Mensagem de texto pura | Timestamp + remetente + texto |
+| `media_attached` | Mídia com arquivo disponível | `<attached: filename>` |
+| `media_omitted` | Mídia sem arquivo | `audio omitted`, `image omitted`, etc. |
+| `edited` | Mensagem editada | `<This message was edited>` |
+| `deleted` | Mensagem deletada | `This message was deleted` |
+| `call` | Chamadas de voz/vídeo | `Missed voice call`, `Voice call` |
+| `error` | Erros de exibição | `can't be displayed` |
+| `empty` | Mensagens vazias | Remetente + `:` sem conteúdo |
+
+```{python}
+#| label: classification-function
+
+def classify_message(text):
+    """
+    Classifica uma mensagem agregada por tipo.
+    
+    Returns:
+        dict: {
+            'message_type': str,
+            'media_type': str or None,
+            'media_source': str or None,
+            'file_path': str or None
+        }
+    """
+    classification = {
+        'message_type': 'text',
+        'media_type': None,
+        'media_source': None,
+        'file_path': None,
+        'is_edited': False
+    }
+    
+    # Checar se é mensagem deletada
+    if 'This message was deleted' in text:
+        classification['message_type'] = 'deleted'
+        return classification
+    
+    # Checar se é mensagem editada (mas manter o tipo principal)
+    if '<This message was edited>' in text:
+        classification['is_edited'] = True
+    
+    # Checar chamadas
+    if 'voice call' in text.lower() or 'video call' in text.lower():
+        classification['message_type'] = 'call'
+        return classification
+    
+    # Checar erros
+    if "can't be displayed" in text.lower():
+        classification['message_type'] = 'error'
+        return classification
+    
+    # Checar mídia anexada
+    attached_match = re.search(r'<attached:\s*([^>]+)>', text)
+    if attached_match:
+        classification['message_type'] = 'media'
+        classification['media_source'] = 'attached'
+        classification['file_path'] = attached_match.group(1).strip()
+        
+        # Extrair tipo de mídia do nome do arquivo
+        media_type_match = re.search(r'-(PHOTO|AUDIO|VIDEO|STICKER|DOCUMENT)-', classification['file_path'])
+        if media_type_match:
+            classification['media_type'] = media_type_match.group(1).lower()
+        elif classification['file_path'].endswith('.vcf'):
+            classification['media_type'] = 'contact'
+        
+        return classification
+    
+    # Checar mídia omitida
+    omitted_patterns = {
+        'audio omitted': 'audio',
+        'image omitted': 'photo',
+        'video omitted': 'video',
+        'video note omitted': 'video_note',
+        'sticker omitted': 'sticker',
+        'GIF omitted': 'gif',
+        'document omitted': 'document'
+    }
+    
+    for pattern, media_type in omitted_patterns.items():
+        if pattern in text:
+            classification['message_type'] = 'media'
+            classification['media_source'] = 'omitted'
+            classification['media_type'] = media_type
+            return classification
+    
+    # Checar se é mensagem vazia (só tem timestamp e remetente)
+    # Padrão: [timestamp] Nome:$ ou [timestamp] Nome:\n
+    if re.search(r'\]\s+[^:]+:\s*$', text):
+        classification['message_type'] = 'empty'
+        return classification
+    
+    # Se chegou aqui, é texto
+    return classification
+
+# Classificar todas as mensagens
+for msg in aggregated_messages:
+    classification = classify_message(msg['raw_text'])
+    msg.update(classification)
+
+# Criar DataFrame
+df_messages = pd.DataFrame(aggregated_messages)
+```
+
+## Distribuição de Tipos de Mensagem
+
+```{python}
+#| label: fig-message-types
+#| fig-cap: "Distribuição dos tipos de mensagens identificadas"
+
+# Contar por tipo
+type_counts = df_messages['message_type'].value_counts().reset_index()
+type_counts.columns = ['Tipo', 'Quantidade']
+
+# Calcular percentuais
+type_counts['Percentual'] = (type_counts['Quantidade'] / type_counts['Quantidade'].sum() * 100).round(2)
+
+# Criar gráfico de barras
+fig = px.bar(
+    type_counts, 
+    x='Tipo', 
+    y='Quantidade',
+    text='Quantidade',
+    color='Tipo',
+    title="Tipos de Mensagens no Dataset"
+)
+
+fig.update_traces(texttemplate='%{text:,}<br>(%{y:.1%})', textposition='outside')
+fig.update_layout(showlegend=False, height=500)
+
+fig.show()
+```
+
+```{python}
+#| label: tbl-message-type-stats
+#| tbl-cap: "Estatísticas detalhadas por tipo de mensagem"
+
+type_counts
+```
+
+## Distribuição de Tipos de Mídia
+
+Para mensagens classificadas como `media`, vamos detalhar os subtipos:
+
+```{python}
+#| label: fig-media-types
+#| fig-cap: "Distribuição dos tipos de mídia"
+
+# Filtrar apenas mensagens de mídia
+media_messages = df_messages[df_messages['message_type'] == 'media'].copy()
+
+
+if len(media_messages) > 0:
+    # Contar por tipo de mídia e fonte
+    media_counts = media_messages.groupby(['media_type',
+                                           'media_source']
+                                         ).size().reset_index(name='Quantidade')
+    
+    # Criar gráfico de barras agrupadas
+    fig = px.bar(
+        media_counts,
+        x='media_type',
+        y='Quantidade',
+        color='media_source',
+        barmode='group',
+        title="Tipos de Mídia: Anexadas vs. Omitidas",
+        labels={'media_type': 'Tipo de Mídia', 'media_source': 'Fonte'}
+    )
+    
+    fig.update_layout(height=500)
+    fig.show()
+    
+    # Tabela detalhada
+    media_pivot = media_counts.pivot(index='media_type', columns='media_source', values='Quantidade').fillna(0).astype(int)
+    media_pivot['Total'] = media_pivot.sum(axis=1)
+    media_pivot = media_pivot.sort_values('Total', ascending=False)
+else:
+    print("Nenhuma mensagem de mídia encontrada.")
+```
+
+::: callout-note
+## Hipótese sobre Mídias Omitidas
+
+A presença de mídias marcadas como `omitted` sugere que, no momento da exportação, o WhatsApp não conseguiu (ou não quis) baixar todos os arquivos de mídia.
+
+Na **Parte IV**, validaremos essa hipótese cruzando os timestamps das mensagens com os arquivos físicos na pasta de mídia exportada.
+:::
+
+------------------------------------------------------------------------
+
+# PARTE IV: Relacionamento com Arquivos Físicos
+
+Agora vamos validar nossa hipótese sobre mídias omitidas vs. anexadas, cruzando as mensagens identificadas com os arquivos reais na pasta de mídia.
+
+## Objetivo
+
+Cruzar as mensagens de mídia identificadas no texto com os arquivos reais na pasta `WhatsappFiles` para:
+
+1.  Validar a hipótese: `omitted` = sem arquivo físico, `attached` = com arquivo físico
+2.  Identificar órfãos (arquivos não referenciados no texto)
+3.  Enriquecer o dataset com metadados dos arquivos (tamanho, extensão, etc.)
+
+## Estrutura dos Arquivos de Mídia
+
+Os arquivos seguem um padrão consistente:
+
+```         
+NNNNNNNN-TIPO-YYYY-MM-DD-HH-MM-SS.extensão
+
+Exemplos:
+00007252-AUDIO-2025-10-20-11-00-46.opus
+00007257-PHOTO-2025-10-20-11-31-49.jpg
+00007258-VIDEO-2025-10-20-11-31-51.mp4
+```
+
+## Inventário de Arquivos Físicos
+
+```{python}
+#| label: create-media-inventory
+
+print("📂 Criando inventário de arquivos físicos")
+print("=" * 70)
+
+from pathlib import Path
+import os
+
+# Verificar se pasta de mídia existe
+if MEDIA_FOLDER.exists():
+    print(f"✓ Pasta de mídia encontrada: {MEDIA_FOLDER}")
+    
+    # Listar todos os arquivos
+    media_files = list(MEDIA_FOLDER.glob('*'))
+    media_files = [f for f in media_files if f.is_file()]
+    
+    print(f"✓ Total de arquivos na pasta: {len(media_files):,}")
+    print()
+    
+    # Criar DataFrame com metadados
+    media_inventory = []
+    
+    for file_path in media_files:
+        filename = file_path.name
+        
+        # Padrão: NNNNNNNN-TIPO-YYYY-MM-DD-HH-MM-SS.ext
+        pattern_standard = r'^(-?\d+)-(PHOTO|AUDIO|VIDEO|STICKER|DOCUMENT)-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.(\w+)$'
+        
+        match = re.match(pattern_standard, filename)
+        
+        if match:
+            # Arquivo padrão
+            file_id, media_type, year, month, day, hour, minute, second, extension = match.groups()
+            timestamp_str = f"{year}-{month}-{day}T{hour}:{minute}:{second}-03:00"
+            
+            media_inventory.append({
+                'filename': filename,
+                'file_id': file_id,
+                'media_type': media_type.lower(),
+                'timestamp': timestamp_str,
+                'extension': extension,
+                'size_bytes': file_path.stat().st_size,
+                'size_mb': file_path.stat().st_size / (1024 * 1024),
+                'full_path': str(file_path)
+            })
+        
+        elif filename.endswith('.vcf'):
+            # Arquivo VCF (contato)
+            vcf_match = re.search(r'(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})', filename)
+            
+            if vcf_match:
+                year, month, day, hour, minute, second = vcf_match.groups()
+                timestamp_str = f"{year}-{month}-{day}T{hour}:{minute}:{second}-03:00"
+            else:
+                timestamp_str = None
+            
+            media_inventory.append({
+                'filename': filename,
+                'file_id': None,
+                'media_type': 'contact',
+                'timestamp': timestamp_str,
+                'extension': 'vcf',
+                'size_bytes': file_path.stat().st_size,
+                'size_mb': file_path.stat().st_size / (1024 * 1024),
+                'full_path': str(file_path)
+            })
+        
+        else:
+            # Arquivo não reconhecido - inferir tipo pela extensão
+            extension = file_path.suffix.lstrip('.')
+            
+            extension_to_type = {
+                'jpg': 'photo', 'jpeg': 'photo', 'png': 'photo', 'gif': 'photo',
+                'webp': 'sticker',
+                'opus': 'audio', 'mp3': 'audio',
+                'mp4': 'video', 'avi': 'video',
+                'pdf': 'document', 'docx': 'document', 'txt': 'document'
+            }
+            
+            inferred_type = extension_to_type.get(extension.lower(), 'other')
+            
+            timestamp_match = re.search(r'(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})', filename)
+            
+            if timestamp_match:
+                year, month, day, hour, minute, second = timestamp_match.groups()
+                timestamp_str = f"{year}-{month}-{day}T{hour}:{minute}:{second}-03:00"
+            else:
+                timestamp_str = None
+            
+            media_inventory.append({
+                'filename': filename,
+                'file_id': None,
+                'media_type': inferred_type,
+                'timestamp': timestamp_str,
+                'extension': extension,
+                'size_bytes': file_path.stat().st_size,
+                'size_mb': file_path.stat().st_size / (1024 * 1024),
+                'full_path': str(file_path)
+            })
+    
+    df_media_inventory = pd.DataFrame(media_inventory)
+    
+    print(f"✅ Inventário criado: {len(df_media_inventory):,} arquivos")
+    print(f"✅ Tamanho total: {df_media_inventory['size_mb'].sum():.2f} MB")
+    
+    # Distribuição por tipo
+    print()
+    print("📊 Distribuição por tipo:")
+    for media_type, count in df_media_inventory['media_type'].value_counts().items():
+        print(f"   {media_type}: {count:,}")
+
+else:
+    print("⚠️  Pasta de mídia não encontrada. Definindo DataFrame vazio.")
+    df_media_inventory = pd.DataFrame(columns=[
+        'filename', 'file_id', 'media_type', 'timestamp', 'extension', 
+        'size_bytes', 'size_mb', 'full_path'
+    ])
+
+print("\n" + "=" * 70)
+```
+
+## PASSO 1: Enriquecer `df_media_inventory` com colunas temporais
+
+```{python}
+#| label: enrich-media-inventory
+
+print("📊 PASSO 1: Enriquecendo df_media_inventory")
+print("=" * 70)
+
+# Garantir que timestamp_dt existe
+if 'timestamp_dt' not in df_media_inventory.columns:
+    df_media_inventory['timestamp_dt'] = pd.to_datetime(
+        df_media_inventory['timestamp'],
+        format='ISO8601',
+        errors='coerce'
+    )
+
+# Criar colunas temporais (igual ao df_final)
+df_media_inventory['date'] = df_media_inventory['timestamp_dt'].dt.date
+df_media_inventory['time'] = df_media_inventory['timestamp_dt'].dt.time
+df_media_inventory['hour'] = df_media_inventory['timestamp_dt'].dt.hour
+df_media_inventory['day_of_week'] = df_media_inventory['timestamp_dt'].dt.day_name()
+df_media_inventory['month'] = df_media_inventory['timestamp_dt'].dt.month
+df_media_inventory['year'] = df_media_inventory['timestamp_dt'].dt.year
+df_media_inventory['year_month'] = df_media_inventory['timestamp_dt'].dt.to_period('M').astype(str)
+
+print(f"✅ df_media_inventory enriquecido!")
+print(f"   Total de arquivos: {len(df_media_inventory):,}")
+print(f"   Colunas adicionadas: date, time, hour, day_of_week, month, year, year_month")
+print()
+
+# Mostrar amostra
+print("📋 Amostra:")
+display(df_media_inventory[['filename', 'media_type', 'date', 'time', 'hour', 'day_of_week']].head(5))
+
+print("\n" + "=" * 70)
+```
+
+---
+
+## PASSO 2: Criar DataFrame limpo das mensagens de mídia
+
+```{python}
+
+#| label: create-df-final
+
+print("🔨 Criando DataFrame final estruturado")
+print("=" * 70)
+
+# Função para extrair informações do timestamp
+def parse_message_timestamp(raw_text):
+    """Extrai timestamp, sender e mensagem do texto bruto"""
+    pattern = r'^\[(\d{2})/(\d{2})/(\d{2}),\s(\d{2}):(\d{2}):(\d{2})\]\s+([^:]+):\s*(.*)'
+    match = re.match(pattern, raw_text, re.DOTALL)
+    
+    if match:
+        day, month, year, hour, minute, second, sender, message = match.groups()
+        
+        # Construir datetime
+        full_year = f"20{year}"
+        timestamp_str = f"{full_year}-{month}-{day}T{hour}:{minute}:{second}-03:00"
+        timestamp_dt = pd.to_datetime(timestamp_str, format='ISO8601', errors='coerce')
+        
+        return {
+            'timestamp': timestamp_dt,
+            'sender': sender.strip(),
+            'message': message.strip(),
+            'date': timestamp_dt.date() if pd.notna(timestamp_dt) else None,
+            'time': timestamp_dt.time() if pd.notna(timestamp_dt) else None,
+            'hour': timestamp_dt.hour if pd.notna(timestamp_dt) else None,
+            'day_of_week': timestamp_dt.day_name() if pd.notna(timestamp_dt) else None,
+            'month': timestamp_dt.month if pd.notna(timestamp_dt) else None,
+            'year': timestamp_dt.year if pd.notna(timestamp_dt) else None,
+            'year_month': f"{timestamp_dt.year}-{timestamp_dt.month:02d}" if pd.notna(timestamp_dt) else None  # ← CORRIGIDO
+        }
+    else:
+        return {
+            'timestamp': None, 'sender': None, 'message': raw_text,
+            'date': None, 'time': None, 'hour': None,
+            'day_of_week': None, 'month': None, 'year': None, 'year_month': None
+        }
+
+# Aplicar parsing em todas as mensagens
+parsed_data = []
+for _, row in df_messages.iterrows():
+    parsed = parse_message_timestamp(row['raw_text'])
+    
+    # Combinar com dados existentes
+    final_row = {
+        'line_number': row['line_number_start'],
+        'timestamp': parsed['timestamp'],
+        'sender': parsed['sender'],
+        'message': parsed['message'],
+        'message_type': row['message_type'],
+        'media_type': row['media_type'],
+        'media_source': row['media_source'],
+        'file_path': row['file_path'],
+        'is_edited': row['is_edited'],
+        'date': parsed['date'],
+        'time': parsed['time'],
+        'hour': parsed['hour'],
+        'day_of_week': parsed['day_of_week'],
+        'month': parsed['month'],
+        'year': parsed['year'],
+        'year_month': parsed['year_month']
+    }
+    
+    # Adicionar contagem de palavras e caracteres
+    if final_row['message']:
+        final_row['word_count'] = len(final_row['message'].split())
+        final_row['char_count'] = len(final_row['message'])
+        final_row['has_link'] = bool(re.search(r'https?://', final_row['message']))
+    else:
+        final_row['word_count'] = 0
+        final_row['char_count'] = 0
+        final_row['has_link'] = False
+    
+    parsed_data.append(final_row)
+
+# Criar DataFrame final
+df_final = pd.DataFrame(parsed_data)
+
+print(f"✅ DataFrame final criado!")
+print(f"   Total de registros: {len(df_final):,}")
+print(f"   Colunas: {len(df_final.columns)}")
+print()
+print(f"📊 Resumo:")
+print(f"   Período: {df_final['date'].min()} a {df_final['date'].max()}")
+print(f"   Remetentes únicos: {df_final['sender'].nunique()}")
+print(f"   Tipos de mensagem: {df_final['message_type'].nunique()}")
+
+# Salvar
+df_final.to_csv(OUTPUT_FOLDER / 'final_dataframe.csv', index=False)
+print(f"\n💾 Salvo em: final_dataframe.csv")
+
+print("\n" + "=" * 70)
+
+```
+
+```{python}
+#| label: create-clean-media-messages
+
+print("\n📊 PASSO 2: Criando DataFrame limpo de mensagens de mídia")
+print("=" * 70)
+
+# Filtrar apenas mensagens de mídia do df_final
+df_media_messages = df_final[df_final['message_type'] == 'media'].copy()
+
+print(f"✅ DataFrame de mensagens de mídia criado!")
+print(f"   Total: {len(df_media_messages):,} mensagens")
+print()
+
+# Distribuição
+print("📊 Distribuição por media_source:")
+print(df_media_messages['media_source'].value_counts())
+print()
+
+print("📊 Distribuição por media_type:")
+print(df_media_messages['media_type'].value_counts().head(10))
+
+print("\n" + "=" * 70)
+```
+
+---
+
+## PASSO 3: Identificar arquivos órfãos
+
+```{python}
+#| label: identify-orphans-clean
+
+print("\n📂 PASSO 3: Identificando arquivos órfãos")
+print("=" * 70)
+
+# Arquivos que têm referência no texto (attached)
+files_with_ref = set(
+    df_media_messages[df_media_messages['file_path'].notna()]['file_path'].unique()
+)
+
+print(f"✅ Arquivos com referência direta no texto: {len(files_with_ref):,}")
+
+# Todos os arquivos físicos
+all_files = set(df_media_inventory['filename'].unique())
+
+# Órfãos = arquivos sem referência
+orphan_files = all_files - files_with_ref
+
+print(f"❌ Arquivos órfãos (sem referência): {len(orphan_files):,}")
+
+# Criar DataFrame de órfãos
+df_orphans = df_media_inventory[
+    df_media_inventory['filename'].isin(orphan_files)
+].copy()
+
+print()
+print("📊 Órfãos por tipo:")
+print(df_orphans['media_type'].value_counts())
+
+print()
+print("📊 Órfãos por período:")
+print(df_orphans['year_month'].value_counts().sort_index())
+
+# Salvar
+df_orphans.to_csv(OUTPUT_FOLDER / 'orphans_clean.csv', index=False)
+print()
+print(f"💾 DataFrame de órfãos salvo: orphans_clean.csv")
+
+print("\n" + "=" * 70)
+```
+
+---
+
+## RESUMO das tabelas criadas:
+
+```{python}
+#| label: summary-tables
+
+print("\n📋 RESUMO DAS TABELAS CRIADAS")
+print("=" * 70)
+
+print(f"\n1️⃣ df_media_inventory (ARQUIVOS FÍSICOS):")
+print(f"   Linhas: {len(df_media_inventory):,}")
+print(f"   Colunas principais: filename, media_type, timestamp_dt, date, time, hour, day_of_week")
+
+print(f"\n2️⃣ df_media_messages (MENSAGENS DE MÍDIA):")
+print(f"   Linhas: {len(df_media_messages):,}")
+print(f"   Colunas principais: timestamp, sender, media_type, media_source, file_path, date, time, hour")
+
+print(f"\n3️⃣ df_orphans (ARQUIVOS ÓRFÃOS):")
+print(f"   Linhas: {len(df_orphans):,}")
+print(f"   Colunas: [mesmas do df_media_inventory]")
+
+print(f"\n✅ Todas as tabelas têm as colunas: date, time, hour, day_of_week")
+print("\n" + "=" * 70)
+```
+
+
+```{python}
+
+#| label: match-omitted-to-orphans
+
+print("\n🔗 PASSO 4: Matching entre mensagens omitted e arquivos órfãos")
+print("=" * 70)
+
+# Filtrar apenas mensagens omitted (que não têm file_path)
+df_omitted = df_media_messages[df_media_messages['media_source'] == 'omitted'].copy()
+
+print(f"📊 Mensagens omitted: {len(df_omitted):,}")
+print(f"📂 Arquivos órfãos disponíveis: {len(df_orphans):,}")
+print()
+
+# Mapeamento de tipos (mensagem → arquivo)
+type_mapping = {
+    'photo': 'photo',
+    'audio': 'audio',
+    'video': 'video',
+    'video_note': 'video',
+    'sticker': 'sticker',
+    'gif': 'photo',
+    'document': 'document',
+    'contact': 'contact'
+}
+
+def match_omitted_to_file(row):
+    """
+    Tenta encontrar um arquivo órfão que corresponda à mensagem omitted.
+    Critérios: mesmo tipo + mesma data + hora próxima (≤1h)
+    """
+    if pd.isna(row['date']) or pd.isna(row['media_type']):
+        return None
+    
+    msg_date = row['date']
+    msg_hour = row['hour']
+    msg_type = row['media_type']
+    
+    # Mapear tipo
+    file_type = type_mapping.get(msg_type, msg_type)
+    
+    # Buscar órfãos: mesmo tipo + mesma data
+    candidates = df_orphans[
+        (df_orphans['media_type'] == file_type) &
+        (df_orphans['date'] == msg_date)
+    ].copy()
+    
+    if len(candidates) == 0:
+        return None
+    
+    # Calcular diferença de hora
+    candidates['hour_diff'] = abs(candidates['hour'] - msg_hour)
+    
+    # Pegar o mais próximo (diferença ≤ 1 hora)
+    closest = candidates[candidates['hour_diff'] <= 1].sort_values('hour_diff')
+    
+    if len(closest) > 0:
+        return closest.iloc[0]['filename']
+    
+    return None
+
+print("🔍 Processando matching...")
+df_omitted['matched_file'] = df_omitted.apply(match_omitted_to_file, axis=1)
+
+# Estatísticas
+matched_count = df_omitted['matched_file'].notna().sum()
+not_matched_count = df_omitted['matched_file'].isna().sum()
+
+print()
+print(f"✅ Mensagens omitted com match: {matched_count:,} ({matched_count/len(df_omitted)*100:.1f}%)")
+print(f"❌ Mensagens omitted sem match: {not_matched_count:,}")
+
+# Atualizar file_path no df_media_messages
+for idx, row in df_omitted.iterrows():
+    if pd.notna(row['matched_file']):
+        df_media_messages.at[idx, 'file_path'] = row['matched_file']
+
+print()
+print("🔄 df_media_messages atualizado com matches!")
+
+# Estatísticas finais
+total_with_file = df_media_messages['file_path'].notna().sum()
+total_without_file = df_media_messages['file_path'].isna().sum()
+
+print()
+print("=" * 60)
+print("📊 RESULTADO FINAL:")
+print(f"✅ Mensagens de mídia COM arquivo: {total_with_file:,} ({total_with_file/len(df_media_messages)*100:.1f}%)")
+print(f"❌ Mensagens de mídia SEM arquivo: {total_without_file:,}")
+print("=" * 60)
+
+# Arquivos órfãos que AINDA estão órfãos
+used_orphans = set(df_omitted['matched_file'].dropna().unique())
+remaining_orphans = df_orphans[~df_orphans['filename'].isin(used_orphans)]
+
+print()
+print(f"📂 Arquivos órfãos restantes: {len(remaining_orphans):,}")
+
+if len(used_orphans) > 0:
+    print(f"🎉 Órfãos que foram pareados: {len(used_orphans):,}")
+
+print("\n" + "=" * 70)
+
+```
+
+```{python}
+
+#| label: fig-matching-results
+#| fig-cap: "Resultado do matching: mensagens vs arquivos"
+
+# Preparar dados para visualização
+matching_summary = pd.DataFrame({
+    'Categoria': [
+        'Attached (já tinham)',
+        'Omitted com match',
+        'Omitted sem match'
+    ],
+    'Quantidade': [
+        len(df_media_messages[df_media_messages['media_source'] == 'attached']),
+        matched_count,
+        not_matched_count
+    ]
+})
+
+matching_summary['Percentual'] = (
+    matching_summary['Quantidade'] / len(df_media_messages) * 100
+).round(1)
+
+# Gráfico de pizza
+fig = px.pie(
+    matching_summary,
+    values='Quantidade',
+    names='Categoria',
+    title='Distribuição de Mensagens de Mídia por Status de Arquivo',
+    hole=0.4
+)
+
+fig.update_traces(
+    textposition='inside',
+    textinfo='percent+label',
+    hovertemplate='<b>%{label}</b><br>%{value:,} mensagens<br>%{percent}<extra></extra>'
+)
+
+fig.show()
+
+```
+
+```{python}
+#| label: tbl-matching-summary
+#| tbl-cap: "Resumo completo do matching"
+
+matching_summary
+```
+
+```{python}
+#| label: investigate-no-match
+
+print("\n🔬 INVESTIGAÇÃO: Por que não conseguimos parear?")
+print("=" * 70)
+
+# 1. ANÁLISE TEMPORAL
+print("\n1️⃣ ANÁLISE TEMPORAL:")
+
+# Mensagens omitted sem match
+omitted_no_match = df_omitted[df_omitted['matched_file'].isna()].copy()
+
+print(f"\n📅 Período das mensagens omitted sem match:")
+print(f"   De: {omitted_no_match['date'].min()}")
+print(f"   Até: {omitted_no_match['date'].max()}")
+
+# Filtrar órfãos com data válida
+remaining_orphans_with_date = remaining_orphans[remaining_orphans['date'].notna()].copy()
+
+print(f"\n📅 Período dos órfãos restantes:")
+if len(remaining_orphans_with_date) > 0:
+    print(f"   De: {remaining_orphans_with_date['date'].min()}")
+    print(f"   Até: {remaining_orphans_with_date['date'].max()}")
+else:
+    print(f"   ⚠️  Nenhum órfão com data válida")
+
+# Distribuição por mês
+print(f"\n📊 Mensagens omitted sem match por mês:")
+msgs_by_month = omitted_no_match.groupby('year_month').size().sort_index()
+for month, count in msgs_by_month.head(15).items():
+    if pd.notna(month):  # Pular NaT
+        print(f"   {month}: {count:,} mensagens")
+
+print(f"\n📊 Órfãos restantes por mês:")
+orphans_by_month = remaining_orphans.groupby('year_month').size().sort_index()
+for month, count in orphans_by_month.items():
+    if pd.notna(month):  # Pular NaT
+        print(f"   {month}: {count:,} arquivos")
+
+# 2. ANÁLISE DE TIPOS
+print(f"\n\n2️⃣ ANÁLISE DE TIPOS:")
+
+print(f"\n📊 Mensagens omitted sem match por tipo:")
+for media_type, count in omitted_no_match['media_type'].value_counts().head(10).items():
+    pct = count / len(omitted_no_match) * 100
+    print(f"   {media_type}: {count:,} ({pct:.1f}%)")
+
+print(f"\n📊 Órfãos restantes por tipo:")
+for media_type, count in remaining_orphans['media_type'].value_counts().items():
+    pct = count / len(remaining_orphans) * 100
+    print(f"   {media_type}: {count:,} ({pct:.1f}%)")
+
+# 3. SOBREPOSIÇÃO DE DATAS
+print(f"\n\n3️⃣ SOBREPOSIÇÃO DE DATAS:")
+
+msg_dates = set(omitted_no_match['date'].dropna())
+orphan_dates = set(remaining_orphans_with_date['date'].dropna())
+common_dates = msg_dates.intersection(orphan_dates)
+
+print(f"   Datas com mensagens: {len(msg_dates)}")
+print(f"   Datas com órfãos: {len(orphan_dates)}")
+print(f"   Datas em comum: {len(common_dates)}")
+
+if len(common_dates) > 0:
+    print(f"\n   📅 Primeiras 5 datas em comum:")
+    for date in sorted(common_dates)[:5]:
+        msgs_on_date = omitted_no_match[omitted_no_match['date'] == date]
+        orphans_on_date = remaining_orphans_with_date[remaining_orphans_with_date['date'] == date]
+        
+        print(f"\n   {date}:")
+        print(f"      Mensagens: {len(msgs_on_date)}")
+        print(f"      Órfãos: {len(orphans_on_date)}")
+        print(f"      Tipos msgs: {msgs_on_date['media_type'].value_counts().to_dict()}")
+        print(f"      Tipos órfãos: {orphans_on_date['media_type'].value_counts().to_dict()}")
+
+# 4. IDENTIFICAR PERÍODOS SEM SOBREPOSIÇÃO
+print(f"\n\n4️⃣ PERÍODOS SEM SOBREPOSIÇÃO:")
+
+if len(remaining_orphans_with_date) > 0:
+    # Primeiro arquivo órfão
+    first_orphan_date = remaining_orphans_with_date['date'].min()
+    print(f"\n   Órfãos começam em: {first_orphan_date}")
+    
+    # Mensagens antes dessa data
+    msgs_before_orphans = omitted_no_match[omitted_no_match['date'] < first_orphan_date]
+    print(f"   Mensagens ANTES dos órfãos: {len(msgs_before_orphans):,} ({len(msgs_before_orphans)/len(omitted_no_match)*100:.1f}%)")
+else:
+    print(f"\n   ⚠️  Sem órfãos com data para comparar")
+    msgs_before_orphans = pd.DataFrame()
+
+print("\n" + "=" * 70)
+
+```
+
+
+```{python}
+#| label: final-diagnosis
+
+print("\n💡 DIAGNÓSTICO FINAL")
+print("=" * 70)
+
+# Calcular estatísticas
+msgs_total = len(omitted_no_match)
+orphans_total = len(remaining_orphans)
+
+# Mensagens antes dos órfãos começarem
+msgs_before = len(msgs_before_orphans) if 'msgs_before_orphans' in locals() else 0
+pct_before = (msgs_before / msgs_total * 100) if msgs_total > 0 else 0
+
+# Datas em comum
+common_count = len(common_dates) if 'common_dates' in locals() else 0
+
+print(f"""
+SITUAÇÃO DOS 10.924 MENSAGENS OMITTED SEM MATCH:
+{'='*70}
+
+1. PERÍODO INCOMPATÍVEL:
+   - {msgs_before:,} mensagens ({pct_before:.1f}%) são de ANTES dos órfãos
+   - Esses arquivos simplesmente NÃO foram exportados
+
+2. DATAS EM COMUM:
+   - {common_count} datas aparecem em ambos os conjuntos
+   - MAS os TIPOS não batem (ex: mensagens de audio vs órfãos photo)
+
+3. TIPOS INCOMPATÍVEIS:
+   - Mensagens: Maioria audio ({omitted_no_match['media_type'].value_counts().iloc[0] if len(omitted_no_match) > 0 else 0:,})
+   - Órfãos: Maioria {remaining_orphans['media_type'].value_counts().index[0] if len(remaining_orphans) > 0 else 'N/A'}
+   
+SITUAÇÃO DOS {orphans_total} ARQUIVOS ÓRFÃOS:
+{'='*70}
+
+1. São de período RECENTE (Agosto-Outubro 2025)
+2. Não têm correspondência no texto exportado
+3. Possíveis razões:
+   - Foram deletados após exportação do texto
+   - Exportação parcial (texto antigo, arquivos novos)
+   - Timestamps muito diferentes (>1h de diferença)
+
+CONCLUSÃO:
+{'='*70}
+Os dados são de DOIS PERÍODOS DIFERENTES que não se sobrepõem bem:
+- Texto: Outubro 2024 - Agosto 2025 (maioria)
+- Arquivos: Agosto - Outubro 2025 (só final)
+
+Taxa de sucesso: {(799/11723*100):.1f}% (799 de 11.723 mensagens têm arquivo)
+""")
+
+print("=" * 70)
+```
+
+
+```{python}
+
+#| label: create-synthetic-messages
+
+print("\n🔧 CRIANDO MENSAGENS SINTÉTICAS PARA ÓRFÃOS")
+print("=" * 70)
+
+# Criar mensagens sintéticas a partir dos órfãos
+synthetic_messages = []
+
+for _, orphan in remaining_orphans.iterrows():
+    synthetic_msg = {
+        'line_number': None,  # Não veio do texto
+        'timestamp': orphan.get('timestamp_dt'),
+        'sender': '[ARQUIVO ÓRFÃO]',  # Marcador especial
+        'message': f"[Mídia órfã não referenciada no texto]",
+        'message_type': 'media',
+        'media_type': orphan['media_type'],
+        'media_source': 'orphan',  # Novo tipo!
+        'file_path': orphan['filename'],
+        'is_edited': False,
+        'date': orphan.get('date'),
+        'time': orphan.get('time'),
+        'hour': orphan.get('hour'),
+        'day_of_week': orphan.get('day_of_week'),
+        'month': orphan.get('month'),
+        'year': orphan.get('year'),
+        'year_month': orphan.get('year_month'),
+        'word_count': 0,
+        'char_count': 0,
+        'has_link': False,
+        'is_synthetic': True  # FLAG para identificar!
+    }
+    synthetic_messages.append(synthetic_msg)
+
+df_synthetic = pd.DataFrame(synthetic_messages)
+
+print(f"✅ Criadas {len(df_synthetic):,} mensagens sintéticas")
+print()
+
+# Adicionar coluna is_synthetic no df_final original
+df_final['is_synthetic'] = False
+
+print(f"📊 Antes da união:")
+print(f"   df_final original: {len(df_final):,} mensagens")
+print(f"   Mensagens sintéticas: {len(df_synthetic):,}")
+
+# Combinar tudo
+df_final_complete = pd.concat([df_final, df_synthetic], ignore_index=True)
+
+# Ordenar por timestamp (NaT vai pro final)
+df_final_complete = df_final_complete.sort_values('timestamp', na_position='last').reset_index(drop=True)
+
+print()
+print(f"✅ DataFrame final completo criado!")
+print(f"   Total de registros: {len(df_final_complete):,}")
+print(f"   - Reais: {(~df_final_complete['is_synthetic']).sum():,}")
+print(f"   - Sintéticas: {df_final_complete['is_synthetic'].sum():,}")
+
+# Salvar
+df_final_complete.to_csv(OUTPUT_FOLDER / 'final_dataframe_complete.csv', index=False)
+print(f"\n💾 Salvo em: final_dataframe_complete.csv")
+
+print("\n" + "=" * 70)
+
+```
+
+
+```{python}
+#| label: fig-complete-overview
+#| fig-cap: "Visão completa: Mensagens reais + Órfãos incluídos"
+
+# Preparar dados para visualização
+source_counts = pd.DataFrame({
+    'Origem': [
+        'Mensagens reais (texto)',
+        'Arquivos órfãos (forçados)',
+    ],
+    'Quantidade': [
+        len(df_final),
+        len(df_synthetic)
+    ]
+})
+
+source_counts['Percentual'] = (
+    source_counts['Quantidade'] / len(df_final_complete) * 100
+).round(1)
+
+# Gráfico
+fig = px.bar(
+    source_counts,
+    x='Origem',
+    y='Quantidade',
+    text='Quantidade',
+    title='Composição do DataFrame Final Completo',
+    color='Origem',
+    color_discrete_map={
+        'Mensagens reais (texto)': 'steelblue',
+        'Arquivos órfãos (forçados)': 'orange'
+    }
+)
+
+fig.update_traces(
+    texttemplate='%{text:,}<br>(%{y:.1%})',
+    textposition='outside'
+)
+
+fig.update_layout(showlegend=False, height=500)
+fig.show()
+
+```
+
+```{python}
+
+#| label: tbl-complete-summary
+#| tbl-cap: "Resumo do dataset completo com órfãos incluídos"
+
+# Estatísticas completas
+complete_summary = pd.DataFrame({
+    'Categoria': [
+        'Total de registros',
+        'Mensagens do texto',
+        'Órfãos incluídos forçadamente',
+        '',
+        'Mensagens COM arquivo',
+        '  - Attached original',
+        '  - Omitted pareadas',
+        '  - Órfãos sintéticos',
+        '',
+        'Mensagens SEM arquivo',
+    ],
+    'Quantidade': [
+        f"{len(df_final_complete):,}",
+        f"{len(df_final):,}",
+        f"{len(df_synthetic):,}",
+        '',
+        f"{df_final_complete['file_path'].notna().sum():,}",
+        f"{len(df_media_messages[df_media_messages['media_source'] == 'attached']):,}",
+        f"{matched_count:,}",
+        f"{len(df_synthetic):,}",
+        '',
+        f"{df_final_complete['file_path'].isna().sum():,}"
+    ]
+})
+
+complete_summary
+
+```
+
+Perfeito! Vamos melhorar essa seção! O problema é que você está usando `print()` com Markdown dentro, e os `{}` estão sendo interpretados como f-string. Vamos fazer direto em Markdown do Quarto:
+
+```{python}
+#| label: explain-synthetic
+#| output: asis
+
+# Calcular estatísticas
+synthetic_count = df_final_complete['is_synthetic'].sum()
+real_count = (~df_final_complete['is_synthetic']).sum()
+
+print(f"""
+::: {{.callout-important}}
+## Sobre as Mensagens Sintéticas
+
+Para garantir que TODOS os arquivos físicos estejam representados no dataset final,
+criamos **{synthetic_count:,} mensagens sintéticas** para os arquivos órfãos.
+
+**Características dessas mensagens:**
+
+- `sender`: "[ARQUIVO ÓRFÃO]"
+- `media_source`: "orphan" (novo tipo!)
+- `is_synthetic`: True (flag de identificação)
+- `message`: "[Mídia órfã não referenciada no texto]"
+
+**Composição do dataset completo:**
+
+- Mensagens reais: **{real_count:,}** ({real_count/len(df_final_complete)*100:.1f}%)
+- Mensagens sintéticas: **{synthetic_count:,}** ({synthetic_count/len(df_final_complete)*100:.1f}%)
+- **Total: {len(df_final_complete):,} registros**
+
+**Uso recomendado:**
+
+- Para análises de **volume total de mídia**: INCLUIR tudo
+- Para análises de **conversação**: FILTRAR apenas reais
+- Para **inventário de arquivos**: INCLUIR tudo
+
+**Exemplo de filtro em Python:**
+
+    ```python
+    # Só mensagens reais
+    df_real = df_final_complete[~df_final_complete['is_synthetic']]
+
+    # Só órfãos sintéticos
+    df_orphans_only = df_final_complete[df_final_complete['is_synthetic']]
+
+    # Todos os registros
+    df_all = df_final_complete
+    ```
+:::
+""")
+```
+
+E agora vamos **MOSTRAR A TABELA** completa:
+
+```{python}
+#| label: tbl-final-complete-sample
+#| tbl-cap: "Amostra do dataset final completo (com sintéticas)"
+
+print("\n📋 Amostra do DataFrame Final Completo:")
+print("=" * 70)
+
+# Mostrar últimas 5 mensagens reais + primeiras 5 sintéticas
+sample_real = df_final_complete[~df_final_complete['is_synthetic']].tail(5)
+sample_synthetic = df_final_complete[df_final_complete['is_synthetic']].head(5)
+
+sample_combined = pd.concat([sample_real, sample_synthetic])
+
+# Selecionar colunas importantes
+columns_to_show = [
+    'timestamp', 'sender', 'message_type', 'media_type', 
+    'media_source', 'file_path', 'is_synthetic'
+]
+
+display(sample_combined[columns_to_show])
+
+print()
+print("💡 Note as diferenças:")
+print("   - Mensagens reais: sender = nome real, is_synthetic = False")
+print("   - Mensagens sintéticas: sender = [ARQUIVO ÓRFÃO], is_synthetic = True")
+```
+
+E uma **ESTATÍSTICA COMPLETA**:
+
+```{python}
+#| label: tbl-complete-statistics
+#| tbl-cap: "Estatísticas completas do dataset final"
+
+# Criar tabela de estatísticas
+stats_complete = []
+
+# Total
+stats_complete.append({
+    'Categoria': 'TOTAL DE REGISTROS',
+    'Quantidade': len(df_final_complete),
+    'Percentual': '100.0%'
+})
+
+stats_complete.append({
+    'Categoria': '',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+# Por origem
+stats_complete.append({
+    'Categoria': 'Mensagens do texto original',
+    'Quantidade': real_count,
+    'Percentual': f"{real_count/len(df_final_complete)*100:.1f}%"
+})
+
+stats_complete.append({
+    'Categoria': 'Mensagens sintéticas (órfãos)',
+    'Quantidade': synthetic_count,
+    'Percentual': f"{synthetic_count/len(df_final_complete)*100:.1f}%"
+})
+
+stats_complete.append({
+    'Categoria': '',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+# Por tipo de mensagem
+stats_complete.append({
+    'Categoria': 'POR TIPO DE MENSAGEM:',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+for msg_type, count in df_final_complete['message_type'].value_counts().items():
+    stats_complete.append({
+        'Categoria': f'  {msg_type}',
+        'Quantidade': count,
+        'Percentual': f"{count/len(df_final_complete)*100:.1f}%"
+    })
+
+stats_complete.append({
+    'Categoria': '',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+# Por fonte de mídia
+stats_complete.append({
+    'Categoria': 'POR FONTE DE MÍDIA:',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+media_only = df_final_complete[df_final_complete['message_type'] == 'media']
+for source, count in media_only['media_source'].value_counts().items():
+    stats_complete.append({
+        'Categoria': f'  {source}',
+        'Quantidade': count,
+        'Percentual': f"{count/len(media_only)*100:.1f}%"
+    })
+
+# Arquivos
+stats_complete.append({
+    'Categoria': '',
+    'Quantidade': '',
+    'Percentual': ''
+})
+
+stats_complete.append({
+    'Categoria': 'COM arquivo físico',
+    'Quantidade': df_final_complete['file_path'].notna().sum(),
+    'Percentual': f"{df_final_complete['file_path'].notna().sum()/len(df_final_complete)*100:.1f}%"
+})
+
+stats_complete.append({
+    'Categoria': 'SEM arquivo físico',
+    'Quantidade': df_final_complete['file_path'].isna().sum(),
+    'Percentual': f"{df_final_complete['file_path'].isna().sum()/len(df_final_complete)*100:.1f}%"
+})
+
+df_stats_complete = pd.DataFrame(stats_complete)
+display(df_stats_complete)
+```
+
+
+
+```{python}
+#| label: final-dashboard
+#| fig-cap: "Dashboard Final: Visão Completa do Dataset"
+
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+# Criar dashboard com 4 subplots
+fig = make_subplots(
+    rows=2, cols=2,
+    subplot_titles=(
+        'Composição do Dataset Final',
+        'Taxa de Cobertura de Arquivos',
+        'Distribuição Temporal',
+        'Tipos de Mídia'
+    ),
+    specs=[
+        [{'type': 'pie'}, {'type': 'indicator'}],
+        [{'type': 'bar'}, {'type': 'bar'}]
+    ]
+)
+
+# 1. PIE: Composição (real vs sintético)
+fig.add_trace(
+    go.Pie(
+        labels=['Mensagens Reais', 'Órfãos Sintéticos'],
+        values=[68036, 472],
+        hole=0.4,
+        marker_colors=['steelblue', 'orange']
+    ),
+    row=1, col=1
+)
+
+# 2. GAUGE: Taxa de cobertura
+coverage_rate = (1250 / 12195) * 100  # arquivos / total de mídia
+
+fig.add_trace(
+    go.Indicator(
+        mode="gauge+number+delta",
+        value=coverage_rate,
+        title={'text': "Cobertura de Arquivos"},
+        delta={'reference': 100},
+        gauge={
+            'axis': {'range': [None, 100]},
+            'bar': {'color': "darkblue"},
+            'steps': [
+                {'range': [0, 33], 'color': "lightgray"},
+                {'range': [33, 66], 'color': "gray"},
+                {'range': [66, 100], 'color': "darkgray"}
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': 90
+            }
+        }
+    ),
+    row=1, col=2
+)
+
+# 3. BAR: Distribuição por fonte
+sources = df_final_complete[df_final_complete['message_type'] == 'media']['media_source'].value_counts()
+fig.add_trace(
+    go.Bar(
+        x=sources.index,
+        y=sources.values,
+        text=sources.values,
+        textposition='outside',
+        marker_color=['#636EFA', '#EF553B', '#00CC96']
+    ),
+    row=2, col=1
+)
+
+# 4. BAR: Top tipos de mídia
+top_media = df_final_complete[df_final_complete['message_type'] == 'media']['media_type'].value_counts().head(6)
+fig.add_trace(
+    go.Bar(
+        x=top_media.index,
+        y=top_media.values,
+        text=top_media.values,
+        textposition='outside',
+        marker_color='lightblue'
+    ),
+    row=2, col=2
+)
+
+# Layout
+fig.update_layout(
+    title_text="📊 DASHBOARD FINAL: WhatsApp Data Wrangling Pipeline",
+    showlegend=False,
+    height=800
+)
+
+fig.show()
+```
+
+
+
+```{python}
+
+#| label: final-dashboard-clean
+#| fig-cap: "Visão Geral do Dataset Final"
+
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+# Criar figura com subplots limpos
+fig = make_subplots(
+    rows=2, cols=2,
+    subplot_titles=(
+        '📊 Composição do Dataset',
+        '📁 Cobertura de Arquivos por Fonte',
+        '🎵 Top 6 Tipos de Mídia',
+        '📅 Linha do Tempo (Mensagens/Dia)'
+    ),
+    specs=[
+        [{'type': 'pie'}, {'type': 'bar'}],
+        [{'type': 'bar'}, {'type': 'scatter'}]
+    ],
+    vertical_spacing=0.12,
+    horizontal_spacing=0.10
+)
+
+# 1. PIE: Real vs Sintético (99.3% vs 0.7%)
+fig.add_trace(
+    go.Pie(
+        labels=['Mensagens Reais<br>(99.3%)', 'Órfãos<br>(0.7%)'],
+        values=[68036, 472],
+        hole=0.5,
+        marker=dict(colors=['#1f77b4', '#ff7f0e']),
+        textinfo='label',
+        textposition='outside',
+        showlegend=False
+    ),
+    row=1, col=1
+)
+
+# 2. BAR: Cobertura por fonte (Horizontal para melhor leitura)
+sources = df_final_complete[df_final_complete['message_type'] == 'media']['media_source'].value_counts()
+colors_map = {'omitted': '#e74c3c', 'attached': '#2ecc71', 'orphan': '#f39c12'}
+colors = [colors_map.get(x, '#95a5a6') for x in sources.index]
+
+fig.add_trace(
+    go.Bar(
+        y=sources.index,
+        x=sources.values,
+        text=[f"{v:,}" for v in sources.values],
+        textposition='outside',
+        orientation='h',
+        marker=dict(color=colors),
+        showlegend=False
+    ),
+    row=1, col=2
+)
+
+# 3. BAR: Top tipos de mídia
+top_media = df_final_complete[df_final_complete['message_type'] == 'media']['media_type'].value_counts().head(6)
+fig.add_trace(
+    go.Bar(
+        x=top_media.index,
+        y=top_media.values,
+        text=[f"{v:,}" for v in top_media.values],
+        textposition='outside',
+        marker=dict(color='#3498db'),
+        showlegend=False
+    ),
+    row=2, col=1
+)
+
+# 4. LINHA DO TEMPO: Mensagens por dia
+timeline = df_final_complete.groupby('date').size().reset_index(name='count')
+timeline = timeline[timeline['date'].notna()].sort_values('date')
+
+fig.add_trace(
+    go.Scatter(
+        x=timeline['date'],
+        y=timeline['count'],
+        mode='lines',
+        fill='tozeroy',
+        line=dict(color='#9b59b6', width=2),
+        showlegend=False
+    ),
+    row=2, col=2
+)
+
+# Atualizar layouts dos eixos
+fig.update_xaxes(title_text="", row=1, col=2)
+fig.update_yaxes(title_text="Fonte", row=1, col=2)
+
+fig.update_xaxes(title_text="Tipo de Mídia", row=2, col=1)
+fig.update_yaxes(title_text="Quantidade", row=2, col=1)
+
+fig.update_xaxes(title_text="Data", row=2, col=2)
+fig.update_yaxes(title_text="Mensagens/dia", row=2, col=2)
+
+# Layout geral
+fig.update_layout(
+    title=dict(
+        text="<b>📊 DASHBOARD FINAL: WhatsApp Data Wrangling Pipeline</b>",
+        x=0.5,
+        xanchor='center',
+        font=dict(size=20)
+    ),
+    height=700,
+    showlegend=False
+)
+
+fig.show()
+
+```
+
+2️⃣ Verificar ordenação dos órfãos
+
+```{python}
+#| label: verify-orphan-insertion
+#| tbl-cap: "Verificação: Órfãos estão ordenados corretamente?"
+
+print("🔍 VERIFICANDO INSERÇÃO DOS ÓRFÃOS NA LINHA DO TEMPO")
+print("=" * 70)
+
+# Pegar amostra de órfãos e suas vizinhanças
+orphan_sample = df_final_complete[df_final_complete['is_synthetic']].head(3)
+
+for idx, orphan in orphan_sample.iterrows():
+    orphan_ts = orphan['timestamp']
+    
+    # Pegar 2 mensagens antes e 2 depois
+    window_start = max(0, idx - 2)
+    window_end = min(len(df_final_complete), idx + 3)
+    
+    neighborhood = df_final_complete.iloc[window_start:window_end]
+    
+    print(f"\n📍 Órfão em posição {idx}:")
+    print(f"   Arquivo: {orphan['file_path']}")
+    print(f"   Timestamp: {orphan_ts}")
+    print(f"\n   Vizinhança:")
+    
+    for i, row in neighborhood.iterrows():
+        marker = "👉" if i == idx else "  "
+        synthetic_flag = "[ÓRFÃO]" if row['is_synthetic'] else ""
+        print(f"   {marker} [{i}] {row['timestamp']} - {row['sender'][:20]} {synthetic_flag}")
+
+print("\n✅ Se os timestamps estão em ordem crescente, está correto!")
+print("=" * 70)
+```
+
+
+3️⃣ Criar tabela para transcrição (AUDIO + VIDEO)
+```{python}
+
+#| label: create-transcription-table
+
+print("\n🎙️ CRIANDO TABELA PARA TRANSCRIÇÃO (Audio & Video)")
+print("=" * 70)
+
+# Filtrar apenas audio e video COM arquivo
+transcription_types = ['audio', 'video', 'video_note']
+
+df_for_transcription = df_final_complete[
+    (df_final_complete['media_type'].isin(transcription_types)) &
+    (df_final_complete['file_path'].notna())
+].copy()
+
+# Criar tabela otimizada para transcrição
+df_transcription = df_for_transcription[[
+    'timestamp',
+    'sender',
+    'media_type',
+    'file_path',
+    'is_synthetic'
+]].copy()
+
+# Adicionar colunas para o processo de transcrição
+df_transcription['transcription'] = ''  # Será preenchida depois
+df_transcription['transcription_status'] = 'pending'  # pending, processing, completed, error
+df_transcription['transcription_language'] = None
+df_transcription['transcription_confidence'] = None
+
+# Reordenar colunas
+df_transcription = df_transcription[[
+    'timestamp',
+    'sender',
+    'media_type',
+    'file_path',
+    'transcription',
+    'transcription_status',
+    'transcription_language',
+    'transcription_confidence',
+    'is_synthetic'
+]]
+
+print(f"✅ Tabela criada!")
+print(f"   Total de mídias para transcrever: {len(df_transcription):,}")
+print()
+
+# Distribuição
+print("📊 Distribuição por tipo:")
+for media_type, count in df_transcription['media_type'].value_counts().items():
+    print(f"   {media_type}: {count:,}")
+
+# Salvar
+df_transcription.to_csv(OUTPUT_FOLDER / 'for_transcription.csv', index=False)
+print(f"\n💾 Salvo em: for_transcription.csv")
+
+print("\n" + "=" * 70)
+
+```
+
+```{python}
+#| label: tbl-transcription-sample
+#| tbl-cap: "Amostra da tabela para transcrição"
+
+print("📋 Primeiras 10 linhas da tabela de transcrição:\n")
+display(df_transcription.head(10))
+```
+
+```{python}
+
+#| label: transcription-stats
+
+print("\n📊 ESTATÍSTICAS DA TABELA DE TRANSCRIÇÃO")
+print("=" * 70)
+
+print(f"\nTotal de arquivos para transcrever: {len(df_transcription):,}")
+print(f"\nPor tipo de mídia:")
+for media_type, count in df_transcription['media_type'].value_counts().items():
+    pct = count / len(df_transcription) * 100
+    print(f"   {media_type}: {count:,} ({pct:.1f}%)")
+
+print(f"\nPor fonte:")
+real_count = (~df_transcription['is_synthetic']).sum()
+synthetic_count = df_transcription['is_synthetic'].sum()
+
+print(f"   Mensagens reais: {real_count:,} ({real_count/len(df_transcription)*100:.1f}%)")
+print(f"   Órfãos sintéticos: {synthetic_count:,} ({synthetic_count/len(df_transcription)*100:.1f}%)")
+
+print(f"\nPróximo passo:")
+print(f"   1. Usar for_transcription.csv como input")
+print(f"   2. Processar transcrições (Whisper, etc)")
+print(f"   3. Preencher coluna 'transcription'")
+print(f"   4. Merge de volta para df_final_complete")
+
+print("\n" + "=" * 70)
+
+```
+
+```{python}
+#| label: pipeline-conclusion
+
+print("""
+::: {.callout-success icon=true}
+## ✅ Pipeline de Data Wrangling Concluído!
+
+### Arquivos Gerados:
+
+| Arquivo | Descrição | Linhas |
+|---------|-----------|--------|
+| `final_dataframe_complete.csv` | Dataset completo (reais + sintéticas) | 68.508 |
+| `for_transcription.csv` | Mídias audio/video para transcrever | {len(df_transcription):,} |
+| `orphans_clean.csv` | Lista de arquivos órfãos | 472 |
+
+### Próximos Passos:
+
+**🎙️ PIPELINE DE TRANSCRIÇÃO** (próximo notebook)
+
+1. Carregar `for_transcription.csv`
+2. Processar transcrições com Whisper/Groq
+3. Preencher coluna `transcription`
+4. Fazer merge com `final_dataframe_complete.csv`
+5. Gerar dataset final enriquecido
+
+**📊 PIPELINE DE ANÁLISE** (futuro)
+
+- Análise de sentimentos
+- Frequência de palavras
+- Padrões temporais
+- Network analysis
+
+### Métricas Finais:
+
+- ✅ **97.297 linhas** processadas do raw-data.txt
+- ✅ **68.036 mensagens** estruturadas
+- ✅ **472 órfãos** incluídos
+- ✅ **1.250 arquivos** de mídia mapeados
+- ✅ **{len(df_transcription):,} mídias** prontas para transcrição
+
+---
+
+**Tempo total estimado:** ~3 segundos de processamento 🚀
+
+:::
+""")
+```
