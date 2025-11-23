@@ -1,0 +1,1251 @@
+```{python}
+#| label: setup-analises-avancadas
+# Setup
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import warnings
+from matplotlib import font_manager as fm
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (14, 8)
+
+# Cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c',
+    'neutral': '#95a5a6'
+}
+
+# Carrega dados
+df = pd.read_csv('final_dataframe_enriched_complete.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print("✅ Setup completo!")
+print(f"📊 Dataset: {len(df):,} mensagens")
+```
+
+
+## 📊 Código: Análise Completa de Viagens
+
+```{python}
+#| label: analise-viagens-completa
+#| fig-cap: "Análise Detalhada: Impacto das Viagens"
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+
+# Define cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+viagens = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',  # ← CORRIGIDO (6 dias)
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+viagens_df = pd.DataFrame(viagens)
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+viagens_df['duracao_dias'] = (viagens_df['fim'] - viagens_df['inicio']).dt.days + 1  # +1 para incluir último dia
+
+print("="*80)
+print("📅 VIAGENS REGISTRADAS")
+print("="*80)
+print(f"\nTotal de viagens: {len(viagens_df)}\n")
+print(viagens_df[['nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+
+# Estatísticas
+total_dias_juntos = viagens_df['duracao_dias'].sum()
+total_dias_ano = 366  # Out/2024 a Out/2025
+pct_juntos = (total_dias_juntos / total_dias_ano) * 100
+
+print(f"\n📊 Resumo:")
+print(f"   • Total de dias juntos: {total_dias_juntos} dias")
+print(f"   • Percentual do ano: {pct_juntos:.1f}%")
+print(f"   • Viagem mais longa: {viagens_df['duracao_dias'].max()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {viagens_df['duracao_dias'].min()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmin(), 'nome']})")
+
+print("\n" + "="*80)
+```
+
+
+```{python}
+#| label: load-emoji-helper
+
+"""
+Emoji Helper para Matplotlib
+Usa emojis como imagens (sempre funciona!)
+"""
+
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
+import requests
+from io import BytesIO
+import matplotlib.pyplot as plt
+
+class MultiEmojiHelper:
+    """Helper para adicionar emojis coloridos em gráficos matplotlib."""
+    
+    # Mapeamento emoji → código unicode
+    EMOJI_CODES = {
+        '😀': '1f600', '😂': '1f602', '😍': '1f60d', '😢': '1f622',
+        '😭': '1f62d', '😡': '1f621', '🤔': '1f914', '🤣': '1f923',
+        '😊': '1f60a', '😎': '1f60e', '🥰': '1f970', '😘': '1f618',
+        '🤗': '1f917', '😳': '1f633', '🥺': '1f97a', '😏': '1f60f',
+        '😌': '1f60c', '😔': '1f614', '😪': '1f62a', '🤤': '1f924',
+        '❤️': '2764-fe0f', '💔': '1f494', '💕': '1f495', '💯': '1f4af',
+        '🔥': '1f525', '✨': '2728', '⭐': '2b50', '💫': '1f4ab',
+        '👍': '1f44d', '👎': '1f44e', '👏': '1f44f', '🙏': '1f64f',
+        '🤝': '1f91d', '💪': '1f4aa', '✌️': '270c-fe0f', '🤞': '1f91e',
+        '🤙': '1f919', '👌': '1f44c', '🤘': '1f918', '🖤': '1f5a4',
+        '💙': '1f499', '💚': '1f49a', '💛': '1f49b', '🧡': '1f9e1',
+        '💜': '1f49c', '🤍': '1f90d', '🤎': '1f90e', '💖': '1f496',
+        '💗': '1f497', '💘': '1f498', '💝': '1f49d', '💞': '1f49e',
+        '📊': '1f4ca', '📈': '1f4c8', '📉': '1f4c9', '💰': '1f4b0',
+        '📅': '1f4c5', '📱': '1f4f1', '💻': '1f4bb', '🎨': '1f3a8',
+        '🚀': '1f680', '🎉': '1f389', '🎁': '1f381', '🏆': '1f3c6',
+        '✅': '2705', '❌': '274c', '⚠️': '26a0-fe0f', '💬': '1f4ac',
+        '🙈': '1f648', '🙉': '1f649', '🙊': '1f64a', '🐵': '1f435',
+        '🌹': '1f339', '🌸': '1f338', '🌺': '1f33a', '🌻': '1f33b',
+    }
+    
+    # Templates de URL por biblioteca
+    LIBRARIES = {
+        'twemoji': {
+            'url_template': 'https://em-content.zobj.net/thumbs/120/twitter/348/{name}_{code}.png',
+            'name_map': {
+                '😀': 'grinning-face', '😂': 'face-with-tears-of-joy',
+                '😍': 'smiling-face-with-heart-eyes', '😢': 'crying-face',
+                '😭': 'loudly-crying-face', '😡': 'pouting-face',
+                '🤔': 'thinking-face', '🤣': 'rolling-on-the-floor-laughing',
+                '😊': 'smiling-face-with-smiling-eyes', '😎': 'smiling-face-with-sunglasses',
+                '🥰': 'smiling-face-with-hearts', '😘': 'face-blowing-a-kiss',
+                '🤗': 'hugging-face', '😳': 'flushed-face', '🥺': 'pleading-face',
+                '😏': 'smirking-face', '😌': 'relieved-face', '😔': 'pensive-face',
+                '😪': 'sleepy-face', '🤤': 'drooling-face',
+                '❤️': 'red-heart', '💔': 'broken-heart', '💕': 'two-hearts',
+                '💯': 'hundred-points', '🔥': 'fire', '✨': 'sparkles',
+                '⭐': 'star', '💫': 'dizzy', '👍': 'thumbs-up', '👎': 'thumbs-down',
+                '👏': 'clapping-hands', '🙏': 'folded-hands', '🤝': 'handshake',
+                '💪': 'flexed-biceps', '🤙': 'call-me-hand', '👌': 'ok-hand',
+                '🤘': 'sign-of-the-horns', '🖤': 'black-heart', '💙': 'blue-heart',
+                '💚': 'green-heart', '💛': 'yellow-heart', '🧡': 'orange-heart',
+                '💜': 'purple-heart', '🤍': 'white-heart', '🤎': 'brown-heart',
+                '💖': 'sparkling-heart', '💗': 'growing-heart', '💘': 'heart-with-arrow',
+                '💝': 'heart-with-ribbon', '💞': 'revolving-hearts',
+                '📊': 'bar-chart', '📈': 'chart-increasing', '📉': 'chart-decreasing',
+                '💰': 'money-bag', '📅': 'calendar', '📱': 'mobile-phone',
+                '💻': 'laptop', '🎨': 'artist-palette', '🚀': 'rocket',
+                '🎉': 'party-popper', '🎁': 'wrapped-gift', '🏆': 'trophy',
+                '✅': 'check-mark-button', '❌': 'cross-mark',
+                '🙈': 'see-no-evil-monkey', '🙉': 'hear-no-evil-monkey',
+                '🙊': 'speak-no-evil-monkey', '🐵': 'monkey-face',
+                '🌹': 'rose', '🌸': 'cherry-blossom', '🌺': 'hibiscus',
+                '🌻': 'sunflower',
+            }
+        },
+    }
+    
+    def __init__(self, library='twemoji'):
+        """Inicializa o helper."""
+        self.library = library
+        self._cache = {}
+        print(f"✅ MultiEmojiHelper inicializado com biblioteca: {library}")
+    
+    def _get_emoji_url(self, emoji):
+        """Gera URL do emoji baseado na biblioteca escolhida."""
+        if emoji not in self.EMOJI_CODES:
+            return None
+        
+        code = self.EMOJI_CODES[emoji]
+        lib_config = self.LIBRARIES[self.library]
+        url_template = lib_config['url_template']
+        
+        # Para twemoji que usa nomes
+        if 'name_map' in lib_config:
+            if emoji in lib_config['name_map']:
+                name = lib_config['name_map'][emoji]
+                return url_template.format(name=name, code=code)
+            else:
+                # Fallback
+                return f"https://em-content.zobj.net/thumbs/120/twitter/348/{code}.png"
+        
+        return None
+    
+    def _get_emoji_image(self, emoji):
+        """Baixa e cacheia a imagem do emoji."""
+        cache_key = f"{self.library}_{emoji}"
+        
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        url = self._get_emoji_url(emoji)
+        if url is None:
+            print(f"⚠️  Emoji '{emoji}' não disponível")
+            return None
+        
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code != 200:
+                print(f"❌ Erro {response.status_code} ao baixar: {url}")
+                return None
+            
+            img = Image.open(BytesIO(response.content))
+            self._cache[cache_key] = img
+            return img
+        except Exception as e:
+            print(f"❌ Erro ao baixar emoji '{emoji}': {e}")
+            return None
+    
+    def add_emoji(self, ax, emoji, x, y, zoom=0.1, xycoords='data'):
+        """Adiciona emoji no gráfico."""
+        img = self._get_emoji_image(emoji)
+        if img is None:
+            return None
+        
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(imagebox, (x, y), 
+                           frameon=False, 
+                           xycoords=xycoords,
+                           box_alignment=(0.5, 0.5))
+        ax.add_artist(ab)
+        return ab
+
+# Cria instância global
+emoji = MultiEmojiHelper('twemoji')
+
+print("\n📖 Helper carregado! Use: emoji.add_emoji(ax, '😀', x, y)")
+```
+
+
+
+```{python}
+#| label: analise-emojis-coloridos
+#| fig-cap: "Análise Completa de Emojis (coloridos!)"
+#| fig-height: 14
+
+# ... (todo o código da função analyze_emojis_colorful que te passei)
+
+# Executa análise
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```
+
+
+```{python}
+#| label: emoji-analysis-complete
+
+# 1. Carrega helper
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+# ... (código do MultiEmojiHelper)
+
+emoji = MultiEmojiHelper('twemoji')
+
+# 2. Define função de análise
+def analyze_emojis_colorful(df, emoji_helper):
+    # ... (código completo)
+    pass
+
+# 3. Executa
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```
+
+
+```{python}
+#| label: emoji-analysis-complete
+#| fig-cap: "Análise Completa de Emojis (coloridos!)"
+#| fig-height: 14
+
+# ============================================================================
+# 1. CARREGA EMOJI HELPER
+# ============================================================================
+
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
+import requests
+from io import BytesIO
+import matplotlib.pyplot as plt
+
+class MultiEmojiHelper:
+    """Helper para adicionar emojis coloridos em gráficos matplotlib."""
+    
+    EMOJI_CODES = {
+        '😀': '1f600', '😂': '1f602', '😍': '1f60d', '😢': '1f622',
+        '😭': '1f62d', '😡': '1f621', '🤔': '1f914', '🤣': '1f923',
+        '😊': '1f60a', '😎': '1f60e', '🥰': '1f970', '😘': '1f618',
+        '🤗': '1f917', '😳': '1f633', '🥺': '1f97a', '😏': '1f60f',
+        '😌': '1f60c', '😔': '1f614', '😪': '1f62a', '🤤': '1f924',
+        '❤️': '2764-fe0f', '💔': '1f494', '💕': '1f495', '💯': '1f4af',
+        '🔥': '1f525', '✨': '2728', '⭐': '2b50', '💫': '1f4ab',
+        '👍': '1f44d', '👎': '1f44e', '👏': '1f44f', '🙏': '1f64f',
+        '🤝': '1f91d', '💪': '1f4aa', '✌️': '270c-fe0f', '🤞': '1f91e',
+        '🤙': '1f919', '👌': '1f44c', '🤘': '1f918', '🖤': '1f5a4',
+        '💙': '1f499', '💚': '1f49a', '💛': '1f49b', '🧡': '1f9e1',
+        '💜': '1f49c', '🤍': '1f90d', '🤎': '1f90e', '💖': '1f496',
+        '💗': '1f497', '💘': '1f498', '💝': '1f49d', '💞': '1f49e',
+        '📊': '1f4ca', '📈': '1f4c8', '📉': '1f4c9', '💰': '1f4b0',
+        '📅': '1f4c5', '📱': '1f4f1', '💻': '1f4bb', '🎨': '1f3a8',
+        '🚀': '1f680', '🎉': '1f389', '🎁': '1f381', '🏆': '1f3c6',
+        '✅': '2705', '❌': '274c', '⚠️': '26a0-fe0f', '💬': '1f4ac',
+        '🙈': '1f648', '🙉': '1f649', '🙊': '1f64a', '🐵': '1f435',
+        '🌹': '1f339', '🌸': '1f338', '🌺': '1f33a', '🌻': '1f33b',
+    }
+    
+    LIBRARIES = {
+        'twemoji': {
+            'url_template': 'https://em-content.zobj.net/thumbs/120/twitter/348/{name}_{code}.png',
+            'name_map': {
+                '😀': 'grinning-face', '😂': 'face-with-tears-of-joy',
+                '😍': 'smiling-face-with-heart-eyes', '😢': 'crying-face',
+                '😭': 'loudly-crying-face', '😡': 'pouting-face',
+                '🤔': 'thinking-face', '🤣': 'rolling-on-the-floor-laughing',
+                '😊': 'smiling-face-with-smiling-eyes', '😎': 'smiling-face-with-sunglasses',
+                '🥰': 'smiling-face-with-hearts', '😘': 'face-blowing-a-kiss',
+                '🤗': 'hugging-face', '😳': 'flushed-face', '🥺': 'pleading-face',
+                '😏': 'smirking-face', '😌': 'relieved-face', '😔': 'pensive-face',
+                '😪': 'sleepy-face', '🤤': 'drooling-face',
+                '❤️': 'red-heart', '💔': 'broken-heart', '💕': 'two-hearts',
+                '💯': 'hundred-points', '🔥': 'fire', '✨': 'sparkles',
+                '⭐': 'star', '💫': 'dizzy', '👍': 'thumbs-up', '👎': 'thumbs-down',
+                '👏': 'clapping-hands', '🙏': 'folded-hands', '🤝': 'handshake',
+                '💪': 'flexed-biceps', '🤙': 'call-me-hand', '👌': 'ok-hand',
+                '🤘': 'sign-of-the-horns', '🖤': 'black-heart', '💙': 'blue-heart',
+                '💚': 'green-heart', '💛': 'yellow-heart', '🧡': 'orange-heart',
+                '💜': 'purple-heart', '🤍': 'white-heart', '🤎': 'brown-heart',
+                '💖': 'sparkling-heart', '💗': 'growing-heart', '💘': 'heart-with-arrow',
+                '💝': 'heart-with-ribbon', '💞': 'revolving-hearts',
+                '📊': 'bar-chart', '📈': 'chart-increasing', '📉': 'chart-decreasing',
+                '💰': 'money-bag', '📅': 'calendar', '📱': 'mobile-phone',
+                '💻': 'laptop', '🎨': 'artist-palette', '🚀': 'rocket',
+                '🎉': 'party-popper', '🎁': 'wrapped-gift', '🏆': 'trophy',
+                '✅': 'check-mark-button', '❌': 'cross-mark',
+                '🙈': 'see-no-evil-monkey', '🙉': 'hear-no-evil-monkey',
+                '🙊': 'speak-no-evil-monkey', '🐵': 'monkey-face',
+                '🌹': 'rose', '🌸': 'cherry-blossom', '🌺': 'hibiscus',
+                '🌻': 'sunflower',
+            }
+        },
+    }
+    
+    def __init__(self, library='twemoji'):
+        self.library = library
+        self._cache = {}
+    
+    def _get_emoji_url(self, emoji):
+        if emoji not in self.EMOJI_CODES:
+            return None
+        code = self.EMOJI_CODES[emoji]
+        lib_config = self.LIBRARIES[self.library]
+        url_template = lib_config['url_template']
+        
+        if 'name_map' in lib_config:
+            if emoji in lib_config['name_map']:
+                name = lib_config['name_map'][emoji]
+                return url_template.format(name=name, code=code)
+            else:
+                return f"https://em-content.zobj.net/thumbs/120/twitter/348/{code}.png"
+        return None
+    
+    def _get_emoji_image(self, emoji):
+        cache_key = f"{self.library}_{emoji}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        url = self._get_emoji_url(emoji)
+        if url is None:
+            return None
+        
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code != 200:
+                return None
+            img = Image.open(BytesIO(response.content))
+            self._cache[cache_key] = img
+            return img
+        except:
+            return None
+    
+    def add_emoji(self, ax, emoji, x, y, zoom=0.1, xycoords='data'):
+        img = self._get_emoji_image(emoji)
+        if img is None:
+            return None
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(imagebox, (x, y), frameon=False, 
+                           xycoords=xycoords, box_alignment=(0.5, 0.5))
+        ax.add_artist(ab)
+        return ab
+
+emoji = MultiEmojiHelper('twemoji')
+print("✅ EmojiHelper carregado!")
+
+# ============================================================================
+# 2. FUNÇÃO DE ANÁLISE COM EMOJIS COLORIDOS
+# ============================================================================
+
+def analyze_emojis_colorful(df, emoji_helper):
+    """Análise completa de uso de emojis COM VISUALIZAÇÃO COLORIDA."""
+    import emoji as emoji_lib
+    from collections import Counter
+    
+    print("="*80)
+    print("😊 ANÁLISE DETALHADA DE EMOJIS")
+    print("="*80)
+    
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    def extract_emojis(text):
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji_lib.EMOJI_DATA]
+    
+    print("\n🔍 Extraindo emojis...")
+    
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    df_text['emoji_count'] = df_text['emojis_list'].apply(len)
+    
+    all_emojis = []
+    emojis_p1 = []
+    emojis_p2 = []
+    
+    for idx, row in df_text.iterrows():
+        emojis = row['emojis_list']
+        all_emojis.extend(emojis)
+        
+        if row['remetente'] == 'P1':
+            emojis_p1.extend(emojis)
+        else:
+            emojis_p2.extend(emojis)
+    
+    counter_all = Counter(all_emojis)
+    counter_p1 = Counter(emojis_p1)
+    counter_p2 = Counter(emojis_p2)
+    
+    print(f"\n📊 Estatísticas Gerais:")
+    print(f"   • Total de emojis: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(counter_all)}")
+    print(f"   • Msgs com emoji: {(df_text['emoji_count'] > 0).sum():,} ({(df_text['emoji_count'] > 0).sum()/len(df_text)*100:.1f}%)")
+    print(f"   • Média por mensagem: {df_text['emoji_count'].mean():.2f}")
+    
+    print(f"\n👥 Por Participante:")
+    print(f"   • P1: {len(emojis_p1):,} emojis ({len(emojis_p1)/len(all_emojis)*100:.1f}%)")
+    print(f"   • P2: {len(emojis_p2):,} emojis ({len(emojis_p2)/len(all_emojis)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # Top 20 Geral
+    ax1 = fig.add_subplot(gs[0, :])
+    top_20 = counter_all.most_common(20)
+    counts_top = [e[1] for e in top_20]
+    
+    bars = ax1.barh(range(len(top_20)), counts_top, color='#4dabf7', alpha=0.6, edgecolor='black')
+    ax1.set_yticks(range(len(top_20)))
+    ax1.set_yticklabels([f"     {c:,}" for e, c in top_20], fontsize=12)
+    
+    for i, (emoji_char, count) in enumerate(top_20):
+        emoji_helper.add_emoji(ax1, emoji_char, -max(counts_top)*0.08, i, zoom=0.08)
+    
+    ax1.set_xlabel('Frequencia', fontsize=12, fontweight='bold')
+    ax1.set_title('Top 20 Emojis Mais Usados (Geral)', fontsize=14, fontweight='bold')
+    ax1.invert_yaxis()
+    ax1.grid(axis='x', alpha=0.3)
+    ax1.set_xlim(-max(counts_top)*0.1, max(counts_top)*1.1)
+    
+    # Top 15 P1
+    ax2 = fig.add_subplot(gs[1, 0])
+    top_p1 = counter_p1.most_common(15)
+    counts_p1_top = [e[1] for e in top_p1]
+    
+    bars_p1 = ax2.barh(range(len(top_p1)), counts_p1_top, color='#0A0AFF', alpha=0.6, edgecolor='black')
+    ax2.set_yticks(range(len(top_p1)))
+    ax2.set_yticklabels([f"     {c:,}" for e, c in top_p1], fontsize=11)
+    
+    for i, (emoji_char, count) in enumerate(top_p1):
+        emoji_helper.add_emoji(ax2, emoji_char, -max(counts_p1_top)*0.08, i, zoom=0.08)
+    
+    ax2.set_xlabel('Frequencia', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 15 Emojis P1 (Marlon)', fontsize=13, fontweight='bold', color='#0A0AFF')
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    ax2.set_xlim(-max(counts_p1_top)*0.1, max(counts_p1_top)*1.1)
+    
+    # Top 15 P2
+    ax3 = fig.add_subplot(gs[1, 1])
+    top_p2 = counter_p2.most_common(15)
+    counts_p2_top = [e[1] for e in top_p2]
+    
+    bars_p2 = ax3.barh(range(len(top_p2)), counts_p2_top, color='#FF0080', alpha=0.6, edgecolor='black')
+    ax3.set_yticks(range(len(top_p2)))
+    ax3.set_yticklabels([f"     {c:,}" for e, c in top_p2], fontsize=11)
+    
+    for i, (emoji_char, count) in enumerate(top_p2):
+        emoji_helper.add_emoji(ax3, emoji_char, -max(counts_p2_top)*0.08, i, zoom=0.08)
+    
+    ax3.set_xlabel('Frequencia', fontsize=11, fontweight='bold')
+    ax3.set_title('Top 15 Emojis P2 (Leticia)', fontsize=13, fontweight='bold', color='#FF0080')
+    ax3.invert_yaxis()
+    ax3.grid(axis='x', alpha=0.3)
+    ax3.set_xlim(-max(counts_p2_top)*0.1, max(counts_p2_top)*1.1)
+    
+    # Evolução Mensal
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df_text['ano_mes'] = df_text['timestamp'].dt.to_period('M')
+    emoji_por_mes = df_text.groupby('ano_mes')['emoji_count'].sum()
+    msgs_por_mes = df_text.groupby('ano_mes').size()
+    emoji_ratio_mes = (emoji_por_mes / msgs_por_mes)
+    
+    meses_dates = [m.to_timestamp() for m in emoji_por_mes.index]
+    
+    ax4_twin = ax4.twinx()
+    
+    line1 = ax4.plot(meses_dates, emoji_por_mes.values, marker='o', linewidth=3, 
+                     markersize=8, color='#FF0080', label='Total de Emojis', zorder=3)
+    ax4.fill_between(meses_dates, emoji_por_mes.values, alpha=0.2, color='#FF0080')
+    
+    line2 = ax4_twin.plot(meses_dates, emoji_ratio_mes.values, marker='s', linewidth=2, 
+                          markersize=7, color='#0A0AFF', label='Emojis por Mensagem', 
+                          linestyle='--', zorder=3)
+    
+    ax4.set_xlabel('Mes', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Total de Emojis', fontsize=12, fontweight='bold', color='#FF0080')
+    ax4_twin.set_ylabel('Emojis por Mensagem', fontsize=12, fontweight='bold', color='#0A0AFF')
+    ax4.set_title('Evolucao do Uso de Emojis ao Longo do Ano', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper left', fontsize=11)
+    
+    plt.suptitle('Analise Completa de Emojis\n"A Linguagem Visual da Conexao"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    df_text.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    print(f"\n💎 Emojis Únicos:")
+    p1_only = set(counter_p1.keys()) - set(counter_p2.keys())
+    p2_only = set(counter_p2.keys()) - set(counter_p1.keys())
+    
+    print(f"   • Só P1 usa: {len(p1_only)} emojis")
+    if len(p1_only) > 0:
+        print(f"      {' '.join(list(p1_only)[:20])}")
+    
+    print(f"   • Só P2 usa: {len(p2_only)} emojis")
+    if len(p2_only) > 0:
+        print(f"      {' '.join(list(p2_only)[:20])}")
+    
+    print("\n" + "="*80)
+    
+    return counter_all, counter_p1, counter_p2
+
+# ============================================================================
+# 3. EXECUTA
+# ============================================================================
+
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```
+
+-------------------------------------------------------
+-------------------------------------------------------
+
+
+# Teste de fontes
+
+```{python}
+#| label: teste-emojis-fontes
+#| fig-cap: "Teste de Fontes com Emojis"
+#| fig-height: 8
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+import sys
+
+# Lista de fontes para testar
+fontes_testar = [
+    'DejaVu Sans',           # Padrão matplotlib
+    'Segoe UI Emoji',        # Windows
+    'Apple Color Emoji',     # Mac
+    'Noto Color Emoji',      # Linux/Android
+    'Symbola',               # Linux alternativa
+    'Arial Unicode MS',      # Multiplataforma
+]
+
+# Texto com emojis para testar
+texto_teste = "📊 Gráfico 🎨 Arte ❤️ Amor 🚀 Foguete ⭐ Estrela 📅 Data"
+
+# Cria figura
+fig, axes = plt.subplots(len(fontes_testar) + 2, 1, figsize=(12, 10))
+fig.suptitle('TESTE DE EMOJIS EM DIFERENTES FONTES', fontsize=16, fontweight='bold')
+
+# Testa cada fonte
+for i, fonte in enumerate(fontes_testar):
+    ax = axes[i]
+    ax.axis('off')
+    
+    # Verifica se fonte existe no sistema
+    fontes_disponiveis = [f.name for f in font_manager.fontManager.ttflist]
+    existe = fonte in fontes_disponiveis
+    
+    try:
+        plt.rcParams['font.family'] = fonte
+        
+        if existe:
+            status = "✓ DISPONÍVEL"
+            cor = 'green'
+        else:
+            status = "✗ NÃO ENCONTRADA"
+            cor = 'red'
+        
+        ax.text(0.05, 0.5, f"{fonte}: {texto_teste}", 
+               fontsize=12, va='center',
+               bbox=dict(boxstyle='round,pad=0.5', 
+                        facecolor='white', 
+                        edgecolor=cor, 
+                        linewidth=2))
+        
+        ax.text(0.95, 0.5, status, 
+               fontsize=10, va='center', ha='right',
+               color=cor, fontweight='bold')
+               
+    except Exception as e:
+        ax.text(0.05, 0.5, f"{fonte}: ERRO - {str(e)[:50]}", 
+               fontsize=10, va='center', color='red')
+
+# Teste com símbolos Unicode simples (sem emoji)
+ax = axes[-2]
+ax.axis('off')
+plt.rcParams['font.family'] = 'DejaVu Sans'
+simbolos_unicode = "★ ● ◆ ▶ ■ → ✓ ← ↑ ↓"
+ax.text(0.05, 0.5, f"Unicode Simples (sempre funciona): {simbolos_unicode}", 
+       fontsize=12, va='center',
+       bbox=dict(boxstyle='round,pad=0.5', 
+                facecolor='lightgreen', 
+                edgecolor='darkgreen', 
+                linewidth=2))
+
+# Teste com LaTeX
+ax = axes[-1]
+ax.axis('off')
+simbolos_latex = r"$\bigstar$ $\bullet$ $\clubsuit$ $\heartsuit$ $\spadesuit$ $\blacktriangleright$"
+ax.text(0.05, 0.5, f"Símbolos LaTeX (sempre funciona): {simbolos_latex}", 
+       fontsize=12, va='center',
+       bbox=dict(boxstyle='round,pad=0.5', 
+                facecolor='lightblue', 
+                edgecolor='darkblue', 
+                linewidth=2))
+
+plt.tight_layout()
+plt.show()
+
+# Restaura fonte padrão
+plt.rcParams['font.family'] = 'DejaVu Sans'
+
+# ========================================================================
+# LISTA TODAS AS FONTES DISPONÍVEIS NO SISTEMA
+# ========================================================================
+
+print("\n" + "="*70)
+print("📋 FONTES DISPONÍVEIS NO SISTEMA:")
+print("="*70)
+
+fontes_sistema = sorted(set([f.name for f in font_manager.fontManager.ttflist]))
+
+# Filtra fontes que podem ter emoji
+fontes_emoji = [f for f in fontes_sistema if any(palavra in f.lower() 
+                for palavra in ['emoji', 'color', 'symbol', 'unicode', 'noto'])]
+
+if fontes_emoji:
+    print("\n🎨 Fontes com possível suporte a emoji:")
+    for fonte in fontes_emoji:
+        print(f"   • {fonte}")
+else:
+    print("\n❌ Nenhuma fonte com emoji detectada no sistema")
+
+print(f"\n📊 Total de fontes no sistema: {len(fontes_sistema)}")
+print(f"💻 Sistema operacional: {sys.platform}")
+
+# Mostra algumas fontes comuns
+print("\n📝 Fontes comuns disponíveis:")
+fontes_comuns = ['Arial', 'Times New Roman', 'Courier New', 'Verdana', 
+                 'DejaVu Sans', 'Liberation Sans']
+for fonte in fontes_comuns:
+    if fonte in fontes_sistema:
+        print(f"   ✓ {fonte}")
+    else:
+        print(f"   ✗ {fonte}")
+
+print("="*70)
+```
+
+```{python}
+
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import platform
+
+def find_emoji_font():
+    """Dynamically finds the best available emoji font for the current OS."""
+    system = platform.system()
+    if system == 'Windows':
+        font_name = 'Segoe UI Emoji'
+    elif system == 'Darwin':  # macOS
+        font_name = 'Apple Color Emoji'
+    else:  # Linux or others
+        # Generic approach for systems that might use Noto Color Emoji
+        font_name = 'Noto Color Emoji'
+
+    # Check if the desired font is actually available on the system
+    font_path = fm.findfont(fm.FontProperties(family=font_name, weight='regular'))
+    if font_path:
+        return font_name
+    else:
+        # Fallback to a generic sans-serif family and hope the OS handles substitution
+        print(f"Warning: '{font_name}' not found. Falling back to default sans-serif.")
+        return 'sans-serif'
+
+# Use the function to set the font parameter
+emoji_font = find_emoji_font()
+plt.rcParams['font.family'] = emoji_font
+
+# Example plot usage:
+fig, ax = plt.subplots()
+ax.text(0.5, 0.5, 'Testando Emojis: ⚠️✅🚀', fontsize=30, ha='center', va='center')
+ax.set_title(f'Rendering with font: {plt.rcParams["font.family"]}')
+# plt.show() # Uncomment to display the plot in a GUI environment
+
+```
+
+
+```{python}
+#| label: teste-arial-unicode
+#| fig-cap: "Teste Arial Unicode MS"
+
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.axis('off')
+
+# Testa Arial Unicode MS
+plt.rcParams['font.family'] = 'Arial Unicode MS'
+
+texto_teste = "📊 Gráfico 🎨 Arte ❤️ Amor 🚀 Foguete ⭐ Estrela"
+
+ax.text(0.5, 0.7, "Teste com Arial Unicode MS:", 
+       fontsize=14, ha='center', fontweight='bold')
+
+ax.text(0.5, 0.5, texto_teste, 
+       fontsize=16, ha='center',
+       bbox=dict(boxstyle='round,pad=0.8', 
+                facecolor='lightyellow', 
+                edgecolor='orange', 
+                linewidth=2))
+
+ax.text(0.5, 0.3, "Se você ver caixinhas □ em vez de emojis,\nemojis NÃO funcionam no matplotlib", 
+       fontsize=11, ha='center', style='italic', color='gray')
+
+plt.tight_layout()
+plt.show()
+
+# Restaura fonte
+plt.rcParams['font.family'] = 'DejaVu Sans'
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+# Força matplotlib a recarregar fontes
+font_manager._load_fontmanager(try_read_cache=False)
+
+# Testa Noto Color Emoji
+plt.rcParams['font.family'] = 'Noto Color Emoji'
+
+fig, ax = plt.subplots(figsize=(10, 3))
+ax.axis('off')
+
+texto = "📊 Gráfico 🎨 Arte ❤️ Amor 🚀 Foguete ⭐ Estrela 📅 Data"
+ax.text(0.5, 0.5, texto, fontsize=20, ha='center')
+
+plt.show()
+```
+
+
+
+```{python}
+#| label: rebuild-font-cache
+
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+import os
+
+# Remove cache antigo
+cache_dir = matplotlib.get_cachedir()
+print(f"Cache dir: {cache_dir}")
+
+# Lista arquivos de cache
+import glob
+cache_files = glob.glob(os.path.join(cache_dir, 'font*.json*'))
+print(f"\nArquivos de cache encontrados: {len(cache_files)}")
+
+for f in cache_files:
+    try:
+        os.remove(f)
+        print(f"✓ Removido: {os.path.basename(f)}")
+    except:
+        print(f"✗ Erro ao remover: {os.path.basename(f)}")
+
+# Força reconstrução
+print("\n🔄 Reconstruindo cache de fontes...")
+font_manager._load_fontmanager(try_read_cache=False)
+
+# Lista fontes com 'emoji' no nome
+fontes_emoji = [f.name for f in font_manager.fontManager.ttflist 
+                if 'emoji' in f.name.lower() or 'color' in f.name.lower()]
+
+print(f"\n📝 Fontes com emoji encontradas: {len(fontes_emoji)}")
+for fonte in fontes_emoji:
+    print(f"   • {fonte}")
+
+# Procura também 'Noto' e 'Apple'
+fontes_noto = [f.name for f in font_manager.fontManager.ttflist 
+               if 'noto' in f.name.lower()]
+print(f"\n📝 Fontes Noto encontradas: {len(fontes_noto)}")
+for fonte in fontes_noto[:5]:  # Mostra só as 5 primeiras
+    print(f"   • {fonte}")
+
+print("\n✅ Reconstrução completa!")
+print("⚠️  REINICIE o kernel do Python agora!")
+```
+
+
+
+```{python}
+#| label: teste-emoji-final
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+# Tenta diferentes variações do nome
+fontes_tentar = [
+    'Noto Color Emoji',
+    'NotoColorEmoji', 
+    'Noto Emoji',
+    'Apple Color Emoji',
+    'AppleColorEmoji',
+]
+
+fig, axes = plt.subplots(len(fontes_tentar), 1, figsize=(12, 8))
+texto_emoji = "📊 📈 📉 💰 ❤️ 🎨 🚀 ⭐ 📅 ✅"
+
+for i, fonte in enumerate(fontes_tentar):
+    ax = axes[i]
+    ax.axis('off')
+    
+    try:
+        plt.rcParams['font.family'] = fonte
+        ax.text(0.05, 0.5, f"{fonte}: {texto_emoji}", 
+               fontsize=16, va='center')
+    except Exception as e:
+        ax.text(0.05, 0.5, f"{fonte}: ERRO", 
+               fontsize=12, va='center', color='red')
+
+plt.tight_layout()
+plt.show()
+
+# Restaura
+plt.rcParams['font.family'] = 'DejaVu Sans'
+```
+
+```{python}
+#| label: emoji-como-imagem
+
+import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
+import requests
+from io import BytesIO
+
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 10)
+
+# URLs de emojis (Twemoji - open source da Twitter)
+emojis_urls = {
+    'grafico': 'https://em-content.zobj.net/thumbs/120/twitter/348/bar-chart_1f4ca.png',
+    'coracao': 'https://em-content.zobj.net/thumbs/120/twitter/348/red-heart_2764-fe0f.png',
+    'foguete': 'https://em-content.zobj.net/thumbs/120/twitter/348/rocket_1f680.png',
+    'estrela': 'https://em-content.zobj.net/thumbs/120/twitter/348/star_2b50.png',
+    'calendario': 'https://em-content.zobj.net/thumbs/120/twitter/348/calendar_1f4c5.png',
+}
+
+# Adiciona cada emoji
+posicoes = [(2, 8), (4, 8), (6, 8), (8, 8), (5, 5)]
+labels = ['Gráfico', 'Amor', 'Foguete', 'Estrela', 'Data']
+
+for (x, y), (nome, url), label in zip(posicoes, emojis_urls.items(), labels):
+    # Baixa emoji
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    
+    # Adiciona ao gráfico
+    imagebox = OffsetImage(img, zoom=0.3)
+    ab = AnnotationBbox(imagebox, (x, y), frameon=False)
+    ax.add_artist(ab)
+    
+    # Adiciona label
+    ax.text(x, y-1, label, ha='center', fontsize=12, fontweight='bold')
+
+ax.set_title('Emojis como IMAGENS (sempre funciona!)', 
+             fontsize=16, fontweight='bold', pad=20)
+ax.axis('off')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+
+
+```{python}
+from imojify import imojify
+from matplotlib import pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+def add_emoji(ax, emoji, x, y, zoom=0.1):
+    img_path = imojify.get_img_path(emoji)
+    img = plt.imread(img_path)
+    im = OffsetImage(img, zoom=zoom)
+    im.image.axes = ax
+    ab = AnnotationBbox(im, (x, y), frameon=False, pad=0)
+    ax.add_artist(ab)
+
+# Uso:
+fig, ax = plt.subplots()
+add_emoji(ax, '🥰', 0.5, 0.5)
+```
+
+
+
+
+
+## 2️⃣ Análise Detalhada de Emojis COM EMOJIS COLORIDOS! 🎨
+```{python}
+#| label: analise-emojis-coloridos
+#| fig-cap: "Análise Completa de Emojis (com emojis coloridos!)"
+#| fig-height: 14
+
+def analyze_emojis_colorful(df, emoji_helper):
+    """
+    Análise completa de uso de emojis COM VISUALIZAÇÃO COLORIDA.
+    """
+    import re
+    import emoji as emoji_lib  # Renomeado para não conflitar
+    from collections import Counter
+    
+    print("="*80)
+    print("😊 ANÁLISE DETALHADA DE EMOJIS")
+    print("="*80)
+    
+    # Filtra mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # EXTRAI TODOS OS EMOJIS
+    # ========================================================================
+    
+    def extract_emojis(text):
+        """Extrai emojis de um texto."""
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji_lib.EMOJI_DATA]
+    
+    print("\n🔍 Extraindo emojis...")
+    
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    df_text['emoji_count'] = df_text['emojis_list'].apply(len)
+    
+    # Todos os emojis
+    all_emojis = []
+    emojis_p1 = []
+    emojis_p2 = []
+    
+    for idx, row in df_text.iterrows():
+        emojis = row['emojis_list']
+        all_emojis.extend(emojis)
+        
+        if row['remetente'] == 'P1':
+            emojis_p1.extend(emojis)
+        else:
+            emojis_p2.extend(emojis)
+    
+    # Contadores
+    counter_all = Counter(all_emojis)
+    counter_p1 = Counter(emojis_p1)
+    counter_p2 = Counter(emojis_p2)
+    
+    print(f"\n📊 Estatísticas Gerais:")
+    print(f"   • Total de emojis: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(counter_all)}")
+    print(f"   • Msgs com emoji: {(df_text['emoji_count'] > 0).sum():,} ({(df_text['emoji_count'] > 0).sum()/len(df_text)*100:.1f}%)")
+    print(f"   • Média por mensagem: {df_text['emoji_count'].mean():.2f}")
+    
+    print(f"\n👥 Por Participante:")
+    print(f"   • P1: {len(emojis_p1):,} emojis ({len(emojis_p1)/len(all_emojis)*100:.1f}%)")
+    print(f"   • P2: {len(emojis_p2):,} emojis ({len(emojis_p2)/len(all_emojis)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES COM EMOJIS COLORIDOS!
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 1. Top 20 Emojis GERAL (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, :])
+    
+    top_20 = counter_all.most_common(20)
+    emojis_top = [e[0] for e in top_20]
+    counts_top = [e[1] for e in top_20]
+    
+    bars = ax1.barh(range(len(top_20)), counts_top, color='#4dabf7', alpha=0.6, edgecolor='black')
+    
+    # ADICIONA EMOJIS COLORIDOS NO EIXO Y!
+    ax1.set_yticks(range(len(top_20)))
+    ax1.set_yticklabels([f"     {c:,}" for e, c in top_20], fontsize=12)  # Só número
+    
+    # Adiciona emojis como IMAGENS
+    for i, (emoji_char, count) in enumerate(top_20):
+        emoji_helper.add_emoji(ax1, emoji_char, -max(counts_top)*0.08, i, zoom=0.08)
+    
+    ax1.set_xlabel('Frequência', fontsize=12, fontweight='bold')
+    ax1.set_title('Top 20 Emojis Mais Usados (Geral)', fontsize=14, fontweight='bold')
+    ax1.invert_yaxis()
+    ax1.grid(axis='x', alpha=0.3)
+    ax1.set_xlim(-max(counts_top)*0.1, max(counts_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 2. Top 15 P1 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[1, 0])
+    
+    top_p1 = counter_p1.most_common(15)
+    counts_p1_top = [e[1] for e in top_p1]
+    
+    bars_p1 = ax2.barh(range(len(top_p1)), counts_p1_top, color='#0A0AFF', alpha=0.6, edgecolor='black')
+    
+    ax2.set_yticks(range(len(top_p1)))
+    ax2.set_yticklabels([f"     {c:,}" for e, c in top_p1], fontsize=11)
+    
+    # Emojis coloridos
+    for i, (emoji_char, count) in enumerate(top_p1):
+        emoji_helper.add_emoji(ax2, emoji_char, -max(counts_p1_top)*0.08, i, zoom=0.08)
+    
+    ax2.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 15 Emojis P1 (Marlon)', fontsize=13, fontweight='bold', color='#0A0AFF')
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    ax2.set_xlim(-max(counts_p1_top)*0.1, max(counts_p1_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 3. Top 15 P2 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, 1])
+    
+    top_p2 = counter_p2.most_common(15)
+    counts_p2_top = [e[1] for e in top_p2]
+    
+    bars_p2 = ax3.barh(range(len(top_p2)), counts_p2_top, color='#FF0080', alpha=0.6, edgecolor='black')
+    
+    ax3.set_yticks(range(len(top_p2)))
+    ax3.set_yticklabels([f"     {c:,}" for e, c in top_p2], fontsize=11)
+    
+    # Emojis coloridos
+    for i, (emoji_char, count) in enumerate(top_p2):
+        emoji_helper.add_emoji(ax3, emoji_char, -max(counts_p2_top)*0.08, i, zoom=0.08)
+    
+    ax3.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax3.set_title('Top 15 Emojis P2 (Letícia)', fontsize=13, fontweight='bold', color='#FF0080')
+    ax3.invert_yaxis()
+    ax3.grid(axis='x', alpha=0.3)
+    ax3.set_xlim(-max(counts_p2_top)*0.1, max(counts_p2_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 4. Evolução Mensal (emoji no título!)
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df_text['ano_mes'] = df_text['timestamp'].dt.to_period('M')
+    emoji_por_mes = df_text.groupby('ano_mes')['emoji_count'].sum()
+    msgs_por_mes = df_text.groupby('ano_mes').size()
+    emoji_ratio_mes = (emoji_por_mes / msgs_por_mes)
+    
+    meses_dates = [m.to_timestamp() for m in emoji_por_mes.index]
+    
+    ax4_twin = ax4.twinx()
+    
+    # Linha: total de emojis
+    line1 = ax4.plot(meses_dates, emoji_por_mes.values, marker='o', linewidth=3, 
+                     markersize=8, color='#FF0080', label='Total de Emojis', zorder=3)
+    ax4.fill_between(meses_dates, emoji_por_mes.values, alpha=0.2, color='#FF0080')
+    
+    # Linha: ratio
+    line2 = ax4_twin.plot(meses_dates, emoji_ratio_mes.values, marker='s', linewidth=2, 
+                          markersize=7, color='#0A0AFF', label='Emojis por Mensagem', 
+                          linestyle='--', zorder=3)
+    
+    ax4.set_xlabel('Mes', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Total de Emojis', fontsize=12, fontweight='bold', color='#FF0080')
+    ax4_twin.set_ylabel('Emojis por Mensagem', fontsize=12, fontweight='bold', color='#0A0AFF')
+    ax4.set_title('Evolucao do Uso de Emojis ao Longo do Ano', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    # Legenda combinada
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper left', fontsize=11)
+    
+    plt.suptitle('Analise Completa de Emojis\n"A Linguagem Visual da Conexao"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Limpa coluna temporária
+    df_text.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    # Emojis únicos
+    print(f"\n💎 Emojis Únicos:")
+    p1_only = set(counter_p1.keys()) - set(counter_p2.keys())
+    p2_only = set(counter_p2.keys()) - set(counter_p1.keys())
+    
+    print(f"   • Só P1 usa: {len(p1_only)} emojis")
+    if len(p1_only) > 0:
+        print(f"      {' '.join(list(p1_only)[:20])}")
+    
+    print(f"   • Só P2 usa: {len(p2_only)} emojis")
+    if len(p2_only) > 0:
+        print(f"      {' '.join(list(p2_only)[:20])}")
+    
+    print("\n" + "="*80)
+    
+    return counter_all, counter_p1, counter_p2
+
+# Executa análise COM EMOJIS COLORIDOS!
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```

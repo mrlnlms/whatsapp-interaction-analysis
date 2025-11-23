@@ -1,0 +1,627 @@
+---
+title: "Emoji Library Builder"
+subtitle: "Construindo biblioteca completa de emojis para visualizações"
+format: html
+---
+
+## 🎨 Biblioteca de Emojis Completa
+
+### 1. Setup e Imports
+```{python}
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import font_manager as fm
+from collections import Counter
+import emoji as emoji_lib
+import numpy as np
+import seaborn as sns
+from datetime import datetime
+import warnings
+
+```
+
+
+```{python}
+#| label: setup-analises-avancadas
+# Setup
+
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (14, 8)
+
+# Cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c',
+    'neutral': '#95a5a6'
+}
+
+# Carrega dados
+df = pd.read_csv('final_dataframe_enriched_complete.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print("✅ Setup completo!")
+print(f"📊 Dataset: {len(df):,} mensagens")
+```
+
+
+## 📊 Código: Análise Completa de Viagens
+
+```{python}
+#| label: analise-viagens-completa
+#| fig-cap: "Análise Detalhada: Impacto das Viagens"
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+
+# Define cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+viagens = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',  # ← CORRIGIDO (6 dias)
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+viagens_df = pd.DataFrame(viagens)
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+viagens_df['duracao_dias'] = (viagens_df['fim'] - viagens_df['inicio']).dt.days + 1  # +1 para incluir último dia
+
+print("="*80)
+print("📅 VIAGENS REGISTRADAS")
+print("="*80)
+print(f"\nTotal de viagens: {len(viagens_df)}\n")
+print(viagens_df[['nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+
+# Estatísticas
+total_dias_juntos = viagens_df['duracao_dias'].sum()
+total_dias_ano = 366  # Out/2024 a Out/2025
+pct_juntos = (total_dias_juntos / total_dias_ano) * 100
+
+print(f"\n📊 Resumo:")
+print(f"   • Total de dias juntos: {total_dias_juntos} dias")
+print(f"   • Percentual do ano: {pct_juntos:.1f}%")
+print(f"   • Viagem mais longa: {viagens_df['duracao_dias'].max()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {viagens_df['duracao_dias'].min()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmin(), 'nome']})")
+
+print("\n" + "="*80)
+```
+
+
+### 3. Análise de emojis usados
+```{python}
+#| label: extrair-emojis-unicos
+
+def extrair_todos_emojis(df):
+    """
+    Extrai todos os emojis únicos do DataFrame.
+    """
+    print("="*80)
+    print("🔍 EXTRAINDO EMOJIS ÚNICOS")
+    print("="*80)
+    
+    # Filtra mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    def extract_emojis(text):
+        """Extrai emojis de um texto."""
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji_lib.EMOJI_DATA]
+    
+    print(f"\n📊 Analisando {len(df_text):,} mensagens com conteúdo...")
+    
+    # Extrai emojis
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    
+    # Coleta todos
+    all_emojis = []
+    for emojis in df_text['emojis_list']:
+        all_emojis.extend(emojis)
+    
+    # Conta
+    counter = Counter(all_emojis)
+    emojis_unicos = sorted(counter.keys(), key=lambda x: counter[x], reverse=True)
+    
+    print(f"\n✅ Resultado:")
+    print(f"   • Total de emojis encontrados: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(emojis_unicos)}")
+    
+    # Mostra top 20
+    print(f"\n🏆 Top 20 mais usados:")
+    for i, emoji_char in enumerate(emojis_unicos[:20], 1):
+        count = counter[emoji_char]
+        try:
+            name = emoji_lib.demojize(emoji_char)
+        except:
+            name = "desconhecido"
+        print(f"   {i:2d}. {emoji_char}  {count:5,}x - {name}")
+    
+    print("\n" + "="*80)
+    
+    return emojis_unicos, counter
+
+# Executa extração
+emojis_unicos, emoji_counter = extrair_todos_emojis(df)
+```
+
+
+### 4. Geração do Dicionário Completo
+```{python}
+#| label: gerar-dicionario-completo
+
+def gerar_dicionario_emoji_codes(emojis_list):
+    """
+    Gera dicionário EMOJI_CODES completo.
+    """
+    print("="*80)
+    print("📝 GERANDO EMOJI_CODES")
+    print("="*80)
+    print(f"\n⏳ Processando {len(emojis_list)} emojis...\n")
+    
+    emoji_codes = {}
+    
+    for emoji_char in emojis_list:
+        # Converte para código unicode hexadecimal
+        code_points = [f"{ord(c):x}" for c in emoji_char]
+        code = '-'.join(code_points)
+        emoji_codes[emoji_char] = code
+    
+    print(f"✅ Dicionário gerado com {len(emoji_codes)} emojis!")
+    print("\n" + "="*80)
+    print("📋 CÓDIGO PYTHON (copie e cole):")
+    print("="*80)
+    print("\nEMOJI_CODES = {")
+    
+    for emoji_char, code in emoji_codes.items():
+        print(f"    '{emoji_char}': '{code}',")
+    
+    print("}")
+    print("\n" + "="*80)
+    
+    return emoji_codes
+
+def gerar_name_map_twemoji(emojis_list, emoji_counter):
+    """
+    Gera NAME_MAP para os emojis mais usados (Twemoji precisa de nomes).
+    """
+    print("="*80)
+    print("📝 GERANDO NAME_MAP (Top 100 para Twemoji)")
+    print("="*80)
+    
+    # Pega top 100 mais usados
+    top_100 = sorted(emojis_list, key=lambda x: emoji_counter.get(x, 0), reverse=True)[:100]
+    
+    name_map = {}
+    
+    for emoji_char in top_100:
+        try:
+            # Usa biblioteca emoji para obter nome
+            demojized = emoji_lib.demojize(emoji_char)
+            # Remove : e converte _ para -
+            name = demojized.strip(':').replace('_', '-')
+            name_map[emoji_char] = name
+        except:
+            pass
+    
+    print(f"\n✅ NAME_MAP gerado com {len(name_map)} emojis!")
+    print("\n" + "="*80)
+    print("📋 CÓDIGO PYTHON (copie e cole):")
+    print("="*80)
+    print("\nNAME_MAP = {")
+    
+    for emoji_char, name in name_map.items():
+        count = emoji_counter.get(emoji_char, 0)
+        print(f"    '{emoji_char}': '{name}',  # {count:,}x")
+    
+    print("}")
+    print("\n" + "="*80)
+    
+    return name_map
+
+# Gera os dicionários
+emoji_codes_dict = gerar_dicionario_emoji_codes(emojis_unicos)
+name_map_dict = gerar_name_map_twemoji(emojis_unicos, emoji_counter)
+```
+
+### 5. EmojiHelper v2.0 - Biblioteca Completa
+```{python}
+#| label: emoji-helper-v2
+
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
+import requests
+from io import BytesIO
+
+class CompleteEmojiHelper:
+    """
+    EmojiHelper v2.0 - Com biblioteca completa de emojis.
+    Suporta TODOS os emojis extraídos dos dados.
+    """
+    
+    def __init__(self, emoji_codes, name_map=None, library='twemoji'):
+        """
+        Inicializa com dicionários personalizados.
+        
+        Args:
+            emoji_codes: Dicionário {emoji: unicode_code}
+            name_map: Dicionário opcional {emoji: twemoji_name}
+            library: 'twemoji' ou 'jsdelivr'
+        """
+        self.emoji_codes = emoji_codes
+        self.name_map = name_map or {}
+        self.library = library
+        self._cache = {}
+        
+        print(f"✅ CompleteEmojiHelper inicializado!")
+        print(f"   📚 {len(emoji_codes)} emojis no dicionário")
+        print(f"   🏷️  {len(self.name_map)} nomes mapeados")
+    
+    def _get_emoji_url(self, emoji):
+        """Gera URL do emoji."""
+        if emoji not in self.emoji_codes:
+            return None
+        
+        code = self.emoji_codes[emoji]
+        
+        # Tenta usar nome se disponível (melhor qualidade)
+        if emoji in self.name_map:
+            name = self.name_map[emoji]
+            return f"https://em-content.zobj.net/thumbs/120/twitter/348/{name}_{code}.png"
+        
+        # Fallback: URL genérica via jsDelivr
+        return f"https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/{code}.png"
+    
+    def _get_emoji_image(self, emoji):
+        """Baixa e cacheia a imagem do emoji."""
+        cache_key = f"{self.library}_{emoji}"
+        
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        url = self._get_emoji_url(emoji)
+        if url is None:
+            return None
+        
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code != 200:
+                return None
+            
+            img = Image.open(BytesIO(response.content))
+            self._cache[cache_key] = img
+            return img
+        except:
+            return None
+    
+    def add_emoji(self, ax, emoji, x, y, zoom=0.1, xycoords='data'):
+        """Adiciona emoji no gráfico."""
+        img = self._get_emoji_image(emoji)
+        if img is None:
+            return None
+        
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(imagebox, (x, y), 
+                           frameon=False, 
+                           xycoords=xycoords,
+                           box_alignment=(0.5, 0.5))
+        ax.add_artist(ab)
+        return ab
+    
+    def get_stats(self):
+        """Retorna estatísticas do helper."""
+        return {
+            'total_emojis': len(self.emoji_codes),
+            'mapped_names': len(self.name_map),
+            'cached_images': len(self._cache)
+        }
+
+# Cria instância global com dicionários completos
+emoji = CompleteEmojiHelper(emoji_codes_dict, name_map_dict)
+
+print("\n🎉 Biblioteca completa carregada!")
+print(f"📊 Stats: {emoji.get_stats()}")
+```
+
+### 6. Testes e Validação
+```{python}
+#| label: teste-emoji-helper
+#| fig-cap: "Teste da Biblioteca Completa"
+#| fig-height: 8
+
+def testar_emoji_helper(emoji_helper, emojis_testar, emoji_counter):
+    """
+    Testa o helper com lista de emojis.
+    """
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    n_emojis = len(emojis_testar)
+    
+    # Posiciona emojis em grid
+    cols = 10
+    rows = (n_emojis + cols - 1) // cols
+    
+    ax.set_xlim(-0.5, cols - 0.5)
+    ax.set_ylim(-0.5, rows - 0.5)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    
+    sucessos = 0
+    falhas = 0
+    
+    for i, emoji_char in enumerate(emojis_testar):
+        row = i // cols
+        col = i % cols
+        
+        y = rows - row - 1  # Inverte Y para começar do topo
+        
+        result = emoji_helper.add_emoji(ax, emoji_char, col, y, zoom=0.15)
+        
+        if result is not None:
+            sucessos += 1
+            # Adiciona contagem
+            count = emoji_counter.get(emoji_char, 0)
+            ax.text(col, y - 0.35, f"{count}", 
+                   ha='center', va='top', fontsize=8, color='gray')
+        else:
+            falhas += 1
+            # Marca falha
+            ax.text(col, y, '❌', ha='center', va='center', fontsize=20)
+    
+    ax.set_title(f'Teste: {n_emojis} Emojis | ✅ {sucessos} OK | ❌ {falhas} Falhas', 
+                fontsize=14, fontweight='bold', pad=20)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"\n📊 Resultado do teste:")
+    print(f"   ✅ Sucessos: {sucessos}/{n_emojis} ({sucessos/n_emojis*100:.1f}%)")
+    print(f"   ❌ Falhas: {falhas}/{n_emojis}")
+    
+    return sucessos, falhas
+
+# Testa com top 50 emojis
+print("🧪 Testando biblioteca com Top 50 emojis...\n")
+top_50_emojis = emojis_unicos[:50]
+sucessos, falhas = testar_emoji_helper(emoji, top_50_emojis, emoji_counter)
+```
+
+
+
+
+
+
+
+### 5.1. EmojiHelper v2.1 - Com Fallback Multi-Source
+```{python}
+#| label: emoji-helper-v2-1-fallback
+
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from PIL import Image
+import requests
+from io import BytesIO
+
+class CompleteEmojiHelper:
+    """
+    EmojiHelper v2.1 - Com fallback multi-source.
+    Tenta múltiplas fontes para garantir máxima cobertura.
+    """
+    
+    def __init__(self, emoji_codes, name_map=None):
+        self.emoji_codes = emoji_codes
+        self.name_map = name_map or {}
+        self._cache = {}
+        
+        print(f"✅ CompleteEmojiHelper v2.1 inicializado!")
+        print(f"   📚 {len(emoji_codes)} emojis no dicionário")
+        print(f"   🏷️  {len(self.name_map)} nomes mapeados")
+        print(f"   🔄 Fallback multi-source ativo")
+    
+    def _get_emoji_urls(self, emoji):
+        """Gera lista de URLs para tentar (ordem de prioridade)."""
+        if emoji not in self.emoji_codes:
+            return []
+        
+        code = self.emoji_codes[emoji]
+        urls = []
+        
+        # 1. Twemoji com nome (melhor qualidade)
+        if emoji in self.name_map:
+            name = self.name_map[emoji]
+            urls.append(f"https://em-content.zobj.net/thumbs/120/twitter/348/{name}_{code}.png")
+        
+        # 2. jsDelivr Twemoji (mais completo, inclui emojis novos)
+        urls.append(f"https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/{code}.png")
+        
+        # 3. Twemoji genérico
+        urls.append(f"https://em-content.zobj.net/thumbs/120/twitter/348/{code}.png")
+        
+        # 4. OpenMoji (fallback final)
+        urls.append(f"https://openmoji.org/data/color/svg/{code.upper()}.svg")
+        
+        return urls
+    
+    def _get_emoji_image(self, emoji):
+        """Baixa emoji tentando múltiplas fontes."""
+        cache_key = emoji
+        
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        urls = self._get_emoji_urls(emoji)
+        
+        for url in urls:
+            try:
+                response = requests.get(url, timeout=3)
+                if response.status_code == 200:
+                    img = Image.open(BytesIO(response.content))
+                    # Converte SVG se necessário
+                    if img.format == 'SVG':
+                        img = img.convert('RGBA')
+                    self._cache[cache_key] = img
+                    return img
+            except:
+                continue
+        
+        # Nenhuma fonte funcionou
+        return None
+    
+    def add_emoji(self, ax, emoji, x, y, zoom=0.1, xycoords='data'):
+        """Adiciona emoji no gráfico."""
+        img = self._get_emoji_image(emoji)
+        if img is None:
+            return None
+        
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(imagebox, (x, y), 
+                           frameon=False, 
+                           xycoords=xycoords,
+                           box_alignment=(0.5, 0.5))
+        ax.add_artist(ab)
+        return ab
+    
+    def get_stats(self):
+        """Retorna estatísticas do helper."""
+        return {
+            'total_emojis': len(self.emoji_codes),
+            'mapped_names': len(self.name_map),
+            'cached_images': len(self._cache)
+        }
+
+# Cria nova instância com fallback
+emoji = CompleteEmojiHelper(emoji_codes_dict, name_map_dict)
+
+print("\n🎉 Biblioteca v2.1 carregada com fallback!")
+```
+
+### 6.1. Teste com Fallback
+```{python}
+#| label: teste-fallback
+#| fig-cap: "Teste com Fallback Multi-Source"
+#| fig-height: 8
+
+print("🧪 Testando biblioteca v2.1 com fallback...\n")
+top_50_emojis = emojis_unicos[:50]
+sucessos, falhas = testar_emoji_helper(emoji, top_50_emojis, emoji_counter)
+
+print(f"\n💡 Melhoria esperada:")
+print(f"   Antes: 38/50 (76%)")
+print(f"   Meta: 45+/50 (90%+)")
+```
+
+
+### 7. Exportar Biblioteca
+```{python}
+#| label: exportar-biblioteca
+
+import pickle
+
+# Salva dicionários
+with open('emoji_library.pkl', 'wb') as f:
+    pickle.dump({
+        'emoji_codes': emoji_codes_dict,
+        'name_map': name_map_dict,
+        'helper': emoji
+    }, f)
+
+print("✅ Biblioteca salva em 'emoji_library.pkl'")
+print("\n💡 Para usar em outros notebooks:")
+print("   import pickle")
+print("   with open('emoji_library.pkl', 'rb') as f:")
+print("       lib = pickle.load(f)")
+print("   emoji = lib['helper']")
+```
+

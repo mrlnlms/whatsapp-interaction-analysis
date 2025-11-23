@@ -1,0 +1,3837 @@
+---
+title: "Análise Descritiva - WhatsApp Dataset"
+author: "Marlon"
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    theme: cosmo
+---
+
+# Estatísticas Descritivas do Dataset
+
+Este notebook apresenta uma análise exploratória descritiva completa do dataset de conversas do WhatsApp, cobrindo aspectos quantitativos, temporais, de conteúdo e de interação.
+
+------------------------------------------------------------------------
+
+## 1. Setup e Carregamento
+
+```{python}
+# Bibliotecas
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime, timedelta
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações de visualização
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (12, 6)
+plt.rcParams['font.size'] = 10
+
+# Paleta de cores
+COLORS = {
+    'P1': '#3498db',  # Azul
+    'P2': '#e74c3c',  # Rosa
+    'neutral': '#95a5a6'  # Cinza
+}
+
+# Configurações do pandas
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.width', None)
+pd.set_option('display.float_format', '{:.2f}'.format)
+
+print("✅ Bibliotecas carregadas!")
+print(f"📊 Paleta de cores definida")
+```
+
+```{python}
+# Carrega dataset enriquecido
+df = pd.read_csv('final_dataframe_enriched_complete.csv')
+
+# Converte timestamp para datetime
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print(f"✅ Dataset carregado com sucesso!")
+print(f"\n📊 Dimensões: {df.shape[0]:,} linhas × {df.shape[1]} colunas")
+print(f"💾 Memória utilizada: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+```
+
+------------------------------------------------------------------------
+
+## 2. Overview do Dataset
+
+### 2.1 Informações Gerais
+
+```{python}
+def print_dataset_overview(df):
+    """
+    Imprime overview geral do dataset.
+    """
+    print("="*80)
+    print("📋 VISÃO GERAL DO DATASET")
+    print("="*80)
+    
+    # Informações básicas
+    total_msgs = len(df)
+    data_inicio = df['timestamp'].min()
+    data_fim = df['timestamp'].max()
+    duracao_dias = (data_fim - data_inicio).days
+    
+    print(f"\n📊 Informações Básicas:")
+    print(f"   • Total de mensagens: {total_msgs:,}")
+    print(f"   • Período: {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+    print(f"   • Duração: {duracao_dias:,} dias (~{duracao_dias/30:.1f} meses)")
+    print(f"   • Média msgs/dia: {total_msgs/duracao_dias:.1f}")
+    
+    # Participantes
+    participantes = df['remetente'].unique()
+    print(f"\n👥 Participantes:")
+    for i, p in enumerate(participantes, 1):
+        count = (df['remetente'] == p).sum()
+        pct = (count / total_msgs * 100)
+        print(f"   {i}. {p}: {count:,} mensagens ({pct:.1f}%)")
+    
+    # Tipos de dados
+    print(f"\n📋 Colunas ({len(df.columns)}):")
+    for col in df.columns:
+        dtype = df[col].dtype
+        non_null = df[col].notna().sum()
+        null_pct = (df[col].isna().sum() / len(df) * 100)
+        print(f"   • {col:<30} {str(dtype):<15} {non_null:>7,} non-null ({null_pct:>5.1f}% null)")
+    
+    print("\n" + "="*80)
+
+# Executa overview
+print_dataset_overview(df)
+```
+
+### 2.2 Completude dos Dados
+
+```{python}
+# Análise de valores nulos
+print("🔍 ANÁLISE DE COMPLETUDE DOS DADOS")
+print("="*80)
+
+null_analysis = pd.DataFrame({
+    'Coluna': df.columns,
+    'Total Nulos': df.isnull().sum().values,
+    '% Nulo': (df.isnull().sum() / len(df) * 100).values,
+    'Tipo': df.dtypes.values
+})
+
+null_analysis = null_analysis[null_analysis['Total Nulos'] > 0].sort_values('% Nulo', ascending=False)
+
+if len(null_analysis) > 0:
+    print("\n📊 Colunas com valores nulos:\n")
+    print(null_analysis.to_string(index=False))
+else:
+    print("\n✅ Nenhuma coluna possui valores nulos!")
+
+print("\n" + "="*80)
+```
+
+```{python}
+# Visualização da completude
+fig, ax = plt.subplots(figsize=(12, 6))
+
+completude = (df.notna().sum() / len(df) * 100).sort_values()
+
+ax.barh(range(len(completude)), completude.values, color=COLORS['neutral'])
+ax.set_yticks(range(len(completude)))
+ax.set_yticklabels(completude.index)
+ax.set_xlabel('% de Completude')
+ax.set_title('Completude dos Dados por Coluna', fontsize=14, fontweight='bold')
+ax.axvline(x=100, color='green', linestyle='--', alpha=0.5, label='100%')
+ax.legend()
+ax.grid(axis='x', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Gráfico: Completude dos dados por coluna")
+```
+
+------------------------------------------------------------------------
+
+## 3. Análise por Participante
+
+### 3.1 Volume de Mensagens
+
+```{python}
+def analyze_by_participant(df):
+    """
+    Análise comparativa por participante.
+    """
+    print("="*80)
+    print("👥 ANÁLISE POR PARTICIPANTE")
+    print("="*80)
+    
+    # Volume total
+    participant_stats = df.groupby('remetente').size().reset_index(name='total_msgs')
+    participant_stats['percentual'] = (participant_stats['total_msgs'] / len(df) * 100)
+    
+    print("\n📊 Volume de Mensagens:\n")
+    print(participant_stats.to_string(index=False))
+    
+    # Média por dia
+    duracao_dias = (df['timestamp'].max() - df['timestamp'].min()).days
+    
+    print(f"\n📅 Média de Mensagens por Dia:")
+    for _, row in participant_stats.iterrows():
+        avg_day = row['total_msgs'] / duracao_dias
+        print(f"   • {row['remetente']}: {avg_day:.1f} msgs/dia")
+    
+    print("\n" + "="*80)
+    
+    return participant_stats
+
+participant_stats = analyze_by_participant(df)
+```
+
+```{python}
+# Visualização: Volume por participante
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+# Gráfico de barras
+colors = [COLORS['P1'], COLORS['P2']]
+ax1.bar(participant_stats['remetente'], participant_stats['total_msgs'], color=colors)
+ax1.set_ylabel('Total de Mensagens')
+ax1.set_title('Volume Total de Mensagens', fontsize=12, fontweight='bold')
+ax1.grid(axis='y', alpha=0.3)
+
+for i, row in participant_stats.iterrows():
+    ax1.text(i, row['total_msgs'] + 500, f"{row['total_msgs']:,}", 
+             ha='center', va='bottom', fontweight='bold')
+
+# Gráfico de pizza
+ax2.pie(participant_stats['total_msgs'], labels=participant_stats['remetente'], 
+        autopct='%1.1f%%', colors=colors, startangle=90)
+ax2.set_title('Distribuição Percentual', fontsize=12, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Volume por participante")
+```
+
+### 3.2 Características de Comunicação
+
+```{python}
+def analyze_communication_style(df):
+    """
+    Analisa estilo de comunicação por participante.
+    """
+    print("="*80)
+    print("💬 ESTILO DE COMUNICAÇÃO POR PARTICIPANTE")
+    print("="*80)
+    
+    style_stats = df.groupby('remetente').agg({
+        'word_count': 'mean',
+        'char_count': 'mean',
+        'avg_word_length': 'mean',
+        'has_link': 'mean',
+        'has_emoji': 'mean',
+        'has_question': 'mean',
+        'has_exclamation': 'mean',
+        'line_breaks': 'mean'
+    }).round(2)
+    
+    # Renomeia colunas
+    style_stats.columns = [
+        'Palavras/msg',
+        'Caracteres/msg',
+        'Tamanho médio palavra',
+        '% com link',
+        '% com emoji',
+        '% com pergunta',
+        '% com exclamação',
+        'Quebras de linha/msg'
+    ]
+    
+    # Converte percentuais
+    for col in ['% com link', '% com emoji', '% com pergunta', '% com exclamação']:
+        style_stats[col] = (style_stats[col] * 100).round(1)
+    
+    print("\n📊 Métricas de Estilo:\n")
+    print(style_stats)
+    
+    print("\n" + "="*80)
+    
+    return style_stats
+
+style_stats = analyze_communication_style(df)
+```
+
+```{python}
+# Visualização: Comparativo de métricas
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+metrics = [
+    ('Palavras/msg', 'Média de Palavras por Mensagem'),
+    ('Caracteres/msg', 'Média de Caracteres por Mensagem'),
+    ('% com emoji', '% de Mensagens com Emoji'),
+    ('% com exclamação', '% de Mensagens com Exclamação')
+]
+
+for idx, (metric, title) in enumerate(metrics):
+    ax = axes[idx // 2, idx % 2]
+    
+    values = style_stats[metric].values
+    remetentes = style_stats.index.values
+    colors_list = [COLORS['P1'], COLORS['P2']]
+    
+    bars = ax.bar(remetentes, values, color=colors_list)
+    ax.set_ylabel(metric)
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3)
+    
+    # Adiciona valores nas barras
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.1f}',
+                ha='center', va='bottom', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Comparativo de métricas de comunicação")
+```
+
+------------------------------------------------------------------------
+
+## 4. Análise Temporal
+
+### 4.1 Distribuições Temporais
+
+```{python}
+def analyze_temporal_distribution(df):
+    """
+    Análise de distribuição temporal das mensagens.
+    """
+    print("="*80)
+    print("📅 DISTRIBUIÇÃO TEMPORAL")
+    print("="*80)
+    
+    # Por ano
+    print("\n📊 Mensagens por Ano:")
+    ano_dist = df.groupby('ano').size()
+    for ano, count in ano_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {ano}: {count:,} ({pct:.1f}%)")
+    
+    # Por mês
+    print("\n📊 Top 5 Meses com Mais Mensagens:")
+    mes_dist = df.groupby(['ano', 'mes']).size().sort_values(ascending=False).head(5)
+    for (ano, mes), count in mes_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {mes}/{ano}: {count:,} ({pct:.1f}%)")
+    
+    # Por dia da semana
+    print("\n📊 Mensagens por Dia da Semana:")
+    dia_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+    dia_dist = df.groupby('dia_semana').size().reindex(dia_ordem)
+    for dia, count in dia_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {dia}: {count:,} ({pct:.1f}%)")
+    
+    # Por período do dia
+    print("\n📊 Mensagens por Período do Dia:")
+    periodo_dist = df.groupby('periodo_dia').size().sort_values(ascending=False)
+    for periodo, count in periodo_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {periodo}: {count:,} ({pct:.1f}%)")
+    
+    print("\n" + "="*80)
+    
+    return {
+        'ano': ano_dist,
+        'dia_semana': dia_dist,
+        'periodo_dia': periodo_dist
+    }
+
+temporal_dist = analyze_temporal_distribution(df)
+```
+
+```{python}
+# Visualização: Distribuições temporais
+fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+# 1. Por dia da semana
+ax1 = axes[0, 0]
+dia_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+dia_dist = df.groupby('dia_semana').size().reindex(dia_ordem)
+colors_dias = [COLORS['neutral']] * 5 + [COLORS['P2'], COLORS['P2']]  # Destaca fim de semana
+ax1.bar(range(len(dia_dist)), dia_dist.values, color=colors_dias)
+ax1.set_xticks(range(len(dia_dist)))
+ax1.set_xticklabels(dia_dist.index, rotation=45, ha='right')
+ax1.set_ylabel('Número de Mensagens')
+ax1.set_title('Mensagens por Dia da Semana', fontsize=12, fontweight='bold')
+ax1.grid(axis='y', alpha=0.3)
+
+# 2. Por período do dia
+ax2 = axes[0, 1]
+periodo_dist = df.groupby('periodo_dia').size()
+ax2.bar(periodo_dist.index, periodo_dist.values, color=COLORS['P1'])
+ax2.set_ylabel('Número de Mensagens')
+ax2.set_title('Mensagens por Período do Dia', fontsize=12, fontweight='bold')
+ax2.grid(axis='y', alpha=0.3)
+ax2.tick_params(axis='x', rotation=45)
+
+# 3. Por mês (timeline)
+ax3 = axes[1, 0]
+df['ano_mes'] = df['timestamp'].dt.to_period('M')
+mes_timeline = df.groupby('ano_mes').size()
+ax3.plot(range(len(mes_timeline)), mes_timeline.values, marker='o', color=COLORS['P2'], linewidth=2)
+ax3.set_xlabel('Mês')
+ax3.set_ylabel('Número de Mensagens')
+ax3.set_title('Timeline Mensal de Mensagens', fontsize=12, fontweight='bold')
+ax3.grid(alpha=0.3)
+ax3.set_xticks(range(0, len(mes_timeline), 2))
+ax3.set_xticklabels([str(m) for m in mes_timeline.index[::2]], rotation=45, ha='right')
+
+# 4. Por hora do dia
+ax4 = axes[1, 1]
+hora_dist = df.groupby('hora_numerica').size()
+ax4.bar(hora_dist.index, hora_dist.values, color=COLORS['neutral'])
+ax4.set_xlabel('Hora do Dia')
+ax4.set_ylabel('Número de Mensagens')
+ax4.set_title('Mensagens por Hora do Dia', fontsize=12, fontweight='bold')
+ax4.grid(axis='y', alpha=0.3)
+ax4.set_xticks(range(0, 24, 2))
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Distribuições temporais")
+```
+
+### 4.2 Estatísticas de Tempo de Resposta
+
+```{python}
+def analyze_response_times(df):
+    """
+    Análise de tempos de resposta.
+    """
+    print("="*80)
+    print("⏱️  ESTATÍSTICAS DE TEMPO DE RESPOSTA")
+    print("="*80)
+    
+    # Remove primeira mensagem (sem tempo de resposta)
+    df_with_response = df[df['tempo_resposta_segundos'].notna()].copy()
+    
+    # Converte para minutos
+    df_with_response['tempo_resposta_minutos'] = df_with_response['tempo_resposta_segundos'] / 60
+    
+    # Estatísticas gerais
+    print("\n📊 Tempo de Resposta (Geral):")
+    print(f"   • Média: {df_with_response['tempo_resposta_minutos'].mean():.1f} minutos")
+    print(f"   • Mediana: {df_with_response['tempo_resposta_minutos'].median():.1f} minutos")
+    print(f"   • Mínimo: {df_with_response['tempo_resposta_minutos'].min():.2f} minutos")
+    print(f"   • Máximo: {df_with_response['tempo_resposta_minutos'].max():.1f} minutos")
+    
+    # Percentis
+    print("\n📊 Percentis:")
+    percentiles = [25, 50, 75, 90, 95, 99]
+    for p in percentiles:
+        value = df_with_response['tempo_resposta_minutos'].quantile(p/100)
+        print(f"   • P{p}: {value:.1f} minutos")
+    
+    # Respostas rápidas
+    quick_count = (df['is_reply_quick']).sum()
+    quick_pct = (quick_count / len(df) * 100)
+    print(f"\n⚡ Respostas Rápidas (<5 min):")
+    print(f"   • Total: {quick_count:,} ({quick_pct:.1f}%)")
+    
+    # Por participante
+    print("\n📊 Tempo Médio de Resposta por Participante:")
+    # Calcula tempo que cada um leva para responder o outro
+    for remetente in df['remetente'].unique():
+        df_rem = df_with_response[df_with_response['remetente'] == remetente]
+        avg_time = df_rem['tempo_resposta_minutos'].mean()
+        median_time = df_rem['tempo_resposta_minutos'].median()
+        print(f"   • {remetente}: média={avg_time:.1f}min | mediana={median_time:.1f}min")
+    
+    print("\n" + "="*80)
+    
+    return df_with_response
+
+df_response = analyze_response_times(df)
+```
+
+```{python}
+# Visualização: Tempo de resposta
+fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+
+# 1. Histograma (com limite para visualização)
+ax1 = axes[0]
+# Filtra valores extremos para melhor visualização
+response_capped = df_response[df_response['tempo_resposta_minutos'] <= 60]['tempo_resposta_minutos']
+ax1.hist(response_capped, bins=50, color=COLORS['P1'], alpha=0.7, edgecolor='black')
+ax1.set_xlabel('Tempo de Resposta (minutos)')
+ax1.set_ylabel('Frequência')
+ax1.set_title('Distribuição de Tempo de Resposta (0-60 min)', fontsize=12, fontweight='bold')
+ax1.grid(axis='y', alpha=0.3)
+ax1.axvline(response_capped.median(), color='red', linestyle='--', label=f'Mediana: {response_capped.median():.1f}min')
+ax1.legend()
+
+# 2. Box plot por participante
+ax2 = axes[1]
+response_by_participant = [
+    df_response[df_response['remetente'] == p]['tempo_resposta_minutos'].clip(upper=120).values 
+    for p in df['remetente'].unique()
+]
+bp = ax2.boxplot(response_by_participant, labels=df['remetente'].unique(), patch_artist=True)
+for patch, color in zip(bp['boxes'], [COLORS['P1'], COLORS['P2']]):
+    patch.set_facecolor(color)
+    patch.set_alpha(0.7)
+ax2.set_ylabel('Tempo de Resposta (minutos, cap 120min)')
+ax2.set_title('Tempo de Resposta por Participante', fontsize=12, fontweight='bold')
+ax2.grid(axis='y', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Tempo de resposta")
+print("⚠️ Nota: Valores acima de 60/120 min foram limitados para melhor visualização")
+```
+
+------------------------------------------------------------------------
+
+## 5. Análise de Conteúdo
+
+### 5.1 Métricas de Texto
+
+```{python}
+def analyze_text_metrics(df):
+    """
+    Análise de métricas de texto.
+    """
+    print("="*80)
+    print("📝 MÉTRICAS DE TEXTO")
+    print("="*80)
+    
+    # Filtra apenas mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    print(f"\n📊 Total de mensagens com conteúdo textual: {len(df_text):,} ({len(df_text)/len(df)*100:.1f}%)")
+    
+    # Word count
+    print("\n📊 Distribuição de Word Count:")
+    print(df_text['word_count'].describe())
+    
+    # Char count
+    print("\n📊 Distribuição de Char Count:")
+    print(df_text['char_count'].describe())
+    
+    # Avg word length
+    print("\n📊 Tamanho Médio das Palavras:")
+    print(df_text['avg_word_length'].describe())
+    
+    # Line breaks
+    print("\n📊 Quebras de Linha:")
+    total_with_breaks = (df_text['line_breaks'] > 0).sum()
+    print(f"   • Mensagens com quebras: {total_with_breaks:,} ({total_with_breaks/len(df_text)*100:.1f}%)")
+    print(f"   • Total de quebras: {df_text['line_breaks'].sum():,}")
+    print(f"   • Média por mensagem (com quebras): {df_text[df_text['line_breaks'] > 0]['line_breaks'].mean():.1f}")
+    
+    print("\n" + "="*80)
+    
+    return df_text
+
+df_text = analyze_text_metrics(df)
+```
+
+```{python}
+# Visualização: Distribuição de word_count e char_count
+fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+# 1. Histograma word_count
+ax1 = axes[0, 0]
+word_count_capped = df_text[df_text['word_count'] <= 100]['word_count']
+ax1.hist(word_count_capped, bins=50, color=COLORS['P1'], alpha=0.7, edgecolor='black')
+ax1.set_xlabel('Número de Palavras')
+ax1.set_ylabel('Frequência')
+ax1.set_title('Distribuição de Palavras por Mensagem (0-100)', fontsize=12, fontweight='bold')
+ax1.axvline(word_count_capped.mean(), color='red', linestyle='--', label=f'Média: {word_count_capped.mean():.1f}')
+ax1.axvline(word_count_capped.median(), color='green', linestyle='--', label=f'Mediana: {word_count_capped.median():.1f}')
+ax1.legend()
+ax1.grid(axis='y', alpha=0.3)
+
+# 2. Histograma char_count
+ax2 = axes[0, 1]
+char_count_capped = df_text[df_text['char_count'] <= 500]['char_count']
+ax2.hist(char_count_capped, bins=50, color=COLORS['P2'], alpha=0.7, edgecolor='black')
+ax2.set_xlabel('Número de Caracteres')
+ax2.set_ylabel('Frequência')
+ax2.set_title('Distribuição de Caracteres por Mensagem (0-500)', fontsize=12, fontweight='bold')
+ax2.axvline(char_count_capped.mean(), color='red', linestyle='--', label=f'Média: {char_count_capped.mean():.1f}')
+ax2.legend()
+ax2.grid(axis='y', alpha=0.3)
+
+# 3. Box plot word_count por participante
+ax3 = axes[1, 0]
+word_by_participant = [
+    df_text[df_text['remetente'] == p]['word_count'].clip(upper=150).values 
+    for p in df['remetente'].unique()
+]
+bp1 = ax3.boxplot(word_by_participant, labels=df['remetente'].unique(), patch_artist=True)
+for patch, color in zip(bp1['boxes'], [COLORS['P1'], COLORS['P2']]):
+    patch.set_facecolor(color)
+    patch.set_alpha(0.7)
+ax3.set_ylabel('Palavras por Mensagem (cap 150)')
+ax3.set_title('Palavras por Participante', fontsize=12, fontweight='bold')
+ax3.grid(axis='y', alpha=0.3)
+
+# 4. Distribuição msg_size_category
+ax4 = axes[1, 1]
+size_dist = df['msg_size_category'].value_counts()
+colors_size = [COLORS['neutral'], COLORS['P1'], COLORS['P2'], COLORS['P1'], COLORS['P2']][:len(size_dist)]
+ax4.barh(size_dist.index, size_dist.values, color=colors_size)
+ax4.set_xlabel('Número de Mensagens')
+ax4.set_title('Distribuição por Tamanho de Mensagem', fontsize=12, fontweight='bold')
+ax4.grid(axis='x', alpha=0.3)
+
+for i, v in enumerate(size_dist.values):
+    ax4.text(v + 500, i, f'{v:,}', va='center', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Métricas de texto")
+```
+
+### 5.2 Features Boolean
+
+```{python}
+def analyze_boolean_features(df):
+    """
+    Análise de features booleanas.
+    """
+    print("="*80)
+    print("✅ FEATURES BOOLEANAS")
+    print("="*80)
+    
+    # Apenas mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    boolean_features = {
+        'has_link': 'Mensagens com Link',
+        'has_emoji': 'Mensagens com Emoji',
+        'has_question': 'Mensagens com Pergunta',
+        'has_exclamation': 'Mensagens com Exclamação',
+        'is_all_caps': 'Mensagens em CAPS',
+        'is_weekend': 'Mensagens em Fim de Semana',
+        'is_reply_quick': 'Respostas Rápidas (<5min)',
+        'is_first_of_day': 'Primeira Mensagem do Dia'
+    }
+    
+    print("\n📊 Frequências:\n")
+    
+    results = []
+    for feature, label in boolean_features.items():
+        if feature in df.columns:
+            count = df[feature].sum()
+            pct = (count / len(df) * 100)
+            results.append({
+                'Feature': label,
+                'Total': count,
+                'Percentual': f'{pct:.1f}%'
+            })
+            print(f"   • {label:<35} {count:>7,} ({pct:>5.1f}%)")
+    
+    print("\n" + "="*80)
+    
+    return pd.DataFrame(results)
+
+boolean_stats = analyze_boolean_features(df)
+```
+
+```{python}
+# Visualização: Features booleanas
+fig, ax = plt.subplots(figsize=(12, 6))
+
+features = ['has_link', 'has_emoji', 'has_question', 'has_exclamation', 
+            'is_all_caps', 'is_reply_quick', 'is_first_of_day']
+labels = ['Links', 'Emojis', 'Perguntas', 'Exclamações', 
+          'CAPS', 'Resp. Rápidas', '1ª do Dia']
+
+percentages = [(df[f].sum() / len(df) * 100) for f in features if f in df.columns]
+colors_list = [COLORS['P1'], COLORS['P2']] * 4
+
+bars = ax.barh(labels, percentages, color=colors_list[:len(labels)])
+ax.set_xlabel('Percentual de Mensagens (%)')
+ax.set_title('Prevalência de Features Booleanas', fontsize=14, fontweight='bold')
+ax.grid(axis='x', alpha=0.3)
+
+for i, (bar, pct) in enumerate(zip(bars, percentages)):
+    ax.text(pct + 1, i, f'{pct:.1f}%', va='center', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualização: Features booleanas")
+```
+
+------------------------------------------------------------------------
+
+## 6. Análise de Mídia
+
+### 6.1 Distribuição por Tipo e Status
+
+```{python}
+def analyze_media_distribution(df):
+    """
+    Análise de distribuição de mídias.
+    """
+    print("="*80)
+    print("🎬 ANÁLISE DE MÍDIA")
+    print("="*80)
+    
+    # Por tipo
+    print("\n📊 Distribuição por Tipo de Mídia:")
+    tipo_dist = df.groupby('tipo_midia').size().sort_values(ascending=False)
+    for tipo, count in tipo_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {tipo:<15} {count:>7,} ({pct:>5.1f}%)")
+    
+    # Por status
+    print("\n📊 Distribuição por Status de Mídia:")
+    status_dist = df.groupby('status_midia').size().sort_values(ascending=False)
+    for status, count in status_dist.items():
+        pct = (count / len(df) * 100)
+        print(f"   • {status:<15} {count:>7,} ({pct:>5.1f}%)")
+    
+    # Tipo × Status
+    print("\n📊 Cruzamento Tipo × Status:")
+    cross_tab = pd.crosstab(df['tipo_midia'], df['status_midia'], margins=True)
+    print(cross_tab)
+    
+    # Taxa de transcrição
+    audio_video = df[df['tipo_midia'].isin(['audio', 'video'])]
+    total_av = len(audio_video)
+    transcribed = (audio_video['status_midia'] == 'transcribed').sum()
+    transcription_rate = (transcribed / total_av * 100) if total_av > 0 else 0
+    
+    print(f"\n🎙️ Taxa de Transcrição (Áudio/Vídeo):")
+    print(f"   • Total de áudio/vídeo: {total_av:,}")
+    print(f"   • Transcritos: {transcribed:,}")
+    print(f"   • Taxa: {transcription_rate:.1f}%")
+    
+    print("\n" + "="*80)
+    
+    return tipo_dist, status_dist
+
+tipo_dist, status_dist = analyze_media_distribution(df)
+```
+
+```{python}
+# Visualização: Distribuição de mídia
+fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+# 1. Tipo de mídia (pie chart)
+ax1 = axes[0, 0]
+top_tipos = tipo_dist.head(6)
+colors_tipos = plt.cm.Set3(range(len(top_tipos)))
+ax1.pie(top_tipos.values, labels=top_tipos.index, autopct='%1.1f%%', 
+        colors=colors_tipos, startangle=90)
+ax1.set_title('Distribuição por Tipo de Mídia', fontsize=12, fontweight='bold')
+
+# 2. Status de mídia (bar chart)
+ax2 = axes[0, 1]
+ax2.bar(status_dist.index, status_dist.values, color=COLORS['P2'])
+ax2.set_ylabel('Número de Mensagens')
+ax2.set_title('Distribuição por Status de Mídia', fontsize=12, fontweight='bold')
+ax2.tick_params(axis='x', rotation=45)
+ax2.grid(axis='y', alpha=0.3)
+
+for i, v in enumerate(status_dist.values):
+    ax2.text(i, v + 500, f'{v:,}', ha='center', va='bottom', fontweight='bold')
+
+# 3. Tipo × Status (stacked bar)
+ax3 = axes[1, 0]
+cross_data = pd.crosstab(df['tipo_midia'], df['status_midia'])
+cross_data_top = cross_data.loc[tipo_dist.head(8).index]
+cross_data_top.plot(kind='barh', stacked=True, ax=ax3, colormap='Set2')
+ax3.set_xlabel('Número de Mensagens')
+ax3.set_title('Tipo de Mídia × Status (Top 8 Tipos)', fontsize=12, fontweight='bold')
+ax3.legend(title='Status', bbox_to_anchor=(1.05, 1), loc='upper left')
+ax3.grid(axis='x', alpha=0.3)
+
+# 4. Comparativo text vs mídia
+ax4 = axes[1, 1]
+text_count = (df['tipo_midia'] == 'text').sum()
+media_count = len(df) - text_count
+ax4.bar(['Texto', 'Mídia'], [text_count, media_count], 
+        color=[COLORS['P1'], COLORS['P2']])
+ax4.set_ylabel('Número de Mensagens')
+ax4.set_title('Texto vs Mídia', fontsize=12, fontweight='bold')
+ax4.grid(axis='y', alpha=0.3)
+
+for i, v in enumerate([text_count, media_count]):
+    pct = (v / len(df) * 100)
+    ax4.text(i, v + 500, f'{v:,}\n({pct:.1f}%)', ha='center', va='bottom', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Distribuição de mídia")
+```
+
+### 6.2 Mídia por Participante
+
+```{python}
+def analyze_media_by_participant(df):
+    """
+    Análise de uso de mídia por participante.
+    """
+    print("="*80)
+    print("👥 MÍDIA POR PARTICIPANTE")
+    print("="*80)
+    
+    # Por participante e tipo
+    media_by_p = pd.crosstab(df['remetente'], df['tipo_midia'])
+    
+    print("\n📊 Distribuição de Tipos por Participante:\n")
+    print(media_by_p)
+    
+    # Percentuais
+    print("\n📊 Percentual por Participante:\n")
+    media_pct = media_by_p.div(media_by_p.sum(axis=1), axis=0) * 100
+    print(media_pct.round(1))
+    
+    # Preferência texto vs mídia
+    print("\n📊 Texto vs Mídia por Participante:")
+    for p in df['remetente'].unique():
+        df_p = df[df['remetente'] == p]
+        text_count = (df_p['tipo_midia'] == 'text').sum()
+        media_count = len(df_p) - text_count
+        text_pct = (text_count / len(df_p) * 100)
+        media_pct_val = (media_count / len(df_p) * 100)
+        print(f"   • {p}: Texto={text_pct:.1f}% | Mídia={media_pct_val:.1f}%")
+    
+    print("\n" + "="*80)
+    
+    return media_by_p
+
+media_by_p = analyze_media_by_participant(df)
+```
+
+```{python}
+# Visualização: Mídia por participante
+fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+
+# 1. Stacked bar por participante
+ax1 = axes[0]
+media_by_p_top = media_by_p[tipo_dist.head(6).index]
+media_by_p_top.plot(kind='bar', stacked=True, ax=ax1, colormap='Set3')
+ax1.set_ylabel('Número de Mensagens')
+ax1.set_title('Tipos de Mídia por Participante (Top 6 Tipos)', fontsize=12, fontweight='bold')
+ax1.legend(title='Tipo de Mídia', bbox_to_anchor=(1.05, 1), loc='upper left')
+ax1.set_xlabel('Participante')
+ax1.tick_params(axis='x', rotation=0)
+ax1.grid(axis='y', alpha=0.3)
+
+# 2. Texto vs Mídia por participante
+ax2 = axes[1]
+participants = df['remetente'].unique()
+text_counts = [(df[df['remetente'] == p]['tipo_midia'] == 'text').sum() for p in participants]
+media_counts = [len(df[df['remetente'] == p]) - tc for p, tc in zip(participants, text_counts)]
+
+x = np.arange(len(participants))
+width = 0.35
+
+bars1 = ax2.bar(x - width/2, text_counts, width, label='Texto', color=COLORS['P1'])
+bars2 = ax2.bar(x + width/2, media_counts, width, label='Mídia', color=COLORS['P2'])
+
+ax2.set_ylabel('Número de Mensagens')
+ax2.set_title('Texto vs Mídia por Participante', fontsize=12, fontweight='bold')
+ax2.set_xticks(x)
+ax2.set_xticklabels(participants)
+ax2.legend()
+ax2.grid(axis='y', alpha=0.3)
+
+# Adiciona valores nas barras
+for bars in [bars1, bars2]:
+    for bar in bars:
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height,
+                f'{int(height):,}',
+                ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Mídia por participante")
+```
+
+------------------------------------------------------------------------
+
+## 7. Padrões de Interação
+
+### 7.1 Sequências e Respostas
+
+```{python}
+def analyze_interaction_patterns(df):
+    """
+    Análise de padrões de interação.
+    """
+    print("="*80)
+    print("🔄 PADRÕES DE INTERAÇÃO")
+    print("="*80)
+    
+    # Mensagens seguidas
+    print("\n📊 Distribuição de Mensagens Seguidas:")
+    print(df['msgs_seguidas'].describe())
+    
+    max_seguidas = df['msgs_seguidas'].max()
+    max_seguidas_idx = df['msgs_seguidas'].idxmax()
+    max_seguidas_person = df.loc[max_seguidas_idx, 'remetente']
+    
+    print(f"\n🏆 Recorde de Mensagens Seguidas:")
+    print(f"   • Máximo: {max_seguidas} mensagens")
+    print(f"   • Quem: {max_seguidas_person}")
+    
+    # Média por participante
+    print(f"\n📊 Média de Mensagens Seguidas por Participante:")
+    for p in df['remetente'].unique():
+        avg = df[df['remetente'] == p]['msgs_seguidas'].mean()
+        print(f"   • {p}: {avg:.1f}")
+    
+    # Conversas
+    total_convs = df['is_conversation_start'].sum()
+    avg_msgs_per_conv = len(df) / total_convs
+    
+    print(f"\n💬 Conversas:")
+    print(f"   • Total de conversas: {total_convs:,}")
+    print(f"   • Média de mensagens por conversa: {avg_msgs_per_conv:.1f}")
+    
+    # Primeira do dia
+    first_of_day = df['is_first_of_day'].sum()
+    print(f"\n🌅 Primeira Mensagem do Dia:")
+    print(f"   • Total: {first_of_day:,}")
+    
+    # Quem inicia mais conversas
+    conv_starts = df[df['is_conversation_start'] == True].groupby('remetente').size()
+    print(f"\n🏁 Quem Inicia Mais Conversas:")
+    for p, count in conv_starts.items():
+        pct = (count / total_convs * 100)
+        print(f"   • {p}: {count:,} ({pct:.1f}%)")
+    
+    print("\n" + "="*80)
+    
+    return total_convs, conv_starts
+
+total_convs, conv_starts = analyze_interaction_patterns(df)
+```
+
+```{python}
+# Visualização: Padrões de interação
+fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+# 1. Distribuição de msgs_seguidas
+ax1 = axes[0, 0]
+msgs_seguidas_capped = df[df['msgs_seguidas'] <= 20]['msgs_seguidas']
+ax1.hist(msgs_seguidas_capped, bins=20, color=COLORS['P1'], alpha=0.7, edgecolor='black')
+ax1.set_xlabel('Mensagens Seguidas')
+ax1.set_ylabel('Frequência')
+ax1.set_title('Distribuição de Mensagens Seguidas (1-20)', fontsize=12, fontweight='bold')
+ax1.grid(axis='y', alpha=0.3)
+ax1.axvline(msgs_seguidas_capped.mean(), color='red', linestyle='--', 
+            label=f'Média: {msgs_seguidas_capped.mean():.1f}')
+ax1.legend()
+
+# 2. Quem inicia conversas
+ax2 = axes[0, 1]
+colors_conv = [COLORS['P1'], COLORS['P2']]
+bars = ax2.bar(conv_starts.index, conv_starts.values, color=colors_conv)
+ax2.set_ylabel('Número de Conversas Iniciadas')
+ax2.set_title('Quem Inicia Mais Conversas', fontsize=12, fontweight='bold')
+ax2.grid(axis='y', alpha=0.3)
+
+for i, (bar, count) in enumerate(zip(bars, conv_starts.values)):
+    pct = (count / total_convs * 100)
+    ax2.text(i, count + 50, f'{count:,}\n({pct:.1f}%)', ha='center', va='bottom', fontweight='bold')
+
+# 3. Msgs seguidas por participante (box plot)
+ax3 = axes[1, 0]
+msgs_by_p = [
+    df[df['remetente'] == p]['msgs_seguidas'].clip(upper=30).values 
+    for p in df['remetente'].unique()
+]
+bp = ax3.boxplot(msgs_by_p, labels=df['remetente'].unique(), patch_artist=True)
+for patch, color in zip(bp['boxes'], [COLORS['P1'], COLORS['P2']]):
+    patch.set_facecolor(color)
+    patch.set_alpha(0.7)
+ax3.set_ylabel('Mensagens Seguidas (cap 30)')
+ax3.set_title('Distribuição de Msgs Seguidas por Participante', fontsize=12, fontweight='bold')
+ax3.grid(axis='y', alpha=0.3)
+
+# 4. Gap em horas (distribuição)
+ax4 = axes[1, 1]
+gap_capped = df[df['gap_horas'].notna() & (df['gap_horas'] <= 12)]['gap_horas']
+ax4.hist(gap_capped, bins=50, color=COLORS['P2'], alpha=0.7, edgecolor='black')
+ax4.set_xlabel('Gap entre Mensagens (horas)')
+ax4.set_ylabel('Frequência')
+ax4.set_title('Distribuição de Gaps (0-12h)', fontsize=12, fontweight='bold')
+ax4.axvline(gap_capped.median(), color='red', linestyle='--', 
+            label=f'Mediana: {gap_capped.median():.2f}h')
+ax4.legend()
+ax4.grid(axis='y', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualizações: Padrões de interação")
+```
+
+------------------------------------------------------------------------
+
+## 8. Correlações
+
+### 8.1 Matriz de Correlação
+
+```{python}
+def analyze_correlations(df):
+    """
+    Análise de correlações entre variáveis numéricas.
+    """
+    print("="*80)
+    print("🔗 ANÁLISE DE CORRELAÇÕES")
+    print("="*80)
+    
+    # Seleciona colunas numéricas relevantes
+    numeric_cols = [
+        'word_count', 'char_count', 'avg_word_length', 'line_breaks',
+        'tempo_resposta_segundos', 'msgs_seguidas', 'gap_horas', 'hora_numerica'
+    ]
+    
+    # Filtra colunas que existem
+    numeric_cols = [col for col in numeric_cols if col in df.columns]
+    
+    # Calcula correlação
+    corr_matrix = df[numeric_cols].corr()
+    
+    print("\n📊 Matriz de Correlação:\n")
+    print(corr_matrix.round(2))
+    
+    # Top correlações (abs)
+    print("\n🔝 Top 10 Correlações (valor absoluto):")
+    corr_pairs = []
+    for i in range(len(corr_matrix.columns)):
+        for j in range(i+1, len(corr_matrix.columns)):
+            corr_pairs.append({
+                'var1': corr_matrix.columns[i],
+                'var2': corr_matrix.columns[j],
+                'correlation': corr_matrix.iloc[i, j]
+            })
+    
+    corr_df = pd.DataFrame(corr_pairs).sort_values('correlation', key=abs, ascending=False).head(10)
+    
+    for idx, row in corr_df.iterrows():
+        print(f"   • {row['var1']} × {row['var2']}: {row['correlation']:.3f}")
+    
+    print("\n" + "="*80)
+    
+    return corr_matrix
+
+corr_matrix = analyze_correlations(df)
+```
+
+```{python}
+# Visualização: Heatmap de correlação
+fig, ax = plt.subplots(figsize=(12, 10))
+
+sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', 
+            center=0, square=True, linewidths=1, cbar_kws={"shrink": 0.8},
+            ax=ax)
+ax.set_title('Matriz de Correlação - Variáveis Numéricas', fontsize=14, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualização: Heatmap de correlação")
+```
+
+------------------------------------------------------------------------
+
+## 9. Records & Curiosidades
+
+### 9.1 Tops e Extremos
+
+```{python}
+def analyze_records(df):
+    """
+    Identifica recordes e curiosidades no dataset.
+    """
+    print("="*80)
+    print("🏆 RECORDS & CURIOSIDADES")
+    print("="*80)
+    
+    # Dia com mais mensagens
+    df['data_only'] = df['timestamp'].dt.date
+    dia_top = df.groupby('data_only').size().sort_values(ascending=False).head(1)
+    
+    print(f"\n📅 Dia com Mais Mensagens:")
+    for date, count in dia_top.items():
+        print(f"   • {date}: {count:,} mensagens")
+    
+    # Hora com mais mensagens
+    hora_top = df.groupby('hora_numerica').size().sort_values(ascending=False).head(3)
+    print(f"\n🕐 Top 3 Horas com Mais Mensagens:")
+    for hora, count in hora_top.items():
+        print(f"   • {int(hora)}h: {count:,} mensagens")
+    
+    # Mensagem mais longa
+    longest_msg = df.loc[df['word_count'].idxmax()]
+    print(f"\n📏 Mensagem Mais Longa:")
+    print(f"   • Palavras: {longest_msg['word_count']}")
+    print(f"   • Caracteres: {longest_msg['char_count']}")
+    print(f"   • Remetente: {longest_msg['remetente']}")
+    print(f"   • Data: {longest_msg['timestamp'].strftime('%d/%m/%Y %H:%M')}")
+    
+    # Maior gap
+    max_gap = df['gap_horas'].max()
+    max_gap_idx = df['gap_horas'].idxmax()
+    max_gap_date = df.loc[max_gap_idx, 'timestamp']
+    
+    print(f"\n⏰ Maior Gap entre Mensagens:")
+    print(f"   • Duração: {max_gap:.1f} horas ({max_gap/24:.1f} dias)")
+    print(f"   • Data: {max_gap_date.strftime('%d/%m/%Y %H:%M')}")
+    
+    # Maior sequência
+    max_seq = df['msgs_seguidas'].max()
+    max_seq_idx = df['msgs_seguidas'].idxmax()
+    max_seq_person = df.loc[max_seq_idx, 'remetente']
+    max_seq_date = df.loc[max_seq_idx, 'timestamp']
+    
+    print(f"\n🔁 Maior Sequência de Mensagens:")
+    print(f"   • Mensagens seguidas: {max_seq}")
+    print(f"   • Remetente: {max_seq_person}")
+    print(f"   • Data: {max_seq_date.strftime('%d/%m/%Y %H:%M')}")
+    
+    # Top 10 dias
+    print(f"\n📊 Top 10 Dias com Mais Mensagens:")
+    top_dias = df.groupby('data_only').size().sort_values(ascending=False).head(10)
+    for i, (date, count) in enumerate(top_dias.items(), 1):
+        print(f"   {i:2}. {date}: {count:>4,} mensagens")
+    
+    # Mês com mais áudios transcritos
+    df_audio = df[(df['tipo_midia'].isin(['audio', 'video'])) & (df['status_midia'] == 'transcribed')]
+    if len(df_audio) > 0:
+        df_audio['ano_mes'] = df_audio['timestamp'].dt.to_period('M')
+        mes_audio_top = df_audio.groupby('ano_mes').size().sort_values(ascending=False).head(1)
+        
+        print(f"\n🎙️ Mês com Mais Áudios/Vídeos Transcritos:")
+        for mes, count in mes_audio_top.items():
+            print(f"   • {mes}: {count:,} transcrições")
+    
+    print("\n" + "="*80)
+    
+    # Remove coluna temporária
+    df.drop(columns=['data_only'], inplace=True)
+    
+    return top_dias
+
+top_dias = analyze_records(df)
+```
+
+```{python}
+# Visualização: Top 10 dias
+fig, ax = plt.subplots(figsize=(14, 6))
+
+dates_str = [str(d) for d in top_dias.index]
+ax.barh(range(len(top_dias)), top_dias.values, color=COLORS['P1'])
+ax.set_yticks(range(len(top_dias)))
+ax.set_yticklabels(dates_str)
+ax.set_xlabel('Número de Mensagens')
+ax.set_title('Top 10 Dias com Mais Mensagens', fontsize=14, fontweight='bold')
+ax.grid(axis='x', alpha=0.3)
+ax.invert_yaxis()
+
+for i, v in enumerate(top_dias.values):
+    ax.text(v + 10, i, f'{v:,}', va='center', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+print("📊 Visualização: Top 10 dias com mais mensagens")
+```
+
+------------------------------------------------------------------------
+
+## 10. Resumo Executivo
+
+```{python}
+def generate_executive_summary(df):
+    """
+    Gera resumo executivo com principais números.
+    """
+    print("="*80)
+    print("📋 RESUMO EXECUTIVO")
+    print("="*80)
+    
+    # Números principais
+    total_msgs = len(df)
+    duracao = (df['timestamp'].max() - df['timestamp'].min()).days
+    total_convs = df['is_conversation_start'].sum()
+    msgs_with_content = df['conteudo'].notna().sum()
+    
+    # Participantes
+    p1, p2 = df['remetente'].unique()
+    p1_count = (df['remetente'] == p1).sum()
+    p2_count = (df['remetente'] == p2).sum()
+    
+    # Tempo de resposta
+    avg_response = df['tempo_resposta_segundos'].mean() / 60
+    median_response = df['tempo_resposta_segundos'].median() / 60
+    quick_replies = (df['is_reply_quick']).sum()
+    
+    # Conteúdo
+    avg_words = df[df['word_count'] > 0]['word_count'].mean()
+    
+    # Mídia
+    audio_video = df[df['tipo_midia'].isin(['audio', 'video'])]
+    transcribed = (audio_video['status_midia'] == 'transcribed').sum()
+    
+    print(f"""
+📊 NÚMEROS PRINCIPAIS
+{'─'*80}
+• Total de mensagens:              {total_msgs:>8,}
+• Período analisado:               {duracao:>8,} dias (~{duracao/30:.0f} meses)
+• Total de conversas:              {total_convs:>8,}
+• Média de msgs por dia:           {total_msgs/duracao:>8.1f}
+• Média de msgs por conversa:      {total_msgs/total_convs:>8.1f}
+
+👥 PARTICIPANTES
+{'─'*80}
+• {p1}:                           {p1_count:>8,} ({p1_count/total_msgs*100:>5.1f}%)
+• {p2}:                          {p2_count:>8,} ({p2_count/total_msgs*100:>5.1f}%)
+
+⏱️ TEMPO DE RESPOSTA
+{'─'*80}
+• Tempo médio:                     {avg_response:>8.1f} min
+• Tempo mediano:                   {median_response:>8.1f} min
+• Respostas rápidas (<5min):       {quick_replies:>8,} ({quick_replies/total_msgs*100:>5.1f}%)
+
+📝 CONTEÚDO
+{'─'*80}
+• Mensagens com texto:             {msgs_with_content:>8,} ({msgs_with_content/total_msgs*100:>5.1f}%)
+• Média de palavras/mensagem:      {avg_words:>8.1f}
+• Mensagens com emoji:             {df['has_emoji'].sum():>8,} ({df['has_emoji'].sum()/total_msgs*100:>5.1f}%)
+• Mensagens com link:              {df['has_link'].sum():>8,} ({df['has_link'].sum()/total_msgs*100:>5.1f}%)
+
+🎬 MÍDIA
+{'─'*80}
+• Total de áudio/vídeo:            {len(audio_video):>8,}
+• Áudios/vídeos transcritos:       {transcribed:>8,} ({transcribed/len(audio_video)*100 if len(audio_video) > 0 else 0:>5.1f}%)
+• Imagens:                         {(df['tipo_midia'] == 'image').sum():>8,}
+• Stickers:                        {(df['tipo_midia'] == 'sticker').sum():>8,}
+
+🏆 RECORDES
+{'─'*80}
+• Dia com mais mensagens:          {top_dias.iloc[0]:>8,} ({top_dias.index[0]})
+• Maior sequência de msgs:         {df['msgs_seguidas'].max():>8,}
+• Mensagem mais longa:             {df['word_count'].max():>8,} palavras
+• Maior gap entre mensagens:       {df['gap_horas'].max():>8.1f} horas
+""")
+    
+    print("="*80)
+
+# Gera resumo executivo
+generate_executive_summary(df)
+```
+
+------------------------------------------------------------------------
+
+## 🎉 Conclusão
+
+Este notebook apresentou uma análise descritiva completa do dataset de conversas do WhatsApp, cobrindo:
+
+✅ **Overview do Dataset** - Estrutura e completude\
+✅ **Análise por Participante** - Volume e estilo de comunicação\
+✅ **Análise Temporal** - Distribuições e padrões temporais\
+✅ **Análise de Conteúdo** - Métricas de texto e features booleanas\
+✅ **Análise de Mídia** - Tipos, status e distribuição\
+✅ **Padrões de Interação** - Sequências, conversas e gaps\
+✅ **Correlações** - Relações entre variáveis\
+✅ **Records & Curiosidades** - Extremos e tops\
+✅ **Resumo Executivo** - Principais números
+
+**Próximos passos sugeridos:** - Análises temporais avançadas (tendências, sazonalidade) - Análise de conteúdo textual (word clouds, n-grams) - Análise comparativa detalhada P1 vs P2 - Storytelling e insights narrativos
+
+------------------------------------------------------------------------
+
+Este notebook tem: - ✅ 10 seções completas - ✅ \~30 visualizações - ✅ Análises descritivas abrangentes - ✅ Resumo executivo
+
+## Análises adicionais
+
+###Gráfico com Viagens
+
+```{python}
+#| label: fig-timeline-viagens
+#| fig-cap: "Timeline de Mensagens com Marcos de Viagens"
+
+def plot_timeline_with_travels(df):
+    """
+    Cria timeline de mensagens por mês com anotações de viagens.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import datetime
+    
+    # Agrupa por mês
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes = df.groupby('ano_mes').size()
+    
+    # Converte para datetime para plotting
+    dates = [period.to_timestamp() for period in msgs_por_mes.index]
+    values = msgs_por_mes.values
+    
+    # Marcos de viagens (datas aproximadas)
+    viagens = [
+        {'data': datetime(2024, 12, 12), 'evento': '1ª Viagem\nChapada/BSB', 'tipo': 'marlon', 'offset': 2000},
+        {'data': datetime(2024, 12, 16), 'evento': '💕 1ª Vez Juntos', 'tipo': 'marco', 'offset': 3000},
+        {'data': datetime(2025, 1, 15), 'evento': 'Marlon\n@ BSB', 'tipo': 'marlon', 'offset': 1500},
+        {'data': datetime(2025, 2, 6), 'evento': 'Letícia\n@ Sorocaba', 'tipo': 'leticia', 'offset': 1500},
+        {'data': datetime(2025, 5, 15), 'evento': 'Marlon\n@ BSB', 'tipo': 'marlon', 'offset': 2500},
+        {'data': datetime(2025, 7, 21), 'evento': 'Letícia @ SP\n(5 dias)', 'tipo': 'leticia', 'offset': 3500},
+        {'data': datetime(2025, 8, 22), 'evento': 'Marlon @ BSB\n(2 meses!)', 'tipo': 'marlon', 'offset': 2500},
+        {'data': datetime(2025, 11, 4), 'evento': '🎂 Niver Letícia\n@ BSB', 'tipo': 'marco', 'offset': 1500},
+    ]
+    
+    # Cria figura
+    fig, ax = plt.subplots(figsize=(16, 8))
+    
+    # Plot linha principal
+    ax.plot(dates, values, marker='o', linewidth=3, markersize=8, 
+            color=COLORS['P2'], label='Mensagens por Mês', zorder=3)
+    
+    # Preenche área sob a curva
+    ax.fill_between(dates, values, alpha=0.2, color=COLORS['P2'])
+    
+    # Adiciona grid
+    ax.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    
+    # Marcos de viagens
+    for viagem in viagens:
+        data = viagem['data']
+        evento = viagem['evento']
+        tipo = viagem['tipo']
+        offset = viagem['offset']
+        
+        # Cores por tipo
+        if tipo == 'marlon':
+            cor = COLORS['P1']
+            marker = '^'
+            linestyle = '--'
+        elif tipo == 'leticia':
+            cor = COLORS['P2']
+            marker = 'v'
+            linestyle = '--'
+        else:  # marco especial
+            cor = '#e74c3c'
+            marker = '*'
+            linestyle = '-'
+        
+        # Linha vertical
+        ax.axvline(x=data, color=cor, linestyle=linestyle, alpha=0.6, linewidth=2, zorder=2)
+        
+        # Anotação
+        ax.annotate(evento, 
+                   xy=(data, offset), 
+                   xytext=(data, offset + 1000),
+                   fontsize=9,
+                   fontweight='bold',
+                   color=cor,
+                   ha='center',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor=cor, alpha=0.9),
+                   arrowprops=dict(arrowstyle='->', color=cor, lw=1.5))
+    
+    # Destaca o pico de Julho
+    pico_idx = values.argmax()
+    pico_date = dates[pico_idx]
+    pico_value = values[pico_idx]
+    
+    ax.scatter([pico_date], [pico_value], s=500, color='gold', 
+               edgecolors='red', linewidths=3, zorder=5, 
+               marker='*', label='Pico Absoluto')
+    
+    ax.annotate(f'🔥 PICO!\n{pico_value:,} msgs', 
+               xy=(pico_date, pico_value), 
+               xytext=(pico_date, pico_value + 4000),
+               fontsize=12,
+               fontweight='bold',
+               color='red',
+               ha='center',
+               bbox=dict(boxstyle='round,pad=0.7', facecolor='yellow', 
+                        edgecolor='red', alpha=0.9, linewidth=2),
+               arrowprops=dict(arrowstyle='->', color='red', lw=2))
+    
+    # Formatação
+    ax.set_xlabel('Mês/Ano', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Número de Mensagens', fontsize=12, fontweight='bold')
+    ax.set_title('Timeline: Mensagens × Viagens\n"A Geografia do Amor em Dados"', 
+                fontsize=16, fontweight='bold', pad=20)
+    
+    # Formata eixo X
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    plt.xticks(rotation=45, ha='right')
+    
+    # Legenda
+    ax.legend(loc='upper left', fontsize=11, framealpha=0.9)
+    
+    # Layout
+    plt.tight_layout()
+    plt.show()
+    
+    print("📊 Timeline gerada com marcos de viagens!")
+    print("\n💡 Legendas:")
+    print(f"   {COLORS['P1']} ▲ Setas azuis (cima): Marlon viajando")
+    print(f"   {COLORS['P2']} ▼ Setas rosas (baixo): Letícia viajando")
+    print("   ⭐ Estrelas vermelhas: Marcos especiais")
+
+# Gera gráfico
+plot_timeline_with_travels(df)
+```
+
+# Análise Extra: Presença Física vs Volume
+
+```{python}
+#| label: analise-presenca-fisica
+#| fig-cap: "Impacto da Presença Física no Volume de Mensagens"
+
+def analyze_physical_presence(df):
+    """
+    Analisa impacto da presença física no volume de mensagens.
+    """
+    print("="*80)
+    print("🏠 ANÁLISE: PRESENÇA FÍSICA × VOLUME DE MENSAGENS")
+    print("="*80)
+    
+    # Define períodos de presença física (aproximado)
+    periodos = [
+        {'inicio': '2024-12-12', 'fim': '2024-12-24', 'tipo': 'Juntos', 'local': 'BSB/Chapada'},
+        {'inicio': '2025-01-01', 'fim': '2025-01-31', 'tipo': 'Juntos', 'local': 'BSB'},
+        {'inicio': '2025-02-06', 'fim': '2025-02-13', 'tipo': 'Juntos', 'local': 'Sorocaba'},
+        {'inicio': '2025-05-01', 'fim': '2025-05-31', 'tipo': 'Juntos', 'local': 'BSB'},
+        {'inicio': '2025-07-21', 'fim': '2025-07-26', 'tipo': 'Juntos', 'local': 'SP'},
+        {'inicio': '2025-08-22', 'fim': '2025-10-22', 'tipo': 'Juntos', 'local': 'BSB'},
+        {'inicio': '2025-11-04', 'fim': '2025-11-30', 'tipo': 'Juntos', 'local': 'BSB'},
+    ]
+    
+    # Marca períodos
+    df['presenca_fisica'] = False
+    for periodo in periodos:
+        mask = (df['timestamp'] >= periodo['inicio']) & (df['timestamp'] <= periodo['fim'])
+        df.loc[mask, 'presenca_fisica'] = True
+    
+    # Calcula médias
+    df['data_only'] = df['timestamp'].dt.date
+    msgs_por_dia = df.groupby('data_only').size()
+    
+    # Classifica dias
+    dias_juntos = df[df['presenca_fisica'] == True]['data_only'].unique()
+    dias_separados = df[df['presenca_fisica'] == False]['data_only'].unique()
+    
+    avg_juntos = msgs_por_dia[msgs_por_dia.index.isin(dias_juntos)].mean()
+    avg_separados = msgs_por_dia[msgs_por_dia.index.isin(dias_separados)].mean()
+    
+    print(f"\n📊 Média de Mensagens por Dia:\n")
+    print(f"   🏠 Quando JUNTOS:    {avg_juntos:.1f} msgs/dia")
+    print(f"   📱 Quando SEPARADOS: {avg_separados:.1f} msgs/dia")
+    print(f"\n   📉 Diferença: {avg_separados - avg_juntos:.1f} msgs/dia")
+    print(f"   📊 Separados enviam {(avg_separados/avg_juntos - 1)*100:.1f}% mais mensagens!")
+    
+    # Visualização
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    categories = ['Juntos\n(presencial)', 'Separados\n(à distância)']
+    values = [avg_juntos, avg_separados]
+    colors_bar = [COLORS['neutral'], COLORS['P2']]
+    
+    bars = ax.bar(categories, values, color=colors_bar, alpha=0.8, edgecolor='black', linewidth=2)
+    
+    ax.set_ylabel('Média de Mensagens por Dia', fontsize=12, fontweight='bold')
+    ax.set_title('Presença Física × Volume de Mensagens\n"Saudade é Mensurável"', 
+                fontsize=14, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3)
+    
+    # Adiciona valores
+    for bar, val in zip(bars, values):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + 5,
+                f'{val:.1f}\nmsgs/dia',
+                ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print("\n" + "="*80)
+    
+    # Remove coluna temporária
+    df.drop(columns=['data_only', 'presenca_fisica'], inplace=True)
+    
+    return avg_juntos, avg_separados
+
+# Executa análise
+avg_juntos, avg_separados = analyze_physical_presence(df)
+```
+
+# 🗺️ PERFEITO! Agora vamos fazer análises **PRECISAS**!
+
+Com essas datas, podemos criar análises **muito mais ricas**! Vou preparar um código completo:
+
+------------------------------------------------------------------------
+
+## 📊 Código: Análise Completa de Viagens
+
+```{python}
+#| label: analise-viagens-completa
+#| fig-cap: "Análise Detalhada: Impacto das Viagens"
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+
+# Define cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+viagens = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',  # ← CORRIGIDO (6 dias)
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+viagens_df = pd.DataFrame(viagens)
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+viagens_df['duracao_dias'] = (viagens_df['fim'] - viagens_df['inicio']).dt.days + 1  # +1 para incluir último dia
+
+print("="*80)
+print("📅 VIAGENS REGISTRADAS")
+print("="*80)
+print(f"\nTotal de viagens: {len(viagens_df)}\n")
+print(viagens_df[['nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+
+# Estatísticas
+total_dias_juntos = viagens_df['duracao_dias'].sum()
+total_dias_ano = 366  # Out/2024 a Out/2025
+pct_juntos = (total_dias_juntos / total_dias_ano) * 100
+
+print(f"\n📊 Resumo:")
+print(f"   • Total de dias juntos: {total_dias_juntos} dias")
+print(f"   • Percentual do ano: {pct_juntos:.1f}%")
+print(f"   • Viagem mais longa: {viagens_df['duracao_dias'].max()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {viagens_df['duracao_dias'].min()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmin(), 'nome']})")
+
+print("\n" + "="*80)
+```
+
+```{python}
+#| label: timeline-viagens-precisa
+#| fig-cap: "Timeline com Datas Precisas de Viagens"
+
+def plot_timeline_precise(df, viagens_df):
+    """
+    Timeline com datas precisas de viagens.
+    """
+    # Prepara dados mensais
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes = df.groupby('ano_mes').size()
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes.index]
+    values = msgs_por_mes.values
+    
+    # Cria figura
+    fig, ax = plt.subplots(figsize=(18, 9))
+    
+    # Plot linha principal
+    ax.plot(dates, values, marker='o', linewidth=3, markersize=10, 
+            color=COLORS['P2'], label='Mensagens por Mês', zorder=3)
+    ax.fill_between(dates, values, alpha=0.2, color=COLORS['P2'])
+    
+    # Adiciona grid
+    ax.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    
+    # Marca períodos de viagem com retângulos
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Cor por tipo
+        if 'Marlon' in tipo:
+            cor_fundo = COLORS['P1']
+            alpha = 0.15
+        else:
+            cor_fundo = COLORS['P2']
+            alpha = 0.15
+        
+        # Retângulo de período
+        ax.axvspan(inicio, fim, alpha=alpha, color=cor_fundo, zorder=0)
+        
+        # Linha vertical de início
+        ax.axvline(x=inicio, color=cor_fundo, linestyle='--', alpha=0.7, linewidth=2, zorder=2)
+        
+        # Anotação no meio do período
+        meio = inicio + (fim - inicio) / 2
+        y_pos = ax.get_ylim()[1] * 0.85 if idx % 2 == 0 else ax.get_ylim()[1] * 0.75
+        
+        ax.annotate(viagem['nome'], 
+                   xy=(meio, y_pos),
+                   fontsize=8,
+                   fontweight='bold',
+                   color=cor_fundo,
+                   ha='center',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                            edgecolor=cor_fundo, alpha=0.9))
+        
+        # Marcos especiais
+        if pd.notna(viagem['marco_especial']):
+            marco_date = pd.to_datetime(viagem['marco_especial'])
+            ax.axvline(x=marco_date, color='red', linestyle='-', alpha=0.8, linewidth=3, zorder=4)
+            ax.scatter([marco_date], [ax.get_ylim()[1] * 0.95], s=300, color='red', 
+                      marker='*', zorder=5, edgecolors='darkred', linewidths=2)
+            ax.annotate(viagem['marco_nome'], 
+                       xy=(marco_date, ax.get_ylim()[1] * 0.95),
+                       xytext=(marco_date, ax.get_ylim()[1] * 1.02),
+                       fontsize=10,
+                       fontweight='bold',
+                       color='red',
+                       ha='center',
+                       bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', 
+                                edgecolor='red', alpha=0.95, linewidth=2))
+    
+    # Destaca pico
+    pico_idx = values.argmax()
+    pico_date = dates[pico_idx]
+    pico_value = values[pico_idx]
+    
+    ax.scatter([pico_date], [pico_value], s=600, color='gold', 
+               edgecolors='red', linewidths=3, zorder=5, marker='*')
+    ax.annotate(f'🔥 PICO\n{pico_value:,} msgs', 
+               xy=(pico_date, pico_value), 
+               xytext=(pico_date, pico_value + 3000),
+               fontsize=12,
+               fontweight='bold',
+               color='red',
+               ha='center',
+               bbox=dict(boxstyle='round,pad=0.7', facecolor='yellow', 
+                        edgecolor='red', alpha=0.95, linewidth=2.5),
+               arrowprops=dict(arrowstyle='->', color='red', lw=2.5))
+    
+    # Formatação
+    ax.set_xlabel('Mês/Ano', fontsize=13, fontweight='bold')
+    ax.set_ylabel('Número de Mensagens', fontsize=13, fontweight='bold')
+    ax.set_title('Timeline Completa: Mensagens × Viagens\n"365 Dias de Conexão"', 
+                fontsize=17, fontweight='bold', pad=20)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    plt.xticks(rotation=45, ha='right')
+    
+    # Legenda customizada
+    from matplotlib.patches import Patch
+    legend_elements = [
+        plt.Line2D([0], [0], color=COLORS['P2'], linewidth=3, label='Volume Mensal'),
+        Patch(facecolor=COLORS['P1'], alpha=0.3, label='Marlon viajando'),
+        Patch(facecolor=COLORS['P2'], alpha=0.3, label='Letícia viajando'),
+        plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='gold', 
+                   markersize=15, label='Eventos Especiais')
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', fontsize=11, framealpha=0.95)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print("📊 Timeline detalhada gerada!")
+
+# Gera timeline
+plot_timeline_precise(df, viagens_df)
+```
+
+```{python}
+#| label: analise-pre-pos-viagem
+#| fig-cap: "Análise de Saudade: Antes, Durante e Depois das Viagens"
+
+def analyze_trip_impact(df, viagens_df):
+    """
+    Analisa impacto das viagens no volume de mensagens.
+    Compara: 7 dias antes, durante, 7 dias depois.
+    """
+    print("="*80)
+    print("💔 ANÁLISE DE SAUDADE: PRÉ × DURANTE × PÓS VIAGEM")
+    print("="*80)
+    
+    resultados = []
+    
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        
+        # Períodos de análise
+        pre_inicio = inicio - timedelta(days=7)
+        pos_fim = fim + timedelta(days=7)
+        
+        # Filtra mensagens
+        msgs_pre = df[(df['timestamp'] >= pre_inicio) & (df['timestamp'] < inicio)]
+        msgs_durante = df[(df['timestamp'] >= inicio) & (df['timestamp'] <= fim)]
+        msgs_pos = df[(df['timestamp'] > fim) & (df['timestamp'] <= pos_fim)]
+        
+        # Calcula médias diárias
+        dias_pre = 7
+        dias_durante = (fim - inicio).days
+        dias_pos = 7
+        
+        avg_pre = len(msgs_pre) / dias_pre if dias_pre > 0 else 0
+        avg_durante = len(msgs_durante) / dias_durante if dias_durante > 0 else 0
+        avg_pos = len(msgs_pos) / dias_pos if dias_pos > 0 else 0
+        
+        resultados.append({
+            'Viagem': viagem['nome'],
+            'Tipo': viagem['tipo'],
+            'Duração': dias_durante,
+            'Pré (7d)': avg_pre,
+            'Durante': avg_durante,
+            'Pós (7d)': avg_pos,
+            'Delta Pré→Durante': avg_durante - avg_pre,
+            'Delta Durante→Pós': avg_pos - avg_durante
+        })
+    
+    # DataFrame de resultados
+    results_df = pd.DataFrame(resultados)
+    
+    print("\n📊 Média de Mensagens por Dia:\n")
+    print(results_df.to_string(index=False))
+    
+    # Estatísticas gerais
+    print("\n" + "="*80)
+    print("📈 ESTATÍSTICAS GERAIS")
+    print("="*80)
+    
+    print(f"\n💬 Média Geral:")
+    print(f"   7 dias ANTES:   {results_df['Pré (7d)'].mean():.1f} msgs/dia")
+    print(f"   DURANTE:        {results_df['Durante'].mean():.1f} msgs/dia")
+    print(f"   7 dias DEPOIS:  {results_df['Pós (7d)'].mean():.1f} msgs/dia")
+    
+    print(f"\n📊 Variação:")
+    queda_durante = ((results_df['Durante'].mean() / results_df['Pré (7d)'].mean()) - 1) * 100
+    subida_pos = ((results_df['Pós (7d)'].mean() / results_df['Durante'].mean()) - 1) * 100
+    
+    print(f"   Pré → Durante:  {queda_durante:+.1f}% ({'⬇️ Caem' if queda_durante < 0 else '⬆️ Sobem'})")
+    print(f"   Durante → Pós:  {subida_pos:+.1f}% ({'⬇️ Caem' if subida_pos < 0 else '⬆️ Sobem'})")
+    
+    print("\n" + "="*80)
+    
+    # Visualização
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # 1. Comparação geral (barras)
+    ax1 = axes[0, 0]
+    periodos = ['7d Antes', 'Durante', '7d Depois']
+    medias = [results_df['Pré (7d)'].mean(), 
+              results_df['Durante'].mean(), 
+              results_df['Pós (7d)'].mean()]
+    cores_bar = [COLORS['neutral'], COLORS['juntos'], COLORS['P2']]
+    
+    bars = ax1.bar(periodos, medias, color=cores_bar, alpha=0.8, edgecolor='black', linewidth=2)
+    ax1.set_ylabel('Média de Msgs/Dia', fontsize=11, fontweight='bold')
+    ax1.set_title('Comparação Geral: Antes × Durante × Depois', fontsize=12, fontweight='bold')
+    ax1.grid(axis='y', alpha=0.3)
+    
+    for bar, val in zip(bars, medias):
+        ax1.text(bar.get_x() + bar.get_width()/2., val + 5,
+                f'{val:.1f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    # 2. Por viagem (heatmap-style)
+    ax2 = axes[0, 1]
+    viagens_curtas = results_df[results_df['Duração'] <= 30].head(6)  # Top 6 viagens curtas
+    
+    if len(viagens_curtas) > 0:
+        x = np.arange(len(viagens_curtas))
+        width = 0.25
+        
+        bars1 = ax2.bar(x - width, viagens_curtas['Pré (7d)'], width, 
+                       label='7d Antes', color=COLORS['neutral'], alpha=0.8)
+        bars2 = ax2.bar(x, viagens_curtas['Durante'], width, 
+                       label='Durante', color=COLORS['juntos'], alpha=0.8)
+        bars3 = ax2.bar(x + width, viagens_curtas['Pós (7d)'], width, 
+                       label='7d Depois', color=COLORS['P2'], alpha=0.8)
+        
+        ax2.set_ylabel('Msgs/Dia', fontsize=11, fontweight='bold')
+        ax2.set_title('Comparação por Viagem (Top 6 Curtas)', fontsize=12, fontweight='bold')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels([v[:15] + '...' if len(v) > 15 else v 
+                             for v in viagens_curtas['Viagem']], rotation=45, ha='right')
+        ax2.legend(fontsize=9)
+        ax2.grid(axis='y', alpha=0.3)
+    
+    # 3. Delta Pré→Durante
+    ax3 = axes[1, 0]
+    deltas_durante = results_df.sort_values('Delta Pré→Durante')
+    cores_delta = [COLORS['juntos'] if x < 0 else COLORS['P2'] for x in deltas_durante['Delta Pré→Durante']]
+    
+    ax3.barh(range(len(deltas_durante)), deltas_durante['Delta Pré→Durante'], 
+            color=cores_delta, alpha=0.7, edgecolor='black')
+    ax3.set_yticks(range(len(deltas_durante)))
+    ax3.set_yticklabels([v[:20] + '...' if len(v) > 20 else v 
+                         for v in deltas_durante['Viagem']], fontsize=9)
+    ax3.set_xlabel('Variação Msgs/Dia (Pré → Durante)', fontsize=11, fontweight='bold')
+    ax3.set_title('Impacto da Presença Física', fontsize=12, fontweight='bold')
+    ax3.axvline(x=0, color='black', linestyle='-', linewidth=1.5)
+    ax3.grid(axis='x', alpha=0.3)
+    
+    # 4. Delta Durante→Pós
+    ax4 = axes[1, 1]
+    deltas_pos = results_df.sort_values('Delta Durante→Pós')
+    cores_delta_pos = [COLORS['juntos'] if x < 0 else COLORS['P2'] for x in deltas_pos['Delta Durante→Pós']]
+    
+    ax4.barh(range(len(deltas_pos)), deltas_pos['Delta Durante→Pós'], 
+            color=cores_delta_pos, alpha=0.7, edgecolor='black')
+    ax4.set_yticks(range(len(deltas_pos)))
+    ax4.set_yticklabels([v[:20] + '...' if len(v) > 20 else v 
+                         for v in deltas_pos['Viagem']], fontsize=9)
+    ax4.set_xlabel('Variação Msgs/Dia (Durante → Pós)', fontsize=11, fontweight='bold')
+    ax4.set_title('Efeito da Saudade Pós-Visita', fontsize=12, fontweight='bold')
+    ax4.axvline(x=0, color='black', linestyle='-', linewidth=1.5)
+    ax4.grid(axis='x', alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return results_df
+
+# Executa análise
+trip_results = analyze_trip_impact(df, viagens_df)
+```
+
+------------------------------------------------------------------------
+
+Agora temos: 1. ✅ **Datas precisas** de todas as viagens 2. ✅ **Timeline visual** com períodos marcados 3. ✅ **Análise quantitativa** de saudade (antes/durante/depois)
+
+Quer rodar esses códigos e ver os resultados? 📊✨
+
+Boa ideia! Vou criar uma versão 2 com **duas linhas** (P1 vs P2) sem preenchimento, mas mantendo as marcações de viagens. Fica mais limpo e comparativo!
+
+```{python}
+#| label: timeline-viagens-v2-comparativo
+#| fig-cap: "Timeline Comparativa P1 vs P2 com Viagens"
+
+def plot_timeline_comparative(df, viagens_df):
+    """
+    Timeline comparativa entre P1 e P2 (sem preenchimento).
+    """
+    # Prepara dados mensais por participante
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_participante = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_participante.index]
+    
+    # Separa P1 e P2
+    p1_values = msgs_por_mes_participante['P1'].values
+    p2_values = msgs_por_mes_participante['P2'].values
+    total_values = p1_values + p2_values
+    
+    # Cria figura
+    fig, ax = plt.subplots(figsize=(18, 9))
+    
+    # Plot linhas comparativas (SEM preenchimento)
+    ax.plot(dates, p1_values, marker='o', linewidth=3, markersize=8, 
+            color=COLORS['P1'], label='P1 (Marlon)', zorder=4, alpha=0.9)
+    ax.plot(dates, p2_values, marker='s', linewidth=3, markersize=8, 
+            color=COLORS['P2'], label='P2 (Letícia)', zorder=4, alpha=0.9)
+    ax.plot(dates, total_values, marker='D', linewidth=2, markersize=6, 
+            color=COLORS['neutral'], label='Total', zorder=3, alpha=0.6, linestyle='--')
+    
+    # Adiciona grid
+    ax.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    
+    # Marca períodos de viagem com retângulos (mantém do original)
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Cor por tipo
+        if 'Marlon' in tipo:
+            cor_fundo = COLORS['P1']
+            alpha = 0.12
+        else:
+            cor_fundo = COLORS['P2']
+            alpha = 0.12
+        
+        # Retângulo de período
+        ax.axvspan(inicio, fim, alpha=alpha, color=cor_fundo, zorder=0)
+        
+        # Linha vertical de início
+        ax.axvline(x=inicio, color=cor_fundo, linestyle='--', alpha=0.5, linewidth=1.5, zorder=2)
+        
+        # Anotação no meio do período
+        meio = inicio + (fim - inicio) / 2
+        y_pos = ax.get_ylim()[1] * 0.88 if idx % 2 == 0 else ax.get_ylim()[1] * 0.80
+        
+        ax.annotate(viagem['nome'], 
+                   xy=(meio, y_pos),
+                   fontsize=8,
+                   fontweight='bold',
+                   color=cor_fundo,
+                   ha='center',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                            edgecolor=cor_fundo, alpha=0.9))
+        
+        # Marcos especiais
+        if pd.notna(viagem['marco_especial']):
+            marco_date = pd.to_datetime(viagem['marco_especial'])
+            ax.axvline(x=marco_date, color='red', linestyle='-', alpha=0.8, linewidth=3, zorder=5)
+            ax.scatter([marco_date], [ax.get_ylim()[1] * 0.96], s=300, color='red', 
+                      marker='*', zorder=6, edgecolors='darkred', linewidths=2)
+            ax.annotate(viagem['marco_nome'], 
+                       xy=(marco_date, ax.get_ylim()[1] * 0.96),
+                       xytext=(marco_date, ax.get_ylim()[1] * 1.03),
+                       fontsize=10,
+                       fontweight='bold',
+                       color='red',
+                       ha='center',
+                       bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', 
+                                edgecolor='red', alpha=0.95, linewidth=2))
+    
+    # Destaca pico TOTAL
+    pico_idx = total_values.argmax()
+    pico_date = dates[pico_idx]
+    pico_value = total_values[pico_idx]
+    
+    ax.scatter([pico_date], [pico_value], s=600, color='gold', 
+               edgecolors='red', linewidths=3, zorder=7, marker='*')
+    ax.annotate(f'🔥 PICO\n{pico_value:,} msgs', 
+               xy=(pico_date, pico_value), 
+               xytext=(pico_date, pico_value + 2800),
+               fontsize=12,
+               fontweight='bold',
+               color='red',
+               ha='center',
+               bbox=dict(boxstyle='round,pad=0.7', facecolor='yellow', 
+                        edgecolor='red', alpha=0.95, linewidth=2.5),
+               arrowprops=dict(arrowstyle='->', color='red', lw=2.5))
+    
+    # Formatação
+    ax.set_xlabel('Mês/Ano', fontsize=13, fontweight='bold')
+    ax.set_ylabel('Número de Mensagens', fontsize=13, fontweight='bold')
+    ax.set_title('Timeline Comparativa: P1 vs P2 × Viagens\n"Dois Estilos, Uma Conexão"', 
+                fontsize=17, fontweight='bold', pad=20)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    plt.xticks(rotation=45, ha='right')
+    
+    # Legenda customizada
+    from matplotlib.patches import Patch
+    legend_elements = [
+        plt.Line2D([0], [0], color=COLORS['P1'], linewidth=3, marker='o', 
+                   markersize=8, label='P1 (Marlon)'),
+        plt.Line2D([0], [0], color=COLORS['P2'], linewidth=3, marker='s', 
+                   markersize=8, label='P2 (Letícia)'),
+        plt.Line2D([0], [0], color=COLORS['neutral'], linewidth=2, marker='D', 
+                   markersize=6, linestyle='--', alpha=0.6, label='Total'),
+        Patch(facecolor=COLORS['P1'], alpha=0.3, label='Marlon viajando'),
+        Patch(facecolor=COLORS['P2'], alpha=0.3, label='Letícia viajando'),
+        plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='gold', 
+                   markersize=15, label='Eventos Especiais')
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', fontsize=11, framealpha=0.95)
+    
+    # Estatísticas no gráfico
+    total_p1 = p1_values.sum()
+    total_p2 = p2_values.sum()
+    pct_p1 = (total_p1 / (total_p1 + total_p2)) * 100
+    pct_p2 = (total_p2 / (total_p1 + total_p2)) * 100
+    
+    stats_text = f'Total: P1={total_p1:,} ({pct_p1:.1f}%) | P2={total_p2:,} ({pct_p2:.1f}%)'
+    ax.text(0.98, 0.02, stats_text, transform=ax.transAxes,
+            fontsize=10, fontweight='bold',
+            ha='right', va='bottom',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', 
+                     edgecolor='black', alpha=0.9))
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print("📊 Timeline comparativa P1 vs P2 gerada!")
+    print(f"\n📈 Resumo:")
+    print(f"   • P1 (Marlon):  {total_p1:,} msgs ({pct_p1:.1f}%)")
+    print(f"   • P2 (Letícia): {total_p2:,} msgs ({pct_p2:.1f}%)")
+
+# Gera timeline comparativa
+plot_timeline_comparative(df, viagens_df)
+```
+
+Agora ficou: - ✅ **Duas linhas** (P1 azul, P2 rosa) sem preenchimento - ✅ **Linha tracejada** do total (cinza) - ✅ **Marcadores diferentes** (círculo P1, quadrado P2, diamante total) - ✅ Mantém os **retângulos de viagem** no fundo - ✅ Mantém os **marcos especiais** (estrelas vermelhas) - ✅ Estatísticas no canto do gráfico
+
+Roda aí e me diz o que achou! 📊✨
+
+------------------------------------------------------------------------
+
+# 🤯 CARA, ESSA IDEIA É GENIAL!
+
+Sim, é **totalmente possível** e vai ficar **ANIMAL**!
+
+Vou criar um gráfico com: - 📊 **Timeline no topo** dividida em quarters - ☁️ **Word cloud embaixo** de cada quarter - 🎨 Tudo integrado numa visualização única
+
+------------------------------------------------------------------------
+
+## 🚀 Código: Timeline com Word Clouds por Quarter
+
+```{python}
+#| label: install-wordcloud
+# Instala wordcloud se necessário
+try:
+    from wordcloud import WordCloud
+    print("✅ wordcloud já instalado!")
+except ImportError:
+    print("📦 Instalando wordcloud...")
+    import subprocess
+    import sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wordcloud", "--break-system-packages"])
+    from wordcloud import WordCloud
+    print("✅ wordcloud instalado com sucesso!")
+```
+
+```{python}
+#| label: timeline-wordclouds-quarters
+#| fig-cap: "Timeline com Word Clouds por Quarter"
+
+def plot_timeline_with_wordclouds(df):
+    """
+    Timeline dividida em quarters com word clouds embaixo.
+    """
+    from wordcloud import WordCloud
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from datetime import datetime
+    import numpy as np
+    
+    # Define cores
+    COLORS = {
+        'P1': '#3498db',
+        'P2': '#e74c3c', 
+        'neutral': '#95a5a6'
+    }
+    
+    # Filtra apenas mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # Define quarters
+    quarters = [
+        {'nome': 'Q1\nOut-Dez/24', 'inicio': '2024-10-01', 'fim': '2024-12-31', 'cor': '#e8f4f8'},
+        {'nome': 'Q2\nJan-Mar/25', 'inicio': '2025-01-01', 'fim': '2025-03-31', 'cor': '#fef5e7'},
+        {'nome': 'Q3\nAbr-Jun/25', 'inicio': '2025-04-01', 'fim': '2025-06-30', 'cor': '#e8f8f5'},
+        {'nome': 'Q4\nJul-Set/25', 'inicio': '2025-07-01', 'fim': '2025-09-30', 'cor': '#fef5e7'},
+        {'nome': 'Q5\nOut-Dez/25', 'inicio': '2025-10-01', 'fim': '2025-12-31', 'cor': '#e8f4f8'}
+    ]
+    
+    for q in quarters:
+        q['inicio'] = pd.to_datetime(q['inicio'])
+        q['fim'] = pd.to_datetime(q['fim'])
+    
+    # Cria figura com grid customizado
+    fig = plt.figure(figsize=(22, 12))
+    gs = fig.add_gridspec(2, len(quarters), height_ratios=[1, 0.8], 
+                          hspace=0.35, wspace=0.15)
+    
+    # ========================================================================
+    # PARTE 1: TIMELINE
+    # ========================================================================
+    ax_timeline = fig.add_subplot(gs[0, :])
+    
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    ax_timeline.plot(dates, p1_values, marker='o', linewidth=3, markersize=8, 
+                    color=COLORS['P1'], label='P1', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, p2_values, marker='s', linewidth=3, markersize=8, 
+                    color=COLORS['P2'], label='P2', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, total_values, marker='D', linewidth=2, markersize=6, 
+                    color=COLORS['neutral'], label='Total', zorder=3, alpha=0.6, linestyle='--')
+    
+    for q in quarters:
+        ax_timeline.axvspan(q['inicio'], q['fim'], alpha=0.15, color=q['cor'], zorder=0)
+        if q != quarters[-1]:
+            ax_timeline.axvline(x=q['fim'], color='black', linestyle='-', 
+                              alpha=0.3, linewidth=1.5, zorder=1)
+        meio = q['inicio'] + (q['fim'] - q['inicio']) / 2
+        ax_timeline.text(meio, ax_timeline.get_ylim()[1] * 1.08, q['nome'],
+                        ha='center', va='center', fontsize=11, fontweight='bold',
+                        bbox=dict(boxstyle='round,pad=0.5', facecolor='white', 
+                                 edgecolor='black', linewidth=2))
+    
+    ax_timeline.set_ylabel('Mensagens/Mês', fontsize=12, fontweight='bold')
+    ax_timeline.set_title('Timeline Anual com Word Clouds por Quarter\n"A Evolução da Nossa Linguagem"', 
+                         fontsize=16, fontweight='bold', pad=30)
+    ax_timeline.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    ax_timeline.legend(loc='upper left', fontsize=11, framealpha=0.95)
+    
+    import matplotlib.dates as mdates
+    ax_timeline.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax_timeline.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    ax_timeline.tick_params(axis='x', rotation=45)
+    ax_timeline.set_xlim(quarters[0]['inicio'], quarters[-1]['fim'])
+    
+    # ========================================================================
+    # PARTE 2: WORD CLOUDS
+    # ========================================================================
+    
+    stopwords_pt = set([
+        'de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'é', 'com',
+        'não', 'uma', 'os', 'no', 'se', 'na', 'por', 'mais', 'as', 'dos', 'como',
+        'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ou', 'ser',
+        'quando', 'muito', 'há', 'nos', 'já', 'está', 'eu', 'também', 'só', 'pelo',
+        'pela', 'até', 'isso', 'ela', 'entre', 'era', 'depois', 'sem', 'mesmo',
+        'aos', 'ter', 'seus', 'quem', 'nas', 'me', 'esse', 'eles', 'estão', 'você',
+        'tinha', 'foram', 'essa', 'num', 'nem', 'suas', 'meu', 'às', 'minha',
+        'têm', 'numa', 'pelos', 'elas', 'havia', 'seja', 'qual', 'será', 'nós',
+        'tenho', 'lhe', 'deles', 'essas', 'esses', 'pelas', 'este', 'fosse', 'dele',
+        'tu', 'te', 'vocês', 'vos', 'lhes', 'meus', 'minhas', 'teu', 'tua',
+        'teus', 'tuas', 'nosso', 'nossa', 'nossos', 'nossas', 'dela', 'delas',
+        'esta', 'estes', 'estas', 'aquele', 'aquela', 'aqueles', 'aquelas',
+        'isto', 'aquilo', 'estou', 'está', 'estamos', 'estão', 'estive', 'esteve',
+        'pra', 'pro', 'aí', 'então', 'né', 'tá', 'vou', 'vai', 'fazer', 'vc',
+        'aqui', 'lá', 'agora', 'hoje', 'ontem', 'amanhã', 'dia', 'hora', 'vez',
+        'ta', 'to', 'q', 'this', 'message', 'was', 'eh', 'e', 'pq', 'por', 'ai', 'Ai'
+    ])
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[1, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim'])
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto_completo = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            
+            wordcloud = WordCloud(
+                width=400, 
+                height=300,
+                background_color='white',
+                stopwords=stopwords_pt,
+                colormap='Set2',
+                max_words=50,
+                relative_scaling=0.5,
+                min_font_size=8
+            ).generate(texto_completo)
+            
+            ax_wc.imshow(wordcloud, interpolation='bilinear')
+            ax_wc.axis('off')
+            
+            for spine in ax_wc.spines.values():
+                spine.set_edgecolor('black')
+                spine.set_linewidth(2)
+                spine.set_visible(True)
+            
+            total_msgs_q = len(quarter_msgs)
+            ax_wc.text(0.5, -0.08, f'{total_msgs_q:,} msgs', 
+                      transform=ax_wc.transAxes, ha='center', va='top',
+                      fontsize=10, fontweight='bold',
+                      bbox=dict(boxstyle='round,pad=0.4', facecolor=q['cor'], 
+                               edgecolor='black', linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=14, color='gray')
+            ax_wc.axis('off')
+    
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    plt.show()
+    
+    print("📊 Timeline com Word Clouds por Quarter gerada!")
+    print("\n💬 Agora você pode ver como o vocabulário evoluiu ao longo do ano!")
+
+# Gera visualização
+plot_timeline_with_wordclouds(df)
+```
+
+------------------------------------------------------------------------
+
+## 🎨 O que esse gráfico vai ter:
+
+### **Parte Superior (Timeline):**
+
+-   📈 Linha temporal com P1 vs P2
+-   🎨 Background colorido por quarter
+-   📝 Labels dos quarters no topo
+
+### **Parte Inferior (Word Clouds):**
+
+-   ☁️ **5 word clouds** (um por quarter)
+-   🔢 Total de mensagens em cada quarter
+-   🎨 Palavras mais frequentes em tamanhos diferentes
+-   🚫 Stopwords removidas automaticamente
+
+------------------------------------------------------------------------
+
+## 💡 O que vai mostrar:
+
+Você vai conseguir **ver visualmente**: - 📅 **Q1 (Out-Dez/24):** Palavras do início (mais formais?) - 📅 **Q2 (Jan-Mar/25):** Como a linguagem mudou - 📅 **Q3 (Abr-Jun/25):** Período de transição - 📅 **Q4 (Jul-Set/25):** PICO emocional (mais "amor", "saudade"?) - 📅 **Q5 (Out-Dez/25):** Maturidade da relação
+
+------------------------------------------------------------------------
+
+Roda aí e me conta o que achou! Essa vai ser **A VISUALIZAÇÃO** do projeto! 🔥📊☁️
+
+------------------------------------------------------------------------
+
+# 🔥 VAMOS TURBINAR ESSA VISUALIZAÇÃO!
+
+Excelente ideia! Vou fazer todas as melhorias:
+
+1.  ✅ Adicionar marcadores de viagens de volta
+2.  ✅ Marcar 16/Dez especialmente
+3.  ✅ Quarters inteligentes (Q4/2024, Q1/2025, etc)
+4.  ✅ **3 linhas de word clouds:** Total, P1 (azul), P2 (rosa)
+
+------------------------------------------------------------------------
+
+```{python}
+#| label: timeline-wordclouds-ultimate
+#| fig-cap: "Timeline Completa com Word Clouds por Participante"
+#| fig-height: 18
+
+def plot_timeline_with_wordclouds_ultimate(df, viagens_df):
+    """
+    Timeline ULTIMATE com word clouds por quarter:
+    - Linha 1: Timeline com marcadores
+    - Linha 2: Word clouds TOTAIS
+    - Linha 3: Word clouds P1 (azul)
+    - Linha 4: Word clouds P2 (rosa)
+    """
+    from wordcloud import WordCloud
+    import matplotlib.pyplot as plt
+    from datetime import datetime
+    import numpy as np
+    
+    # Define cores
+    COLORS = {
+        'P1': '#3498db',
+        'P2': '#e74c3c', 
+        'neutral': '#95a5a6'
+    }
+    
+    # Filtra apenas mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # DEFINE QUARTERS INTELIGENTES
+    # ========================================================================
+    
+    min_date = df['timestamp'].min()
+    max_date = df['timestamp'].max()
+    
+    # Identifica quarters necessários
+    quarters = []
+    
+    # Q4/2024 (Out-Dez/24)
+    if min_date <= pd.Timestamp('2024-12-31'):
+        quarters.append({
+            'nome': 'Q4/24\nOut-Dez',
+            'inicio': '2024-10-01',
+            'fim': '2024-12-31',
+            'cor': '#e8f4f8'
+        })
+    
+    # Q1-Q4/2025
+    year_quarters = [
+        {'nome': 'Q1/25\nJan-Mar', 'inicio': '2025-01-01', 'fim': '2025-03-31', 'cor': '#fef5e7'},
+        {'nome': 'Q2/25\nAbr-Jun', 'inicio': '2025-04-01', 'fim': '2025-06-30', 'cor': '#e8f8f5'},
+        {'nome': 'Q3/25\nJul-Set', 'inicio': '2025-07-01', 'fim': '2025-09-30', 'cor': '#fef5e7'},
+        {'nome': 'Q4/25\nOut-Dez', 'inicio': '2025-10-01', 'fim': '2025-12-31', 'cor': '#e8f4f8'}
+    ]
+    
+    for q in year_quarters:
+        q_start = pd.Timestamp(q['inicio'])
+        if q_start <= max_date:
+            quarters.append(q)
+    
+    # Converte datas
+    for q in quarters:
+        q['inicio'] = pd.to_datetime(q['inicio'])
+        q['fim'] = pd.to_datetime(q['fim'])
+    
+    num_quarters = len(quarters)
+    
+    # ========================================================================
+    # CRIA FIGURA COM GRID
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(24, 18))
+    
+    # Grid: 4 linhas (timeline + 3 word clouds)
+    gs = fig.add_gridspec(4, num_quarters, 
+                          height_ratios=[1.2, 0.7, 0.7, 0.7], 
+                          hspace=0.4, wspace=0.15)
+    
+    # ========================================================================
+    # LINHA 1: TIMELINE COM MARCADORES
+    # ========================================================================
+    
+    ax_timeline = fig.add_subplot(gs[0, :])
+    
+    # Prepara dados
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    # Plot linhas
+    ax_timeline.plot(dates, p1_values, marker='o', linewidth=3, markersize=8, 
+                    color=COLORS['P1'], label='P1 (Marlon)', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, p2_values, marker='s', linewidth=3, markersize=8, 
+                    color=COLORS['P2'], label='P2 (Letícia)', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, total_values, marker='D', linewidth=2, markersize=6, 
+                    color=COLORS['neutral'], label='Total', zorder=3, alpha=0.6, linestyle='--')
+    
+    # Marca quarters
+    for q in quarters:
+        ax_timeline.axvspan(q['inicio'], q['fim'], alpha=0.15, color=q['cor'], zorder=0)
+        if q != quarters[-1]:
+            ax_timeline.axvline(x=q['fim'], color='black', linestyle='-', 
+                              alpha=0.3, linewidth=1.5, zorder=1)
+        meio = q['inicio'] + (q['fim'] - q['inicio']) / 2
+        ax_timeline.text(meio, ax_timeline.get_ylim()[1] * 1.08, q['nome'],
+                        ha='center', va='center', fontsize=11, fontweight='bold',
+                        bbox=dict(boxstyle='round,pad=0.5', facecolor='white', 
+                                 edgecolor='black', linewidth=2))
+    
+    # ========================================================================
+    # ADICIONA MARCADORES DE VIAGENS
+    # ========================================================================
+    
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Cor por tipo
+        if 'Marlon' in tipo:
+            cor_linha = COLORS['P1']
+        else:
+            cor_linha = COLORS['P2']
+        
+        # Linhas verticais de início e fim
+        ax_timeline.axvline(x=inicio, color=cor_linha, linestyle='--', 
+                          alpha=0.5, linewidth=1.5, zorder=2)
+        
+        # Marco especial: 16/Dez - 1ª Vez Juntos
+        if pd.notna(viagem['marco_especial']):
+            marco_date = pd.to_datetime(viagem['marco_especial'])
+            ax_timeline.axvline(x=marco_date, color='red', linestyle='-', 
+                              alpha=0.8, linewidth=3, zorder=5)
+            ax_timeline.scatter([marco_date], [ax_timeline.get_ylim()[1] * 0.96], 
+                              s=400, color='red', marker='*', zorder=6, 
+                              edgecolors='darkred', linewidths=2)
+            ax_timeline.annotate(viagem['marco_nome'], 
+                               xy=(marco_date, ax_timeline.get_ylim()[1] * 0.96),
+                               xytext=(marco_date, ax_timeline.get_ylim()[1] * 1.03),
+                               fontsize=10, fontweight='bold', color='red',
+                               ha='center',
+                               bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', 
+                                        edgecolor='red', alpha=0.95, linewidth=2))
+    
+    # Formatação timeline
+    ax_timeline.set_ylabel('Mensagens/Mês', fontsize=13, fontweight='bold')
+    ax_timeline.set_title('Timeline Anual com Word Clouds Comparativos\n"A Evolução da Nossa Linguagem"', 
+                         fontsize=17, fontweight='bold', pad=30)
+    ax_timeline.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    ax_timeline.legend(loc='upper left', fontsize=11, framealpha=0.95)
+    
+    import matplotlib.dates as mdates
+    ax_timeline.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax_timeline.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    ax_timeline.tick_params(axis='x', rotation=45)
+    ax_timeline.set_xlim(quarters[0]['inicio'], quarters[-1]['fim'])
+    
+    # ========================================================================
+    # STOPWORDS
+    # ========================================================================
+    
+    stopwords_pt = set([
+        'de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'é', 'com',
+        'não', 'uma', 'os', 'no', 'se', 'na', 'por', 'mais', 'as', 'dos', 'como',
+        'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ou', 'ser',
+        'quando', 'muito', 'há', 'nos', 'já', 'está', 'eu', 'também', 'só', 'pelo',
+        'pela', 'até', 'isso', 'ela', 'entre', 'era', 'depois', 'sem', 'mesmo',
+        'aos', 'ter', 'seus', 'quem', 'nas', 'me', 'esse', 'eles', 'estão', 'você',
+        'tinha', 'foram', 'essa', 'num', 'nem', 'suas', 'meu', 'às', 'minha',
+        'têm', 'numa', 'pelos', 'elas', 'havia', 'seja', 'qual', 'será', 'nós',
+        'tenho', 'lhe', 'deles', 'essas', 'esses', 'pelas', 'este', 'fosse', 'dele',
+        'tu', 'te', 'vocês', 'vos', 'lhes', 'meus', 'minhas', 'teu', 'tua',
+        'teus', 'tuas', 'nosso', 'nossa', 'nossos', 'nossas', 'dela', 'delas',
+        'esta', 'estes', 'estas', 'aquele', 'aquela', 'aqueles', 'aquelas',
+        'isto', 'aquilo', 'estou', 'está', 'estamos', 'estão', 'estive', 'esteve',
+        'pra', 'pro', 'aí', 'então', 'né', 'tá', 'vou', 'vai', 'fazer', 'vc',
+        'aqui', 'lá', 'agora', 'hoje', 'ontem', 'amanhã', 'dia', 'hora', 'vez',
+        'sim', 'kkk', 'kk', 'rs', 'rsrs', 'haha', 'kkkk', 'kkkkk', 'boa', 'tudo',
+        'demais', 'ver', 'assim', 'Oi', 'oq', 'oi', 'bo', 'edited'
+
+    ])
+    
+    # ========================================================================
+    # FUNÇÃO AUXILIAR: GERA WORD CLOUD
+    # ========================================================================
+    
+    def generate_wordcloud(texto, colormap='Set2'):
+        """Gera word cloud a partir de texto."""
+        if not texto or len(texto.strip()) < 10:
+            return None
+        
+        return WordCloud(
+            width=400, 
+            height=280,
+            background_color='white',
+            stopwords=stopwords_pt,
+            colormap=colormap,
+            max_words=40,
+            relative_scaling=0.5,
+            min_font_size=7,
+            collocations=False
+        ).generate(texto)
+    
+    # ========================================================================
+    # LINHA 2: WORD CLOUDS TOTAIS
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[1, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim'])
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='viridis')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor('black')
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                # Label
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'TOTAL', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold',
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', 
+                                       edgecolor='black', linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold',
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                   edgecolor='black', linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # ========================================================================
+    # LINHA 3: WORD CLOUDS P1 (AZUL)
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[2, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim']) & (df_text['remetente'] == 'P1')
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='Blues')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor(COLORS['P1'])
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                # Label P1
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'P1', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold', color=COLORS['P1'],
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', 
+                                       edgecolor=COLORS['P1'], linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold', color=COLORS['P1'],
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', 
+                                   edgecolor=COLORS['P1'], linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # ========================================================================
+    # LINHA 4: WORD CLOUDS P2 (ROSA)
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[3, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim']) & (df_text['remetente'] == 'P2')
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='Reds')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor(COLORS['P2'])
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                # Label P2
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'P2', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold', color=COLORS['P2'],
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffe6e6', 
+                                       edgecolor=COLORS['P2'], linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold', color=COLORS['P2'],
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffe6e6', 
+                                   edgecolor=COLORS['P2'], linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # Cleanup
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    plt.show()
+    
+    print("🎨 Visualização ULTIMATE gerada!")
+    print(f"\n📊 Estrutura:")
+    print(f"   • {num_quarters} quarters identificados automaticamente")
+    print(f"   • {num_quarters} word clouds TOTAIS")
+    print(f"   • {num_quarters} word clouds P1 (azul)")
+    print(f"   • {num_quarters} word clouds P2 (rosa)")
+    print(f"   • Total: {num_quarters * 3} word clouds! 🔥")
+
+# Gera visualização ULTIMATE
+plot_timeline_with_wordclouds_ultimate(df, viagens_df)
+```
+
+------------------------------------------------------------------------
+
+## 🎨 O que mudou:
+
+1.  ✅ **Quarters inteligentes:** Q4/2024, Q1-Q4/2025 (automático!)
+2.  ✅ **Marcadores de viagens** de volta (linhas tracejadas)
+3.  ✅ **16/Dez em destaque** (estrela vermelha + "💕 1ª Vez Juntos")
+4.  ✅ **3 linhas de word clouds:**
+    -   Total (colormap viridis, borda preta)
+    -   P1 (colormap azul, borda azul)
+    -   P2 (colormap rosa, borda rosa)
+5.  ✅ Labels laterais identificando cada linha
+
+Roda e me conta se ficou **ÉPICO**! 🔥📊☁️
+
+------------------------------------------------------------------------
+
+Ótimas observações! Vou simplificar e melhorar:
+
+## 🎨 Mudanças:
+
+1.  ✅ **Remove colorização dos quarters** (fundo limpo)
+2.  ✅ **Viagens com DURAÇÃO** (retângulos como antes)
+3.  ✅ **Aniversário vira viagem normal** (não mais marcador especial)
+4.  ✅ **Único marcador especial:** 16/Dez (1 ano de relacionamento)
+5.  ✅ **Remove linhas cinza divisórias** (só labels dos quarters)
+
+------------------------------------------------------------------------
+
+```{python}
+#| label: timeline-wordclouds-clean
+#| fig-cap: "Timeline Limpa com Word Clouds Comparativos"
+#| fig-height: 18
+
+def plot_timeline_with_wordclouds_clean(df, viagens_df):
+    """
+    Timeline limpa e clara com word clouds por participante.
+    """
+    from wordcloud import WordCloud
+    import matplotlib.pyplot as plt
+    from datetime import datetime
+    import numpy as np
+    
+    # Define cores
+    COLORS = {
+        'P1': '#3498db',
+        'P2': '#e74c3c', 
+        'neutral': '#95a5a6'
+    }
+    
+    # Filtra apenas mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # DEFINE QUARTERS INTELIGENTES
+    # ========================================================================
+    
+    min_date = df['timestamp'].min()
+    max_date = df['timestamp'].max()
+    
+    quarters = []
+    
+    # Q4/2024 (Out-Dez/24)
+    if min_date <= pd.Timestamp('2024-12-31'):
+        quarters.append({
+            'nome': 'Q4/24\nOut-Dez',
+            'inicio': '2024-10-01',
+            'fim': '2024-12-31'
+        })
+    
+    # Q1-Q4/2025
+    year_quarters = [
+        {'nome': 'Q1/25\nJan-Mar', 'inicio': '2025-01-01', 'fim': '2025-03-31'},
+        {'nome': 'Q2/25\nAbr-Jun', 'inicio': '2025-04-01', 'fim': '2025-06-30'},
+        {'nome': 'Q3/25\nJul-Set', 'inicio': '2025-07-01', 'fim': '2025-09-30'},
+        {'nome': 'Q4/25\nOut-Dez', 'inicio': '2025-10-01', 'fim': '2025-12-31'}
+    ]
+    
+    for q in year_quarters:
+        q_start = pd.Timestamp(q['inicio'])
+        if q_start <= max_date:
+            quarters.append(q)
+    
+    # Converte datas
+    for q in quarters:
+        q['inicio'] = pd.to_datetime(q['inicio'])
+        q['fim'] = pd.to_datetime(q['fim'])
+    
+    num_quarters = len(quarters)
+    
+    # ========================================================================
+    # CRIA FIGURA COM GRID
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(24, 18))
+    
+    gs = fig.add_gridspec(4, num_quarters, 
+                          height_ratios=[1.2, 0.7, 0.7, 0.7], 
+                          hspace=0.4, wspace=0.15)
+    
+    # ========================================================================
+    # LINHA 1: TIMELINE LIMPA
+    # ========================================================================
+    
+    ax_timeline = fig.add_subplot(gs[0, :])
+    
+    # Prepara dados
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    # Plot linhas
+    ax_timeline.plot(dates, p1_values, marker='o', linewidth=3, markersize=8, 
+                    color=COLORS['P1'], label='P1 (Marlon)', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, p2_values, marker='s', linewidth=3, markersize=8, 
+                    color=COLORS['P2'], label='P2 (Letícia)', zorder=4, alpha=0.9)
+    ax_timeline.plot(dates, total_values, marker='D', linewidth=2, markersize=6, 
+                    color=COLORS['neutral'], label='Total', zorder=3, alpha=0.6, linestyle='--')
+    
+    # ========================================================================
+    # MARCA PERÍODOS DE VIAGENS (RETÂNGULOS COM DURAÇÃO)
+    # ========================================================================
+    
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Cor por tipo
+        if 'Marlon' in tipo:
+            cor_fundo = COLORS['P1']
+        else:
+            cor_fundo = COLORS['P2']
+        
+        # Retângulo do período COMPLETO da viagem
+        ax_timeline.axvspan(inicio, fim, alpha=0.12, color=cor_fundo, zorder=0)
+        
+        # Linha de início (tracejada, sutil)
+        ax_timeline.axvline(x=inicio, color=cor_fundo, linestyle='--', 
+                          alpha=0.4, linewidth=1.5, zorder=2)
+        
+        # Anotação (nome da viagem)
+        meio = inicio + (fim - inicio) / 2
+        y_pos = ax_timeline.get_ylim()[1] * 0.92 if idx % 2 == 0 else ax_timeline.get_ylim()[1] * 0.85
+        
+        ax_timeline.annotate(viagem['nome'], 
+                           xy=(meio, y_pos),
+                           fontsize=8,
+                           fontweight='bold',
+                           color=cor_fundo,
+                           ha='center',
+                           bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                                    edgecolor=cor_fundo, alpha=0.9, linewidth=1.5))
+    
+    # ========================================================================
+    # MARCADOR ESPECIAL: PRIMEIRA VEZ (16 DEZ/24)
+    # ========================================================================
+    
+    marco_1_vez = pd.Timestamp('2024-12-16')
+    
+    ax_timeline.axvline(x=marco_1_vez, color='red', linestyle='-', 
+                      alpha=0.9, linewidth=1, zorder=6)
+    
+    #ax_timeline.scatter([marco_1_vez], [ax_timeline.get_ylim()[1] * 0.97], 
+    #                  s=500, color='gold', marker='*', zorder=7, 
+    #                  edgecolors='red', linewidths=1)
+    
+    ax_timeline.annotate('PRIMEIRA VEZ!\n16/Dez/24', 
+                       xy=(marco_1_vez, ax_timeline.get_ylim()[1] * 0.97),
+                       xytext=(marco_1_vez, ax_timeline.get_ylim()[1] * 1.06),
+                       fontsize=11, fontweight='bold', color='red',
+                       ha='center',
+                       bbox=dict(boxstyle='round,pad=0.6', facecolor='yellow', 
+                                edgecolor='red', alpha=0.95, linewidth=1.5),
+                       arrowprops=dict(arrowstyle='->', color='red', lw=1.5))
+
+
+    # ========================================================================
+    # MARCADOR ESPECIAL: 1 ANO (16 DEZ/25)
+    # ========================================================================
+    
+    marco_1_ano = pd.Timestamp('2025-12-16')
+    
+    ax_timeline.axvline(x=marco_1_ano, color='red', linestyle='-', 
+                      alpha=0.9, linewidth=1, zorder=6)
+    
+    #ax_timeline.scatter([marco_1_ano], [ax_timeline.get_ylim()[1] * 0.97], 
+    #                  s=500, color='gold', marker='*', zorder=7, 
+    #                  edgecolors='red', linewidths=1)
+    
+    ax_timeline.annotate('1 ANO JUNTOS\n16/Dez/25', 
+                       xy=(marco_1_ano, ax_timeline.get_ylim()[1] * 0.97),
+                       xytext=(marco_1_ano, ax_timeline.get_ylim()[1] * 1.06),
+                       fontsize=11, fontweight='bold', color='red',
+                       ha='center',
+                       bbox=dict(boxstyle='round,pad=0.6', facecolor='yellow', 
+                                edgecolor='red', alpha=0.95, linewidth=1.5),
+                       arrowprops=dict(arrowstyle='->', color='red', lw=1.5))
+    
+    # ========================================================================
+    # LABELS DOS QUARTERS (SEM LINHAS, SEM FUNDO)
+    # ========================================================================
+    
+    for q in quarters:
+        meio = q['inicio'] + (q['fim'] - q['inicio']) / 2
+        ax_timeline.text(meio, ax_timeline.get_ylim()[0] - (ax_timeline.get_ylim()[1] * 0.08), 
+                        q['nome'],
+                        ha='center', va='top', fontsize=10, fontweight='bold',
+                        color='dimgray',
+                        bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                                 edgecolor='gray', linewidth=1.5, alpha=0.8))
+    
+    # Formatação timeline
+    ax_timeline.set_ylabel('Mensagens/Mês', fontsize=13, fontweight='bold')
+    ax_timeline.set_title('Timeline Anual com Word Clouds Comparativos\n"A Evolução da Nossa Linguagem"', 
+                         fontsize=17, fontweight='bold', pad=25)
+    ax_timeline.grid(True, alpha=0.25, linestyle=':', zorder=1)
+    ax_timeline.legend(loc='upper left', fontsize=11, framealpha=0.95)
+    
+    import matplotlib.dates as mdates
+    ax_timeline.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax_timeline.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    ax_timeline.tick_params(axis='x', rotation=45)
+    ax_timeline.set_xlim(quarters[0]['inicio'] - pd.Timedelta(days=5), 
+                        quarters[-1]['fim'] + pd.Timedelta(days=5))
+    
+    # ========================================================================
+    # STOPWORDS
+    # ========================================================================
+    
+    stopwords_pt = set([
+        'de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'é', 'com',
+        'não', 'uma', 'os', 'no', 'se', 'na', 'por', 'mais', 'as', 'dos', 'como',
+        'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ou', 'ser',
+        'quando', 'muito', 'há', 'nos', 'já', 'está', 'eu', 'também', 'só', 'pelo',
+        'pela', 'até', 'isso', 'ela', 'entre', 'era', 'depois', 'sem', 'mesmo',
+        'aos', 'ter', 'seus', 'quem', 'nas', 'me', 'esse', 'eles', 'estão', 'você',
+        'tinha', 'foram', 'essa', 'num', 'nem', 'suas', 'meu', 'às', 'minha',
+        'têm', 'numa', 'pelos', 'elas', 'havia', 'seja', 'qual', 'será', 'nós',
+        'tenho', 'lhe', 'deles', 'essas', 'esses', 'pelas', 'este', 'fosse', 'dele',
+        'tu', 'te', 'vocês', 'vos', 'lhes', 'meus', 'minhas', 'teu', 'tua',
+        'teus', 'tuas', 'nosso', 'nossa', 'nossos', 'nossas', 'dela', 'delas',
+        'esta', 'estes', 'estas', 'aquele', 'aquela', 'aqueles', 'aquelas',
+        'isto', 'aquilo', 'estou', 'está', 'estamos', 'estão', 'estive', 'esteve',
+        'pra', 'pro', 'aí', 'então', 'né', 'tá', 'vou', 'vai', 'fazer', 'vc',
+        'aqui', 'lá', 'agora', 'hoje', 'ontem', 'amanhã', 'dia', 'hora', 'vez',
+        'sim', 'kkk', 'kk', 'rs', 'rsrs', 'haha', 'kkkk', 'kkkkk', 'tb', 'tbm',
+        'eh', 'Ai', 'was', 'message', 'ta', 'to', 'sei', 'n', 'This', 'this', 
+        'kkkkkk','kkkkkkk','kkkkkkkk','kkkkkkkkk','kkkkkkkkkk','kkkkkkkkkkk',
+        'por', 'quê', 'q', 'tô', 'Ah', 'pq','acho', 'bem','bom', 'mto',
+        'quero','hahah','hahaha', 'hahahah', 'ja', 'https', 'nao','si',
+        'demai','gato', 'coisa', 'pra', 'pro', 'aí', 'então', 'né', 'tá', 'vou', 'vai', 'fazer', 'vc',
+        'aqui', 'lá', 'agora', 'hoje', 'ontem', 'amanhã', 'dia', 'hora', 'vez',
+        'sim', 'kkk', 'kk', 'rs', 'rsrs', 'haha', 'kkkk', 'kkkkk', 'boa', 'tudo',
+        'demais', 'ver', 'assim', 'Oi', 'oq', 'oi', 'bo', 'edited', 'tipo', 'deu','hahahaha', 'sabe', 'R', 'open', 'qd', 'p', 'la', 'lá', 'ia', 'Ia', 'meio', 'tava',
+        'entendi', 'Entendi', 'td'
+
+    ])
+    
+    # ========================================================================
+    # FUNÇÃO AUXILIAR: GERA WORD CLOUD
+    # ========================================================================
+    
+    def generate_wordcloud(texto, colormap='Set2'):
+        if not texto or len(texto.strip()) < 10:
+            return None
+        
+        return WordCloud(
+            width=400, 
+            height=280,
+            background_color='white',
+            stopwords=stopwords_pt,
+            colormap=colormap,
+            max_words=40,
+            relative_scaling=0.5,
+            min_font_size=7,
+            collocations=False
+        ).generate(texto)
+    
+    # ========================================================================
+    # LINHA 2: WORD CLOUDS TOTAIS
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[1, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim'])
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='viridis')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor('black')
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'TOTAL', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold',
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', 
+                                       edgecolor='black', linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold',
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                   edgecolor='black', linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # ========================================================================
+    # LINHA 3: WORD CLOUDS P1 (AZUL)
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[2, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim']) & (df_text['remetente'] == 'P1')
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='Blues')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor(COLORS['P1'])
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'P1', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold', color=COLORS['P1'],
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', 
+                                       edgecolor=COLORS['P1'], linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold', color=COLORS['P1'],
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', 
+                                   edgecolor=COLORS['P1'], linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # ========================================================================
+    # LINHA 4: WORD CLOUDS P2 (ROSA)
+    # ========================================================================
+    
+    for idx, q in enumerate(quarters):
+        ax_wc = fig.add_subplot(gs[3, idx])
+        
+        mask = (df_text['timestamp'] >= q['inicio']) & (df_text['timestamp'] <= q['fim']) & (df_text['remetente'] == 'P2')
+        quarter_msgs = df_text[mask]
+        
+        if len(quarter_msgs) > 0:
+            texto = ' '.join(quarter_msgs['conteudo'].astype(str).values)
+            wordcloud = generate_wordcloud(texto, colormap='Reds')
+            
+            if wordcloud:
+                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                ax_wc.axis('off')
+                
+                for spine in ax_wc.spines.values():
+                    spine.set_edgecolor(COLORS['P2'])
+                    spine.set_linewidth(2)
+                    spine.set_visible(True)
+                
+                if idx == 0:
+                    ax_wc.text(-0.15, 0.5, 'P2', transform=ax_wc.transAxes,
+                              rotation=90, ha='center', va='center',
+                              fontsize=13, fontweight='bold', color=COLORS['P2'],
+                              bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffe6e6', 
+                                       edgecolor=COLORS['P2'], linewidth=2))
+                
+                ax_wc.text(0.5, -0.08, f'{len(quarter_msgs):,} msgs', 
+                          transform=ax_wc.transAxes, ha='center', va='top',
+                          fontsize=9, fontweight='bold', color=COLORS['P2'],
+                          bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffe6e6', 
+                                   edgecolor=COLORS['P2'], linewidth=1.5))
+        else:
+            ax_wc.text(0.5, 0.5, 'Sem dados', transform=ax_wc.transAxes,
+                      ha='center', va='center', fontsize=12, color='gray')
+            ax_wc.axis('off')
+    
+    # Cleanup
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    plt.show()
+    
+    print("🎨 Timeline LIMPA gerada!")
+    print(f"\n✨ Melhorias:")
+    print(f"   • Fundo limpo (sem colorização de quarters)")
+    print(f"   • Viagens com DURAÇÃO (retângulos completos)")
+    print(f"   • Único marcador especial: 1 ANO (16/Dez)")
+    print(f"   • Sem linhas divisórias (mais clean)")
+    print(f"   • Labels de quarters na parte inferior")
+
+# Gera visualização limpa
+plot_timeline_with_wordclouds_clean(df, viagens_df)
+```
+
+------------------------------------------------------------------------
+
+## ✨ Mudanças implementadas:
+
+1.  ✅ **Fundo branco limpo** (sem cores nos quarters)
+2.  ✅ **Viagens = retângulos com duração completa** (início → fim)
+3.  ✅ **Único marcador especial:** Estrela dourada em 16/Dez ("💕 1 ANO JUNTOS")
+4.  ✅ **Sem linhas cinza divisórias** (muito mais limpo!)
+5.  ✅ **Labels de quarters embaixo** (sutis, em cinza)
+6.  ✅ **Grid pontilhado** (mais sutil que antes)
+
+Agora ficou **clean e profissional**! Roda aí! 🎨📊
+
+------------------------------------------------------------------------
+
+Boa ideia! Vou criar uma análise completa de **dias juntos vs separados**! 📊
+
+```{python}
+#| label: analise-tempo-juntos-fixed
+#| fig-cap: "Análise de Tempo Junto vs Separado"
+
+def analyze_time_together(df, viagens_df):
+    """
+    Analisa quanto tempo passaram juntos vs separados ao longo do ano.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from datetime import timedelta
+    
+    # Define cores
+    COLORS = {
+        'juntos': '#2ecc71',
+        'separados': '#e74c3c',
+        'neutral': '#95a5a6'
+    }
+    
+    print("="*80)
+    print("🏠 ANÁLISE: TEMPO JUNTOS vs SEPARADOS")
+    print("="*80)
+    
+    # ========================================================================
+    # CALCULA PERÍODO TOTAL
+    # ========================================================================
+    
+    data_inicio = df['timestamp'].min().date()
+    data_fim = df['timestamp'].max().date()
+    total_dias = (data_fim - data_inicio).days + 1
+    
+    print(f"\n📅 Período Analisado:")
+    print(f"   • Início: {data_inicio.strftime('%d/%m/%Y')}")
+    print(f"   • Fim: {data_fim.strftime('%d/%m/%Y')}")
+    print(f"   • Total: {total_dias} dias")
+    
+    # ========================================================================
+    # MARCA DIAS JUNTOS
+    # ========================================================================
+    
+    import pandas as pd
+    all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D').date
+    dias_juntos_set = set()
+    
+    viagens_detalhadas = []
+    
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio'].date()
+        fim = viagem['fim'].date()
+        duracao = (fim - inicio).days + 1
+        
+        current_date = inicio
+        while current_date <= fim:
+            dias_juntos_set.add(current_date)
+            current_date += timedelta(days=1)
+        
+        viagens_detalhadas.append({
+            'nome': viagem['nome'],
+            'inicio': inicio,
+            'fim': fim,
+            'duracao': duracao
+        })
+    
+    total_dias_juntos = len(dias_juntos_set)
+    total_dias_separados = total_dias - total_dias_juntos
+    pct_juntos = (total_dias_juntos / total_dias * 100)
+    pct_separados = (total_dias_separados / total_dias * 100)
+    
+    # ========================================================================
+    # ESTATÍSTICAS GERAIS
+    # ========================================================================
+    
+    print(f"\n📊 Resumo Geral:")
+    print(f"   • Dias JUNTOS:    {total_dias_juntos:3d} dias ({pct_juntos:5.1f}%)")
+    print(f"   • Dias SEPARADOS: {total_dias_separados:3d} dias ({pct_separados:5.1f}%)")
+    
+    print(f"\n🗓️ Detalhamento das Viagens:")
+    print(f"   {'Viagem':<30} {'Início':<12} {'Fim':<12} {'Dias':<5}")
+    print(f"   {'-'*65}")
+    
+    total_viagens = len(viagens_detalhadas)
+    for v in viagens_detalhadas:
+        print(f"   {v['nome']:<30} {v['inicio'].strftime('%d/%m/%Y'):<12} "
+              f"{v['fim'].strftime('%d/%m/%Y'):<12} {v['duracao']:3d}")
+    
+    duracao_media = total_dias_juntos / total_viagens if total_viagens > 0 else 0
+    viagem_mais_longa = max(viagens_detalhadas, key=lambda x: x['duracao'])
+    viagem_mais_curta = min(viagens_detalhadas, key=lambda x: x['duracao'])
+    
+    print(f"\n📈 Estatísticas das Viagens:")
+    print(f"   • Total de viagens: {total_viagens}")
+    print(f"   • Duração média: {duracao_media:.1f} dias")
+    print(f"   • Mais longa: {viagem_mais_longa['duracao']} dias ({viagem_mais_longa['nome']})")
+    print(f"   • Mais curta: {viagem_mais_curta['duracao']} dias ({viagem_mais_curta['nome']})")
+    
+    # ========================================================================
+    # ANÁLISE POR MÊS
+    # ========================================================================
+    
+    print(f"\n📅 Dias Juntos por Mês:")
+    
+    dias_df = pd.DataFrame({
+        'data': all_dates,
+        'juntos': [d in dias_juntos_set for d in all_dates]
+    })
+    # Usa data_inicio e data_fim das VIAGENS, não das mensagens!
+    primeiro_dia = min(data_inicio, viagens_df['inicio'].min().date())
+    ultimo_dia = max(data_fim, viagens_df['fim'].max().date())
+
+    # Recria all_dates com range completo
+    all_dates_completo = pd.date_range(start=primeiro_dia, end=ultimo_dia, freq='D').date
+
+    # Recria dias_df
+    dias_df = pd.DataFrame({
+        'data': all_dates_completo,
+        'juntos': [d in dias_juntos_set for d in all_dates_completo]
+    })
+    dias_df['ano_mes'] = pd.to_datetime(dias_df['data']).dt.to_period('M')
+
+    por_mes = dias_df.groupby('ano_mes').agg({
+        'juntos': 'sum',
+        'data': 'count'
+    }).rename(columns={'juntos': 'dias_juntos', 'data': 'total_dias'})
+    por_mes['dias_separados'] = por_mes['total_dias'] - por_mes['dias_juntos']
+    por_mes['pct_juntos'] = (por_mes['dias_juntos'] / por_mes['total_dias'] * 100)
+    
+    print(f"   {'Mês':<10} {'Juntos':<8} {'Separados':<10} {'% Juntos':<10}")
+    print(f"   {'-'*45}")
+    for mes, row in por_mes.iterrows():
+        juntos = int(row['dias_juntos'])
+        separados = int(row['dias_separados'])
+        pct = float(row['pct_juntos'])
+        print(f"   {str(mes):<10} {juntos:3d}      {separados:3d}        {pct:5.1f}%")
+    
+    print("\n" + "="*80)
+    
+    # ========================================================================
+    # VISUALIZAÇÕES
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 12))
+    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.25)
+    
+    # ------------------------------------------------------------------------
+    # 1. Pizza: Geral
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, 0])
+    
+    sizes = [total_dias_juntos, total_dias_separados]
+    labels = [f'Juntos\n{total_dias_juntos} dias\n({pct_juntos:.1f}%)', 
+              f'Separados\n{total_dias_separados} dias\n({pct_separados:.1f}%)']
+    colors = [COLORS['juntos'], COLORS['separados']]
+    
+    wedges, texts, autotexts = ax1.pie(sizes, labels=labels, colors=colors, autopct='',
+                                        startangle=90, textprops={'fontsize': 12, 'fontweight': 'bold'})
+    ax1.set_title('Distribuição Geral: Juntos vs Separados', fontsize=14, fontweight='bold', pad=20)
+    
+    # ------------------------------------------------------------------------
+    # 2. Barras: Por Mês
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[0, 1])
+    
+    x = np.arange(len(por_mes))
+    width = 0.35
+    
+    bars1 = ax2.bar(x - width/2, por_mes['dias_juntos'], width, 
+                   label='Juntos', color=COLORS['juntos'], alpha=0.8, edgecolor='black')
+    bars2 = ax2.bar(x + width/2, por_mes['dias_separados'], width, 
+                   label='Separados', color=COLORS['separados'], alpha=0.8, edgecolor='black')
+    
+    ax2.set_xlabel('Mês', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Dias', fontsize=12, fontweight='bold')
+    ax2.set_title('Dias Juntos vs Separados por Mês', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([str(m) for m in por_mes.index], rotation=45, ha='right')
+    ax2.legend(fontsize=11)
+    ax2.grid(axis='y', alpha=0.3)
+    
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            if height > 0:
+                ax2.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height)}',
+                        ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    # ------------------------------------------------------------------------
+    # 3. Percentual por Mês (Linha)
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, :])
+    
+    meses_dates = [m.to_timestamp() for m in por_mes.index]
+    
+    ax3.plot(meses_dates, por_mes['pct_juntos'], marker='o', linewidth=3, 
+            markersize=10, color=COLORS['juntos'], label='% Juntos', zorder=3)
+    ax3.fill_between(meses_dates, por_mes['pct_juntos'], alpha=0.3, 
+                     color=COLORS['juntos'], zorder=2)
+    
+    ax3.axhline(y=50, color='black', linestyle='--', alpha=0.5, linewidth=2, 
+               label='50% (metade do mês)', zorder=1)
+    
+    ax3.set_xlabel('Mês', fontsize=12, fontweight='bold')
+    ax3.set_ylabel('% de Dias Juntos', fontsize=12, fontweight='bold')
+    ax3.set_title('Evolução: Percentual de Dias Juntos ao Longo do Ano', 
+                 fontsize=14, fontweight='bold')
+    ax3.grid(True, alpha=0.3)
+    ax3.legend(fontsize=11)
+    ax3.set_ylim(0, 105)
+    
+    import matplotlib.dates as mdates
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax3.xaxis.set_major_locator(mdates.MonthLocator())
+    ax3.tick_params(axis='x', rotation=45)
+    
+    for x, y in zip(meses_dates, por_mes['pct_juntos']):
+        ax3.text(x, y + 3, f'{y:.0f}%', ha='center', va='bottom', 
+                fontsize=9, fontweight='bold', color=COLORS['juntos'])
+    
+    # ------------------------------------------------------------------------
+    # 4. Calendário Visual (CORRIGIDO)
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    # Cria array de cores por dia (0=separado, 1=junto)
+    dias_array = np.array([1 if d in dias_juntos_set else 0 for d in all_dates])
+    
+    # Calcula número de semanas necessárias
+    num_weeks = int(np.ceil(len(dias_array) / 7))
+    
+    # Preenche com -1 (será tratado como "sem dados") em vez de NaN
+    padding_size = num_weeks * 7 - len(dias_array)
+    padded = np.concatenate([dias_array, np.full(padding_size, -1)])
+    
+    # Reshape
+    calendar_data = padded.reshape(num_weeks, 7)
+    
+    # Cria colormap com 3 cores: separado(0), junto(1), sem_dados(-1)
+    from matplotlib.colors import ListedColormap, BoundaryNorm
+    colors_cal = ['white', COLORS['separados'], COLORS['juntos']]
+    cmap = ListedColormap(colors_cal)
+    bounds = [-1.5, -0.5, 0.5, 1.5]
+    norm = BoundaryNorm(bounds, cmap.N)
+    
+    # Plot
+    im = ax4.imshow(calendar_data, cmap=cmap, norm=norm, aspect='auto', interpolation='nearest')
+    
+    ax4.set_xlabel('Dia da Semana', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Semana do Ano', fontsize=12, fontweight='bold')
+    ax4.set_title('Calendário Anual: Cada Quadrado = 1 Dia', 
+                 fontsize=14, fontweight='bold')
+    
+    ax4.set_xticks(range(7))
+    ax4.set_xticklabels(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'])
+    ax4.set_yticks(range(0, num_weeks, 4))
+    ax4.set_yticklabels(range(0, num_weeks, 4))
+    
+    # Grid sutil
+    ax4.set_xticks(np.arange(-0.5, 7, 1), minor=True)
+    ax4.set_yticks(np.arange(-0.5, num_weeks, 1), minor=True)
+    ax4.grid(which='minor', color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
+    
+    # Legenda
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor=COLORS['juntos'], label='Juntos'),
+        Patch(facecolor=COLORS['separados'], label='Separados')
+    ]
+    ax4.legend(handles=legend_elements, loc='upper right', fontsize=11)
+    
+    plt.suptitle('Análise Completa: Tempo Juntos vs Separados\n"365 Dias de Conexão"', 
+                fontsize=18, fontweight='bold', y=0.995)
+    
+    plt.show()
+    
+    print("\n📊 Visualizações geradas com sucesso!")
+    
+    return {
+        'total_dias': total_dias,
+        'dias_juntos': total_dias_juntos,
+        'dias_separados': total_dias_separados,
+        'pct_juntos': pct_juntos,
+        'viagens': viagens_detalhadas,
+        'por_mes': por_mes
+    }
+
+# Executa análise
+resultado_tempo = analyze_time_together(df, viagens_df)
+```
+
+------------------------------------------------------------------------
+
+## 📊 O que essa análise vai mostrar:
+
+### **Estatísticas:**
+
+-   ✅ Total de dias juntos vs separados
+-   ✅ % de cada categoria
+-   ✅ Tabela detalhada de todas as viagens
+-   ✅ Viagem mais longa/curta
+-   ✅ Média de duração
+-   ✅ Análise mês a mês
+
+### **4 Visualizações:**
+
+1.  **Pizza:** Proporção geral (juntos vs separados)
+2.  **Barras:** Comparação mês a mês
+3.  **Linha:** Evolução do % de dias juntos
+4.  **Calendário Heatmap:** Cada dia do ano (verde = juntos, vermelho = separados)
+
+------------------------------------------------------------------------
+
+Roda e vê os resultados! Vai ser interessante ver quanto tempo realmente passaram juntos! 🏠💕📊
+
+```{python}
+#| label: fig-timeline-simples
+#| fig-cap: "Timeline de mensagens crescendo"
+
+import plotly.graph_objects as go
+import pandas as pd
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Cria figura
+fig = go.Figure()
+
+# Primeira linha (vazia)
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['count'].iloc[0]],
+    mode='lines',
+    line=dict(color='#075E54', width=2)
+))
+
+# Cria frames - cada frame adiciona mais um dia
+frames = []
+for i in range(1, len(df_daily)):
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['count'][:i],
+            mode='lines',
+            line=dict(color='#075E54', width=2)
+        )]
+    ))
+
+fig.frames = frames
+
+# EIXOS FIXOS (não pula!)
+fig.update_layout(
+    title='Mensagens por Dia',
+    xaxis={
+        'range': [df_daily['date'].min(), df_daily['date'].max()],
+        'title': 'Data'
+    },
+    yaxis={
+        'range': [0, df_daily['count'].max() * 1.1],
+        'title': 'Mensagens'
+    },
+    # Botões
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 50, 'redraw': True},
+                    'fromcurrent': True
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}}]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```
+
+```{python}
+#| label: fig-timeline-janela
+#| fig-cap: "Timeline com janela deslizante"
+
+import plotly.graph_objects as go
+import pandas as pd
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Cria figura
+fig = go.Figure()
+
+# Define tamanho da janela (quantos dias mostrar de cada vez)
+window_days = 60  # Mostra 60 dias na tela
+
+# Primeira linha
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['count'].iloc[0]],
+    mode='lines',
+    line=dict(color='#075E54', width=2)
+))
+
+# Cria frames
+frames = []
+for i in range(1, len(df_daily)):
+    # Calcula a janela do eixo X
+    if i < window_days:
+        # Ainda enchendo a tela - mostra desde o início
+        x_start = df_daily['date'].iloc[0]
+        x_end = df_daily['date'].iloc[window_days - 1] if window_days < len(df_daily) else df_daily['date'].iloc[-1]
+    else:
+        # Janela desliza - mostra últimos window_days dias
+        x_start = df_daily['date'].iloc[i - window_days]
+        x_end = df_daily['date'].iloc[i]
+    
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['count'][:i],
+            mode='lines',
+            line=dict(color='#075E54', width=2)
+        )],
+        layout=go.Layout(
+            xaxis={'range': [x_start, x_end]}
+        )
+    ))
+
+fig.frames = frames
+
+# Layout inicial
+fig.update_layout(
+    title='Mensagens por Dia (Janela Deslizante)',
+    xaxis={
+        'range': [df_daily['date'].iloc[0], 
+                 df_daily['date'].iloc[window_days - 1] if window_days < len(df_daily) else df_daily['date'].iloc[-1]],
+        'title': 'Data'
+    },
+    yaxis={
+        'range': [0, df_daily['count'].max() * 1.1],
+        'title': 'Mensagens'
+    },
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 50, 'redraw': True},
+                    'fromcurrent': True
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}}]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```
+
+```{python}
+#| label: fig-timeline-correto
+#| fig-cap: "Timeline crescendo corretamente"
+
+import plotly.graph_objects as go
+import pandas as pd
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Define janela inicial (quantos dias mostrar no início)
+initial_window = 90  # Mostra 90 dias inicialmente
+
+# Cria figura
+fig = go.Figure()
+
+# Primeira linha
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['count'].iloc[0]],
+    mode='lines',
+    line=dict(color='#075E54', width=2)
+))
+
+# Calcula data final da janela inicial
+initial_end_date = df_daily['date'].iloc[min(initial_window, len(df_daily)-1)]
+
+# Cria frames
+frames = []
+for i in range(1, len(df_daily)):
+    # Até preencher a janela inicial, mantém eixo X fixo
+    if i <= initial_window:
+        x_start = df_daily['date'].iloc[0]
+        x_end = initial_end_date
+    else:
+        # Depois que preencheu, expande o eixo X
+        x_start = df_daily['date'].iloc[0]
+        x_end = df_daily['date'].iloc[i]
+    
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['count'][:i],
+            mode='lines',
+            line=dict(color='#075E54', width=2)
+        )],
+        layout=go.Layout(
+            xaxis={'range': [x_start, x_end]}
+        )
+    ))
+
+fig.frames = frames
+
+# Layout inicial - eixo X já amplo
+fig.update_layout(
+    title='Mensagens por Dia',
+    xaxis={
+        'range': [df_daily['date'].iloc[0], initial_end_date],
+        'title': 'Data'
+    },
+    yaxis={
+        'range': [0, df_daily['count'].max() * 1.1],
+        'title': 'Mensagens'
+    },
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 50, 'redraw': True},
+                    'fromcurrent': True
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}}]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```
+
+```{python}
+
+#| label: fig-timeline-correto
+#| fig-cap: "Timeline crescendo corretamente"
+
+import plotly.graph_objects as go
+import pandas as pd
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Define janela inicial (quantos dias mostrar no início)
+initial_window = 90  # Mostra 90 dias inicialmente
+
+# Cria figura
+fig = go.Figure()
+
+# Primeira linha
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['count'].iloc[0]],
+    mode='lines',
+    line=dict(color='#075E54', width=2)
+))
+
+# Calcula data final da janela inicial
+initial_end_date = df_daily['date'].iloc[min(initial_window, len(df_daily)-1)]
+
+# Cria frames
+frames = []
+for i in range(1, len(df_daily)):
+    # Até preencher a janela inicial, mantém eixo X fixo
+    if i <= initial_window:
+        x_start = df_daily['date'].iloc[0]
+        x_end = initial_end_date
+    else:
+        # Depois que preencheu, expande o eixo X
+        x_start = df_daily['date'].iloc[0]
+        x_end = df_daily['date'].iloc[i]
+    
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['count'][:i],
+            mode='lines',
+            line=dict(color='#075E54', width=2)
+        )],
+        layout=go.Layout(
+            xaxis={'range': [x_start, x_end]}
+        )
+    ))
+
+fig.frames = frames
+
+# Layout inicial - eixo X já amplo
+fig.update_layout(
+    title='Mensagens por Dia',
+    xaxis={
+        'range': [df_daily['date'].iloc[0], initial_end_date],
+        'title': 'Data'
+    },
+    yaxis={
+        'range': [0, df_daily['count'].max() * 1.1],
+        'title': 'Mensagens'
+    },
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 50, 'redraw': True},
+                    'fromcurrent': True
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}}]
+            }
+        ]
+    }]
+)
+
+fig.show()
+
+```
+
+```{python}
+#| label: fig-timeline-suave
+#| fig-cap: "Timeline - 60 dias fixos, depois expande"
+
+import plotly.graph_objects as go
+import pandas as pd
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Parâmetros
+dias_fixos = 7  # Eixo X fixo nos primeiros 60 dias
+dias_frente = 19  # Mostra +19 dias à frente
+
+# Cria figura
+fig = go.Figure()
+
+# Primeira linha
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['count'].iloc[0]],
+    mode='lines',
+    line=dict(color='#075E54', width=2)
+))
+
+# Calcula data final da janela inicial
+date_inicio = df_daily['"date'].iloc[0]
+date_limite = df_daily['date'].iloc[min(dias_fixos + dias_frente, len(df_daily)-1)]
+
+# Cria frames
+frames = []
+for i in range(1, len(df_daily)):
+    current_day = i
+    
+    # Lógica do eixo X
+    if current_day <= dias_fixos:
+        # Fase 1: Eixo X FIXO (primeiros 60 dias)
+        x_start = date_inicio
+        x_end = date_limite
+    else:
+        # Fase 2: Eixo X EXPANDE (após dia 60)
+        # Sempre mostra desde o início + os dias_frente à frente
+        x_start = date_inicio
+        x_end = df_daily['date'].iloc[min(current_day + dias_frente, len(df_daily)-1)]
+    
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['count'][:i],
+            mode='lines',
+            line=dict(color='#075E54', width=2)
+        )],
+        layout=go.Layout(
+            xaxis={'range': [x_start, x_end]}
+        )
+    ))
+
+fig.frames = frames
+
+# Layout inicial
+fig.update_layout(
+    title=f'Mensagens por Dia ({dias_fixos} dias fixos → expande)',
+    xaxis={
+        'range': [date_inicio, date_limite],
+        'title': 'Data'
+    },
+    yaxis={
+        'range': [0, df_daily['count'].max() * 1.1],
+        'title': 'Mensagens'
+    },
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 360, 'redraw': True},
+                    'fromcurrent': True,
+                    'transition': {'duration': 0}  # ⬅️ Sem transição = menos tremor
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}}]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```

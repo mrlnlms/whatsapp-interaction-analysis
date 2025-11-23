@@ -1,0 +1,2819 @@
+# 🔥 Perfeito! Vamos fazer essas 3 análises!
+
+------------------------------------------------------------------------
+
+```{python}
+#| label: setup-analises-avancadas
+# Setup
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import warnings
+from matplotlib import font_manager as fm
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (14, 8)
+
+# Cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c',
+    'neutral': '#95a5a6'
+}
+
+# Carrega dados
+df = pd.read_csv('final_dataframe_enriched_complete.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print("✅ Setup completo!")
+print(f"📊 Dataset: {len(df):,} mensagens")
+```
+
+## 📊 Código: Análise Completa de Viagens
+
+```{python}
+#| label: analise-viagens-completa
+#| fig-cap: "Análise Detalhada: Impacto das Viagens"
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+
+# Define cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+viagens = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',  # ← CORRIGIDO (6 dias)
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+viagens_df = pd.DataFrame(viagens)
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+viagens_df['duracao_dias'] = (viagens_df['fim'] - viagens_df['inicio']).dt.days + 1  # +1 para incluir último dia
+
+print("="*80)
+print("📅 VIAGENS REGISTRADAS")
+print("="*80)
+print(f"\nTotal de viagens: {len(viagens_df)}\n")
+print(viagens_df[['nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+
+# Estatísticas
+total_dias_juntos = viagens_df['duracao_dias'].sum()
+total_dias_ano = 366  # Out/2024 a Out/2025
+pct_juntos = (total_dias_juntos / total_dias_ano) * 100
+
+print(f"\n📊 Resumo:")
+print(f"   • Total de dias juntos: {total_dias_juntos} dias")
+print(f"   • Percentual do ano: {pct_juntos:.1f}%")
+print(f"   • Viagem mais longa: {viagens_df['duracao_dias'].max()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {viagens_df['duracao_dias'].min()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmin(), 'nome']})")
+
+print("\n" + "="*80)
+```
+
+```{python}
+#| label: timeline-viagens-precisa
+#| fig-cap: "Timeline com Datas Precisas de Viagens"
+
+def plot_timeline_precise(df, viagens_df):
+    """
+    Timeline com datas precisas de viagens.
+    """
+    # Prepara dados mensais
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes = df.groupby('ano_mes').size()
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes.index]
+    values = msgs_por_mes.values
+    
+    # Cria figura
+    fig, ax = plt.subplots(figsize=(18, 9))
+    
+    # Plot linha principal
+    ax.plot(dates, values, marker='o', linewidth=3, markersize=10, 
+            color=COLORS['P2'], label='Mensagens por Mês', zorder=3)
+    ax.fill_between(dates, values, alpha=0.2, color=COLORS['P2'])
+    
+    # Adiciona grid
+    ax.grid(True, alpha=0.3, linestyle='--', zorder=1)
+    
+    # Marca períodos de viagem com retângulos
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Cor por tipo
+        if 'Marlon' in tipo:
+            cor_fundo = COLORS['P1']
+            alpha = 0.15
+        else:
+            cor_fundo = COLORS['P2']
+            alpha = 0.15
+        
+        # Retângulo de período
+        ax.axvspan(inicio, fim, alpha=alpha, color=cor_fundo, zorder=0)
+        
+        # Linha vertical de início
+        ax.axvline(x=inicio, color=cor_fundo, linestyle='--', alpha=0.7, linewidth=2, zorder=2)
+        
+        # Anotação no meio do período
+        meio = inicio + (fim - inicio) / 2
+        y_pos = ax.get_ylim()[1] * 0.85 if idx % 2 == 0 else ax.get_ylim()[1] * 0.75
+        
+        ax.annotate(viagem['nome'], 
+                   xy=(meio, y_pos),
+                   fontsize=8,
+                   fontweight='bold',
+                   color=cor_fundo,
+                   ha='center',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                            edgecolor=cor_fundo, alpha=0.9))
+        
+        # Marcos especiais
+        if pd.notna(viagem['marco_especial']):
+            marco_date = pd.to_datetime(viagem['marco_especial'])
+            ax.axvline(x=marco_date, color='red', linestyle='-', alpha=0.8, linewidth=3, zorder=4)
+            ax.scatter([marco_date], [ax.get_ylim()[1] * 0.95], s=300, color='red', 
+                      marker='*', zorder=5, edgecolors='darkred', linewidths=2)
+            ax.annotate(viagem['marco_nome'], 
+                       xy=(marco_date, ax.get_ylim()[1] * 0.95),
+                       xytext=(marco_date, ax.get_ylim()[1] * 1.02),
+                       fontsize=10,
+                       fontweight='bold',
+                       color='red',
+                       ha='center',
+                       bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', 
+                                edgecolor='red', alpha=0.95, linewidth=2))
+    
+    # Destaca pico
+    pico_idx = values.argmax()
+    pico_date = dates[pico_idx]
+    pico_value = values[pico_idx]
+    
+    ax.scatter([pico_date], [pico_value], s=600, color='gold', 
+               edgecolors='red', linewidths=3, zorder=5, marker='*')
+    ax.annotate(f'🔥 PICO\n{pico_value:,} msgs', 
+               xy=(pico_date, pico_value), 
+               xytext=(pico_date, pico_value + 3000),
+               fontsize=12,
+               fontweight='bold',
+               color='red',
+               ha='center',
+               bbox=dict(boxstyle='round,pad=0.7', facecolor='yellow', 
+                        edgecolor='red', alpha=0.95, linewidth=2.5),
+               arrowprops=dict(arrowstyle='->', color='red', lw=2.5))
+    
+    # Formatação
+    ax.set_xlabel('Mês/Ano', fontsize=13, fontweight='bold')
+    ax.set_ylabel('Número de Mensagens', fontsize=13, fontweight='bold')
+    ax.set_title('Timeline Completa: Mensagens × Viagens\n"365 Dias de Conexão"', 
+                fontsize=17, fontweight='bold', pad=20)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    plt.xticks(rotation=45, ha='right')
+    
+    # Legenda customizada
+    from matplotlib.patches import Patch
+    legend_elements = [
+        plt.Line2D([0], [0], color=COLORS['P2'], linewidth=3, label='Volume Mensal'),
+        Patch(facecolor=COLORS['P1'], alpha=0.3, label='Marlon viajando'),
+        Patch(facecolor=COLORS['P2'], alpha=0.3, label='Letícia viajando'),
+        plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='gold', 
+                   markersize=15, label='Eventos Especiais')
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', fontsize=11, framealpha=0.95)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print("📊 Timeline detalhada gerada!")
+
+# Gera timeline
+plot_timeline_precise(df, viagens_df)
+```
+
+------------------------------------------------------------------------
+
+## 1️⃣ Heatmap de Atividade (Dia × Hora)
+
+```{python}
+#| label: heatmap-atividade
+#| fig-cap: "Heatmap de Atividade: Quando Mais Conversam"
+#| fig-height: 10
+
+def plot_activity_heatmap(df):
+    """
+    Cria heatmap de atividade: dia da semana × hora do dia.
+    """
+    print("="*80)
+    print("🔥 HEATMAP DE ATIVIDADE")
+    print("="*80)
+    
+    # Prepara dados
+    df_heat = df.copy()
+    df_heat['dia_semana_num'] = df_heat['timestamp'].dt.dayofweek
+    df_heat['hora'] = df_heat['timestamp'].dt.hour
+    
+    # Cria pivot table
+    heatmap_data = df_heat.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+    
+    # Labels dos dias
+    dias_labels = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+    
+    # Cria figura com 3 heatmaps
+    fig, axes = plt.subplots(3, 1, figsize=(18, 14))
+    
+    # ========================================================================
+    # HEATMAP 1: GERAL
+    # ========================================================================
+    ax1 = axes[0]
+    
+    sns.heatmap(heatmap_data, annot=True, fmt='d', cmap='YlOrRd', 
+                cbar_kws={'label': 'Número de Mensagens'},
+                linewidths=0.5, linecolor='gray',
+                ax=ax1)
+    
+    ax1.set_yticklabels(dias_labels, rotation=0)
+    ax1.set_xlabel('Hora do Dia', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Dia da Semana', fontsize=12, fontweight='bold')
+    ax1.set_title('Heatmap de Atividade GERAL\n"Quando Mais Conversam"', 
+                  fontsize=14, fontweight='bold', pad=15)
+    
+    # Encontra pico
+    max_val = heatmap_data.max().max()
+    max_pos = np.where(heatmap_data == max_val)
+    pico_dia = dias_labels[max_pos[0][0]]
+    pico_hora = max_pos[1][0]
+    
+    print(f"\n🔥 Horário de PICO:")
+    print(f"   • {pico_dia} às {pico_hora}h: {max_val:,} mensagens")
+    
+    # ========================================================================
+    # HEATMAP 2: P1
+    # ========================================================================
+    ax2 = axes[1]
+    
+    df_p1 = df_heat[df_heat['remetente'] == 'P1']
+    heatmap_p1 = df_p1.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+    
+    sns.heatmap(heatmap_p1, annot=True, fmt='d', cmap='Blues', 
+                cbar_kws={'label': 'Mensagens P1'},
+                linewidths=0.5, linecolor='gray',
+                ax=ax2)
+    
+    ax2.set_yticklabels(dias_labels, rotation=0)
+    ax2.set_xlabel('Hora do Dia', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Dia da Semana', fontsize=12, fontweight='bold')
+    ax2.set_title('Heatmap P1 (Marlon)\n"Seus Horários de Atividade"', 
+                  fontsize=14, fontweight='bold', pad=15)
+    
+    # ========================================================================
+    # HEATMAP 3: P2
+    # ========================================================================
+    ax3 = axes[2]
+    
+    df_p2 = df_heat[df_heat['remetente'] == 'P2']
+    heatmap_p2 = df_p2.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+    
+    sns.heatmap(heatmap_p2, annot=True, fmt='d', cmap='Reds', 
+                cbar_kws={'label': 'Mensagens P2'},
+                linewidths=0.5, linecolor='gray',
+                ax=ax3)
+    
+    ax3.set_yticklabels(dias_labels, rotation=0)
+    ax3.set_xlabel('Hora do Dia', fontsize=12, fontweight='bold')
+    ax3.set_ylabel('Dia da Semana', fontsize=12, fontweight='bold')
+    ax3.set_title('Heatmap P2 (Letícia)\n"Seus Horários de Atividade"', 
+                  fontsize=14, fontweight='bold', pad=15)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Estatísticas
+    print(f"\n📊 Estatísticas por Período:")
+    
+    periodos = {
+        'Madrugada (0-6h)': range(0, 6),
+        'Manhã (6-12h)': range(6, 12),
+        'Tarde (12-18h)': range(12, 18),
+        'Noite (18-24h)': range(18, 24)
+    }
+    
+    for periodo, horas in periodos.items():
+        total = heatmap_data[list(horas)].sum().sum()
+        pct = (total / len(df) * 100)
+        print(f"   • {periodo}: {total:,} msgs ({pct:.1f}%)")
+    
+    print("\n" + "="*80)
+
+# Gera heatmap
+plot_activity_heatmap(df)
+```
+
+------------------------------------------------------------------------
+
+## 2️⃣ Análise Detalhada de Emojis
+
+```{python}
+#| label: analise-emojis
+#| fig-cap: "Análise Completa de Emojis"
+#| fig-height: 14
+
+def analyze_emojis(df):
+    """
+    Análise completa de uso de emojis.
+    """
+    import re
+    import emoji
+    from collections import Counter
+    
+    print("="*80)
+    print("😊 ANÁLISE DETALHADA DE EMOJIS")
+    print("="*80)
+    
+    # Filtra mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # EXTRAI TODOS OS EMOJIS
+    # ========================================================================
+    
+    def extract_emojis(text):
+        """Extrai emojis de um texto."""
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji.EMOJI_DATA]
+    
+    print("\n🔍 Extraindo emojis...")
+    
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    df_text['emoji_count'] = df_text['emojis_list'].apply(len)
+    
+    # Todos os emojis
+    all_emojis = []
+    emojis_p1 = []
+    emojis_p2 = []
+    
+    for idx, row in df_text.iterrows():
+        emojis = row['emojis_list']
+        all_emojis.extend(emojis)
+        
+        if row['remetente'] == 'P1':
+            emojis_p1.extend(emojis)
+        else:
+            emojis_p2.extend(emojis)
+    
+    # Contadores
+    counter_all = Counter(all_emojis)
+    counter_p1 = Counter(emojis_p1)
+    counter_p2 = Counter(emojis_p2)
+    
+    print(f"\n📊 Estatísticas Gerais:")
+    print(f"   • Total de emojis: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(counter_all)}")
+    print(f"   • Msgs com emoji: {(df_text['emoji_count'] > 0).sum():,} ({(df_text['emoji_count'] > 0).sum()/len(df_text)*100:.1f}%)")
+    print(f"   • Média por mensagem: {df_text['emoji_count'].mean():.2f}")
+    
+    print(f"\n👥 Por Participante:")
+    print(f"   • P1: {len(emojis_p1):,} emojis ({len(emojis_p1)/len(all_emojis)*100:.1f}%)")
+    print(f"   • P2: {len(emojis_p2):,} emojis ({len(emojis_p2)/len(all_emojis)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 1. Top 20 Emojis GERAL
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, :])
+    
+    top_20 = counter_all.most_common(20)
+    emojis_top = [e[0] for e in top_20]
+    counts_top = [e[1] for e in top_20]
+    
+    bars = ax1.barh(range(len(top_20)), counts_top, color=COLORS['neutral'], alpha=0.8, edgecolor='black')
+    ax1.set_yticks(range(len(top_20)))
+    ax1.set_yticklabels([f"{e}  ({c:,})" for e, c in top_20], fontsize=14)
+    ax1.set_xlabel('Frequência', fontsize=12, fontweight='bold')
+    ax1.set_title('Top 20 Emojis Mais Usados (Geral)', fontsize=14, fontweight='bold')
+    ax1.invert_yaxis()
+    ax1.grid(axis='x', alpha=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 2. Top 15 P1
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[1, 0])
+    
+    top_p1 = counter_p1.most_common(15)
+    emojis_p1_top = [e[0] for e in top_p1]
+    counts_p1_top = [e[1] for e in top_p1]
+    
+    bars_p1 = ax2.barh(range(len(top_p1)), counts_p1_top, color=COLORS['P1'], alpha=0.8, edgecolor='black')
+    ax2.set_yticks(range(len(top_p1)))
+    ax2.set_yticklabels([f"{e}  ({c:,})" for e, c in top_p1], fontsize=12)
+    ax2.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 15 Emojis P1 (Marlon)', fontsize=13, fontweight='bold', color=COLORS['P1'])
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 3. Top 15 P2
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, 1])
+    
+    top_p2 = counter_p2.most_common(15)
+    emojis_p2_top = [e[0] for e in top_p2]
+    counts_p2_top = [e[1] for e in top_p2]
+    
+    bars_p2 = ax3.barh(range(len(top_p2)), counts_p2_top, color=COLORS['P2'], alpha=0.8, edgecolor='black')
+    ax3.set_yticks(range(len(top_p2)))
+    ax3.set_yticklabels([f"{e}  ({c:,})" for e, c in top_p2], fontsize=12)
+    ax3.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax3.set_title('Top 15 Emojis P2 (Letícia)', fontsize=13, fontweight='bold', color=COLORS['P2'])
+    ax3.invert_yaxis()
+    ax3.grid(axis='x', alpha=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 4. Evolução Mensal
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df_text['ano_mes'] = df_text['timestamp'].dt.to_period('M')
+    emoji_por_mes = df_text.groupby('ano_mes')['emoji_count'].sum()
+    msgs_por_mes = df_text.groupby('ano_mes').size()
+    emoji_ratio_mes = (emoji_por_mes / msgs_por_mes)
+    
+    meses_dates = [m.to_timestamp() for m in emoji_por_mes.index]
+    
+    ax4_twin = ax4.twinx()
+    
+    # Linha: total de emojis
+    line1 = ax4.plot(meses_dates, emoji_por_mes.values, marker='o', linewidth=3, 
+                     markersize=8, color=COLORS['P2'], label='Total de Emojis', zorder=3)
+    ax4.fill_between(meses_dates, emoji_por_mes.values, alpha=0.2, color=COLORS['P2'])
+    
+    # Linha: ratio
+    line2 = ax4_twin.plot(meses_dates, emoji_ratio_mes.values, marker='s', linewidth=2, 
+                          markersize=7, color=COLORS['P1'], label='Emojis por Mensagem', 
+                          linestyle='--', zorder=3)
+    
+    ax4.set_xlabel('Mês', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Total de Emojis', fontsize=12, fontweight='bold', color=COLORS['P2'])
+    ax4_twin.set_ylabel('Emojis por Mensagem', fontsize=12, fontweight='bold', color=COLORS['P1'])
+    ax4.set_title('Evolução do Uso de Emojis ao Longo do Ano', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    # Legenda combinada
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper left', fontsize=11)
+    
+    plt.suptitle('Análise Completa de Emojis\n"A Linguagem Visual da Conexão"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.show()
+    
+    # Emojis únicos
+    print(f"\n💎 Emojis Únicos:")
+    p1_only = set(counter_p1.keys()) - set(counter_p2.keys())
+    p2_only = set(counter_p2.keys()) - set(counter_p1.keys())
+    
+    print(f"   • Só P1 usa: {len(p1_only)} emojis")
+    if len(p1_only) > 0:
+        print(f"      {' '.join(list(p1_only)[:20])}")
+    
+    print(f"   • Só P2 usa: {len(p2_only)} emojis")
+    if len(p2_only) > 0:
+        print(f"      {' '.join(list(p2_only)[:20])}")
+    
+    print("\n" + "="*80)
+    
+    return counter_all, counter_p1, counter_p2
+
+# Executa análise
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis(df)
+```
+
+------------------------------------------------------------------------
+
+## 2️⃣ Análise Detalhada de Emojis COM EMOJIS COLORIDOS! 🎨
+
+```{python2}
+#| label: analise-emojis-coloridos
+#| fig-cap: "Análise Completa de Emojis (com emojis coloridos!)"
+#| fig-height: 14
+
+def analyze_emojis_colorful(df, emoji_helper):
+    """
+    Análise completa de uso de emojis COM VISUALIZAÇÃO COLORIDA.
+    """
+    import re
+    import emoji as emoji_lib  # Renomeado para não conflitar
+    from collections import Counter
+    
+    print("="*80)
+    print("😊 ANÁLISE DETALHADA DE EMOJIS")
+    print("="*80)
+    
+    # Filtra mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # EXTRAI TODOS OS EMOJIS
+    # ========================================================================
+    
+    def extract_emojis(text):
+        """Extrai emojis de um texto."""
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji_lib.EMOJI_DATA]
+    
+    print("\n🔍 Extraindo emojis...")
+    
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    df_text['emoji_count'] = df_text['emojis_list'].apply(len)
+    
+    # Todos os emojis
+    all_emojis = []
+    emojis_p1 = []
+    emojis_p2 = []
+    
+    for idx, row in df_text.iterrows():
+        emojis = row['emojis_list']
+        all_emojis.extend(emojis)
+        
+        if row['remetente'] == 'P1':
+            emojis_p1.extend(emojis)
+        else:
+            emojis_p2.extend(emojis)
+    
+    # Contadores
+    counter_all = Counter(all_emojis)
+    counter_p1 = Counter(emojis_p1)
+    counter_p2 = Counter(emojis_p2)
+    
+    print(f"\n📊 Estatísticas Gerais:")
+    print(f"   • Total de emojis: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(counter_all)}")
+    print(f"   • Msgs com emoji: {(df_text['emoji_count'] > 0).sum():,} ({(df_text['emoji_count'] > 0).sum()/len(df_text)*100:.1f}%)")
+    print(f"   • Média por mensagem: {df_text['emoji_count'].mean():.2f}")
+    
+    print(f"\n👥 Por Participante:")
+    print(f"   • P1: {len(emojis_p1):,} emojis ({len(emojis_p1)/len(all_emojis)*100:.1f}%)")
+    print(f"   • P2: {len(emojis_p2):,} emojis ({len(emojis_p2)/len(all_emojis)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES COM EMOJIS COLORIDOS!
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 1. Top 20 Emojis GERAL (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, :])
+    
+    top_20 = counter_all.most_common(20)
+    emojis_top = [e[0] for e in top_20]
+    counts_top = [e[1] for e in top_20]
+    
+    bars = ax1.barh(range(len(top_20)), counts_top, color='#4dabf7', alpha=0.6, edgecolor='black')
+    
+    # ADICIONA EMOJIS COLORIDOS NO EIXO Y!
+    ax1.set_yticks(range(len(top_20)))
+    ax1.set_yticklabels([f"     {c:,}" for e, c in top_20], fontsize=12)  # Só número
+    
+    # Adiciona emojis como IMAGENS
+    for i, (emoji_char, count) in enumerate(top_20):
+        emoji_helper.add_emoji(ax1, emoji_char, -max(counts_top)*0.08, i, zoom=0.08)
+    
+    ax1.set_xlabel('Frequência', fontsize=12, fontweight='bold')
+    ax1.set_title('Top 20 Emojis Mais Usados (Geral)', fontsize=14, fontweight='bold')
+    ax1.invert_yaxis()
+    ax1.grid(axis='x', alpha=0.3)
+    ax1.set_xlim(-max(counts_top)*0.1, max(counts_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 2. Top 15 P1 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[1, 0])
+    
+    top_p1 = counter_p1.most_common(15)
+    counts_p1_top = [e[1] for e in top_p1]
+    
+    bars_p1 = ax2.barh(range(len(top_p1)), counts_p1_top, color='#0A0AFF', alpha=0.6, edgecolor='black')
+    
+    ax2.set_yticks(range(len(top_p1)))
+    ax2.set_yticklabels([f"     {c:,}" for e, c in top_p1], fontsize=11)
+    
+    # Emojis coloridos
+    for i, (emoji_char, count) in enumerate(top_p1):
+        emoji_helper.add_emoji(ax2, emoji_char, -max(counts_p1_top)*0.08, i, zoom=0.08)
+    
+    ax2.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 15 Emojis P1 (Marlon)', fontsize=13, fontweight='bold', color='#0A0AFF')
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    ax2.set_xlim(-max(counts_p1_top)*0.1, max(counts_p1_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 3. Top 15 P2 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, 1])
+    
+    top_p2 = counter_p2.most_common(15)
+    counts_p2_top = [e[1] for e in top_p2]
+    
+    bars_p2 = ax3.barh(range(len(top_p2)), counts_p2_top, color='#FF0080', alpha=0.6, edgecolor='black')
+    
+    ax3.set_yticks(range(len(top_p2)))
+    ax3.set_yticklabels([f"     {c:,}" for e, c in top_p2], fontsize=11)
+    
+    # Emojis coloridos
+    for i, (emoji_char, count) in enumerate(top_p2):
+        emoji_helper.add_emoji(ax3, emoji_char, -max(counts_p2_top)*0.08, i, zoom=0.08)
+    
+    ax3.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax3.set_title('Top 15 Emojis P2 (Letícia)', fontsize=13, fontweight='bold', color='#FF0080')
+    ax3.invert_yaxis()
+    ax3.grid(axis='x', alpha=0.3)
+    ax3.set_xlim(-max(counts_p2_top)*0.1, max(counts_p2_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 4. Evolução Mensal (emoji no título!)
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df_text['ano_mes'] = df_text['timestamp'].dt.to_period('M')
+    emoji_por_mes = df_text.groupby('ano_mes')['emoji_count'].sum()
+    msgs_por_mes = df_text.groupby('ano_mes').size()
+    emoji_ratio_mes = (emoji_por_mes / msgs_por_mes)
+    
+    meses_dates = [m.to_timestamp() for m in emoji_por_mes.index]
+    
+    ax4_twin = ax4.twinx()
+    
+    # Linha: total de emojis
+    line1 = ax4.plot(meses_dates, emoji_por_mes.values, marker='o', linewidth=3, 
+                     markersize=8, color='#FF0080', label='Total de Emojis', zorder=3)
+    ax4.fill_between(meses_dates, emoji_por_mes.values, alpha=0.2, color='#FF0080')
+    
+    # Linha: ratio
+    line2 = ax4_twin.plot(meses_dates, emoji_ratio_mes.values, marker='s', linewidth=2, 
+                          markersize=7, color='#0A0AFF', label='Emojis por Mensagem', 
+                          linestyle='--', zorder=3)
+    
+    ax4.set_xlabel('Mes', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Total de Emojis', fontsize=12, fontweight='bold', color='#FF0080')
+    ax4_twin.set_ylabel('Emojis por Mensagem', fontsize=12, fontweight='bold', color='#0A0AFF')
+    ax4.set_title('Evolucao do Uso de Emojis ao Longo do Ano', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    # Legenda combinada
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper left', fontsize=11)
+    
+    plt.suptitle('Analise Completa de Emojis\n"A Linguagem Visual da Conexao"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Limpa coluna temporária
+    df_text.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    # Emojis únicos
+    print(f"\n💎 Emojis Únicos:")
+    p1_only = set(counter_p1.keys()) - set(counter_p2.keys())
+    p2_only = set(counter_p2.keys()) - set(counter_p1.keys())
+    
+    print(f"   • Só P1 usa: {len(p1_only)} emojis")
+    if len(p1_only) > 0:
+        print(f"      {' '.join(list(p1_only)[:20])}")
+    
+    print(f"   • Só P2 usa: {len(p2_only)} emojis")
+    if len(p2_only) > 0:
+        print(f"      {' '.join(list(p2_only)[:20])}")
+    
+    print("\n" + "="*80)
+    
+    return counter_all, counter_p1, counter_p2
+
+# Executa análise COM EMOJIS COLORIDOS!
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```
+
+## 3️⃣ Análise de Áudio vs Texto + Tipos de Mídia
+
+```{python}
+#| label: analise-audio-texto
+#| fig-cap: "Análise de Áudio vs Texto e Tipos de Mídia"
+#| fig-height: 14
+
+def analyze_audio_vs_text(df):
+    """
+    Análise completa de áudio vs texto + tipos de mídia.
+    """
+    print("="*80)
+    print("🎙️ ANÁLISE: ÁUDIO vs TEXTO + TIPOS DE MÍDIA")
+    print("="*80)
+    
+    # ========================================================================
+    # ESTATÍSTICAS GERAIS
+    # ========================================================================
+    
+    total_msgs = len(df)
+    
+    # Por tipo
+    tipo_counts = df['tipo_midia'].value_counts()
+    
+    text_count = (df['tipo_midia'] == 'text').sum()
+    audio_count = (df['tipo_midia'] == 'audio').sum()
+    video_count = (df['tipo_midia'] == 'video').sum()
+    image_count = (df['tipo_midia'] == 'image').sum()
+    sticker_count = (df['tipo_midia'] == 'sticker').sum()
+    
+    print(f"\n📊 Distribuição Geral:")
+    print(f"   • Texto:    {text_count:,} ({text_count/total_msgs*100:.1f}%)")
+    print(f"   • Áudio:    {audio_count:,} ({audio_count/total_msgs*100:.1f}%)")
+    print(f"   • Vídeo:    {video_count:,} ({video_count/total_msgs*100:.1f}%)")
+    print(f"   • Imagem:   {image_count:,} ({image_count/total_msgs*100:.1f}%)")
+    print(f"   • Sticker:  {sticker_count:,} ({sticker_count/total_msgs*100:.1f}%)")
+    
+    # Por participante
+    print(f"\n👥 Por Participante:")
+    
+    for p in ['P1', 'P2']:
+        df_p = df[df['remetente'] == p]
+        p_text = (df_p['tipo_midia'] == 'text').sum()
+        p_audio = (df_p['tipo_midia'] == 'audio').sum()
+        p_video = (df_p['tipo_midia'] == 'video').sum()
+        
+        print(f"\n   {p}:")
+        print(f"      • Texto: {p_text:,} ({p_text/len(df_p)*100:.1f}%)")
+        print(f"      • Áudio: {p_audio:,} ({p_audio/len(df_p)*100:.1f}%)")
+        print(f"      • Vídeo: {p_video:,} ({p_video/len(df_p)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 1. Pizza: Texto vs Outras Mídias
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, 0])
+    
+    media_count = total_msgs - text_count
+    sizes = [text_count, media_count]
+    labels = [f'Texto\n{text_count:,}\n({text_count/total_msgs*100:.1f}%)',
+              f'Mídias\n{media_count:,}\n({media_count/total_msgs*100:.1f}%)']
+    colors = [COLORS['P1'], COLORS['P2']]
+    
+    ax1.pie(sizes, labels=labels, colors=colors, autopct='', startangle=90,
+           textprops={'fontsize': 12, 'fontweight': 'bold'})
+    ax1.set_title('Texto vs Mídias (Geral)', fontsize=14, fontweight='bold')
+    
+    # ------------------------------------------------------------------------
+    # 2. Barras: Tipos de Mídia Detalhado
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[0, 1])
+    
+    top_tipos = tipo_counts.head(6)
+    colors_tipos = [COLORS['P1'], COLORS['P2'], COLORS['neutral'], 
+                    COLORS['P1'], COLORS['P2'], COLORS['neutral']][:len(top_tipos)]
+    
+    bars = ax2.barh(range(len(top_tipos)), top_tipos.values, 
+                   color=colors_tipos, alpha=0.8, edgecolor='black')
+    ax2.set_yticks(range(len(top_tipos)))
+    ax2.set_yticklabels(top_tipos.index, fontsize=11)
+    ax2.set_xlabel('Número de Mensagens', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 6 Tipos de Mídia', fontsize=14, fontweight='bold')
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    
+    for i, v in enumerate(top_tipos.values):
+        pct = (v / total_msgs * 100)
+        ax2.text(v + 500, i, f'{v:,} ({pct:.1f}%)', 
+                va='center', fontsize=10, fontweight='bold')
+    
+    # ------------------------------------------------------------------------
+    # 3. Comparativo P1 vs P2 (Stacked)
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, :])
+    
+    tipos_principais = ['text', 'audio', 'video', 'image', 'sticker']
+    
+    p1_counts = []
+    p2_counts = []
+    
+    for tipo in tipos_principais:
+        p1_counts.append((df[(df['remetente'] == 'P1') & (df['tipo_midia'] == tipo)]).shape[0])
+        p2_counts.append((df[(df['remetente'] == 'P2') & (df['tipo_midia'] == tipo)]).shape[0])
+    
+    x = np.arange(len(tipos_principais))
+    width = 0.35
+    
+    bars1 = ax3.bar(x - width/2, p1_counts, width, label='P1', 
+                   color=COLORS['P1'], alpha=0.8, edgecolor='black')
+    bars2 = ax3.bar(x + width/2, p2_counts, width, label='P2', 
+                   color=COLORS['P2'], alpha=0.8, edgecolor='black')
+    
+    ax3.set_xlabel('Tipo de Mídia', fontsize=12, fontweight='bold')
+    ax3.set_ylabel('Número de Mensagens', fontsize=12, fontweight='bold')
+    ax3.set_title('Comparativo P1 vs P2 por Tipo de Mídia', fontsize=14, fontweight='bold')
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(tipos_principais)
+    ax3.legend(fontsize=11)
+    ax3.grid(axis='y', alpha=0.3)
+    
+    # Adiciona valores
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            if height > 0:
+                ax3.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height):,}',
+                        ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    # ------------------------------------------------------------------------
+    # 4. Evolução Mensal por Tipo (P1 e P2)
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    
+    # Agrupa por mês e tipo
+    tipos_mes = df.groupby(['ano_mes', 'tipo_midia']).size().unstack(fill_value=0)
+    
+    meses_dates = [m.to_timestamp() for m in tipos_mes.index]
+    
+    # Plot linhas principais
+    ax4.plot(meses_dates, tipos_mes['text'], marker='o', linewidth=3, 
+            markersize=7, label='Texto', color=COLORS['P1'])
+    ax4.plot(meses_dates, tipos_mes['audio'], marker='s', linewidth=2, 
+            markersize=6, label='Áudio', color=COLORS['P2'])
+    ax4.plot(meses_dates, tipos_mes['video'], marker='^', linewidth=2, 
+            markersize=6, label='Vídeo', color='purple', linestyle='--')
+    ax4.plot(meses_dates, tipos_mes['image'], marker='d', linewidth=2, 
+            markersize=6, label='Imagem', color='green', linestyle='--')
+    
+    ax4.set_xlabel('Mês', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Número de Mensagens', fontsize=12, fontweight='bold')
+    ax4.set_title('Evolução Mensal por Tipo de Mídia', fontsize=14, fontweight='bold')
+    ax4.legend(fontsize=11, loc='upper left')
+    ax4.grid(True, alpha=0.3)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    plt.suptitle('Análise Completa: Áudio vs Texto vs Outras Mídias\n"Estilos de Comunicação"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.show()
+    
+    # Estatísticas de áudios transcritos
+    audio_transcribed = (df[df['tipo_midia'].isin(['audio', 'video'])]['status_midia'] == 'transcribed').sum()
+    audio_total = (df['tipo_midia'].isin(['audio', 'video'])).sum()
+    
+    print(f"\n🎙️ Transcrições:")
+    print(f"   • Áudios/Vídeos transcritos: {audio_transcribed:,} ({audio_transcribed/audio_total*100:.1f}%)")
+    print(f"   • Não transcritos: {audio_total - audio_transcribed:,}")
+    
+    print("\n" + "="*80)
+
+# Executa análise
+analyze_audio_vs_text(df)
+```
+
+------------------------------------------------------------------------
+
+Pronto! As **3 análises completas**! 🎉
+
+Cada uma tem: - ✅ Estatísticas detalhadas - ✅ Múltiplas visualizações - ✅ Comparativo P1 vs P2 - ✅ Evolução temporal
+
+------------------------------------------------------------------------
+
+# Mega timeline
+
+```{python}
+#| label: timeline-final-legendas-personalizadas
+#| fig-cap: "Timeline Final: Legendas Personalizadas"
+#| fig-height: 10
+
+def plot_timeline_final_legendas_custom(df, viagens_df, 
+                                        usar_linha_ondulada=True):
+    """
+    Timeline com legendas reorganizadas e personalizadas.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import datetime, timedelta
+    import numpy as np
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    
+    COLORS_PALETTE_0 = {
+        'P1': '#7c3aed',
+        'P2': '#059669',
+        'total': '#6b7280',
+        'viagens_bg': '#9ca2faff',
+        'text': '#3b82f6',
+        'audio': '#ef4444',
+        'video': '#8b5cf6',
+        'image': '#10b981',
+        'pct_juntos': '#9ca2faff'
+    }
+
+    COLORS_PALETTE_1 = {
+        'P1': '#ff6b6b',      # Coral vibrante (Marlon)
+        'P2': '#4ecdc4',      # Turquesa suave (Letícia)
+        'total': '#95a5a6',   # Cinza neutro
+        'viagens_bg': '#e8f4f8',  # Azul claríssimo
+        'text': '#3498db',    # Azul royal
+        'audio': '#e74c3c',   # Vermelho forte
+        'video': '#9b59b6',   # Roxo médio
+        'image': '#2ecc71',   # Verde esmeralda
+        'pct_juntos': '#48c9b0'  # Verde-água brilhante
+    }
+    COLORS_PALETTE_2 = {
+        'P1': '#8e44ad',      # Roxo profundo (Marlon)
+        'P2': '#16a085',      # Verde petróleo (Letícia)
+        'total': '#7f8c8d',   # Cinza médio
+        'viagens_bg': '#ecf0f1',  # Cinza claríssimo
+        'text': '#2980b9',    # Azul escuro
+        'audio': '#c0392b',   # Vermelho tijolo
+        'video': '#d35400',   # Laranja queimado
+        'image': '#27ae60',   # Verde floresta
+        'pct_juntos': '#1abc9c'  # Turquesa vibrante
+    }
+    COLORS_PALETTE_3 = {
+        'P1': '#e91e63',      # Pink magenta (Marlon)
+        'P2': '#00bcd4',      # Ciano elétrico (Letícia)
+        'total': '#9e9e9e',   # Cinza neutro
+        'viagens_bg': '#f3e5f5',  # Lavanda claríssimo
+        'text': '#2196f3',    # Azul material
+        'audio': '#ff5722',   # Laranja vibrante
+        'video': '#673ab7',   # Roxo deep
+        'image': '#4caf50',   # Verde lime
+        'pct_juntos': '#26c6da'  # Ciano claro brilhante
+    }
+    COLORS_PALETTE_4 = {
+        'P1': '#d35400',      # Laranja terroso (Marlon)
+        'P2': '#16a085',      # Verde jade (Letícia)
+        'total': '#95a5a6',   # Cinza pedra
+        'viagens_bg': '#fef5e7',  # Bege claríssimo
+        'text': '#2980b9',    # Azul profundo
+        'audio': '#c0392b',   # Terracota
+        'video': '#8e44ad',   # Roxo berinjela
+        'image': '#27ae60',   # Verde folha
+        'pct_juntos': '#1abc9c'  # Verde menta
+    }
+    COLORS_PALETTE_5 = {
+        'P1': '#ff0080',      # Pink neon (Marlon)
+        'P2': '#00ff9f',      # Verde neon (Letícia)
+        'total': '#8b9dc3',   # Azul acinzentado
+        'viagens_bg': '#f0f3ff',  # Azul gelo
+        'text': '#0080ff',    # Azul elétrico
+        'audio': '#ff3366',   # Rosa forte
+        'video': '#9933ff',   # Roxo neon
+        'image': '#00ff66',   # Verde limão
+        'pct_juntos': '#00ffcc'  # Ciano neon
+    }
+    COLORS_PALETTE_6 = {
+        'P1': '#ff6b9d',      # Rosa quente (Marlon)
+        'P2': '#4dabf7',      # Azul céu (Letícia)
+        'total': '#868e96',   # Cinza neutro
+        'viagens_bg': '#e7d4ff',  # Lavanda clara (combina com onda!)
+        'text': '#1c7ed6',    # Azul forte
+        'audio': '#f03e3e',   # Vermelho vibrante
+        'video': '#fa5252',   # Coral
+        'image': '#37b24d',   # Verde vivo
+        'pct_juntos': '#9775fa'  # ROXO VIBRANTE (onda!)
+    }
+    COLORS_PALETTE_7 = {
+        'P1': '#be4bdb',      # Roxo médio (Marlon)
+        'P2': '#1098ad',      # Azul petróleo (Letícia)
+        'total': '#868e96',   # Cinza
+        'viagens_bg': '#ffb691ff',  # Amarelo clarinho (combina com onda!)
+        'text': '#1864ab',    # Azul
+        'audio': '#f03e3e',   # Vermelho
+        'video': '#d6336c',   # Rosa forte
+        'image': '#37b24d',   # Verde
+        'pct_juntos': '#fab005'  # AMARELO LIMÃO (onda!)
+    }
+    COLORS_PALETTE_8 = {
+        'P1': '#5f3dc4',      # Roxo profundo (Marlon)
+        'P2': '#0c8599',      # Verde petróleo (Letícia)
+        'total': '#74808b',   # Cinza azulado
+        'viagens_bg': '#ffe0f5',  # Rosa clarinho (combina com onda!)
+        'text': '#1971c2',    # Azul
+        'audio': '#e8590c',   # Laranja queimado
+        'video': '#9c36b5',   # Roxo
+        'image': '#2f9e44',   # Verde
+        'pct_juntos': '#f06595'  # PINK VIBRANTE (onda!)
+    }
+    COLORS_PALETTE_9 = {
+        'P1': '#d6336c',      # Magenta profundo (Marlon)
+        'P2': '#0ca678',      # Verde jade (Letícia)
+        'total': '#74808b',   # Cinza azulado
+        'viagens_bg': '#fb9ba6ff',  # Pêssego claro (combina com onda!)
+        'text': '#1971c2',    # Azul royal
+        'audio': '#e03131',   # Vermelho
+        'video': '#ae3ec9',   # Roxo
+        'image': '#2f9e44',   # Verde floresta
+        'pct_juntos': '#fd7e14'  # LARANJA INTENSO (onda!)
+    }
+    COLORS_PALETTE_10 = {
+        'viagens_bg': '#f6db8bff',
+        'pct_juntos': '#E9A53A',
+
+        'P1': '#181bc9ff',           # rosa escuro
+        'P2': '#0bb8daff',           # azul marinho petróleo
+
+        'text':  '#d81dc2ff',
+        'audio': '#C1121F',
+        'video': '#2E7D32',
+        'image': '#9C27B0',
+        'total': '#74808b'
+    }
+    COLORS_PALETTE_11 = {
+        'viagens_bg': '#FFF1CE',     # creme amarelo claro
+        'pct_juntos': '#F4A300',
+
+        'P1': '#C9184A',             # magenta cereja
+        'P2': '#0081A7',             # teal petróleo vibrante
+
+        'text':  '#7B2CBF',          # roxo forte
+        'audio': '#E63946',          # vermelho coral intenso
+        'video': '#2A9D8F',          # verde-azulado
+        'image': '#F72585',          # rosa neon
+        'total': '#74808b'
+    }
+    COLORS_PALETTE_12 = {
+        'viagens_bg': '#f6d4a5ff',     # pêssego bem claro
+        'pct_juntos': '#f69e2cff',
+
+        'P1': '#0A0AFF',             # azul royal
+        'P2': '#FF0080',             # pink neon
+
+        'text':  '#0099F6',          # ciano forte
+        'audio': '#E63946',          # vermelho
+        'video': '#2ECC71',          # verde forte
+        'image': '#9C27B0',          # roxo vívido
+        'total': '#74808b'
+    }
+    COLORS_NEW = COLORS_PALETTE_12 
+    # COLORS_PALETTE_10 e 11 as melhores.
+    
+    # ========================================================================
+    # DADOS (mesmo código completo anterior)
+    # ========================================================================
+    
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    max_viagem_date = viagens_df['fim'].max()
+    min_period = msgs_por_mes_p.index.min()
+    max_period = pd.Period(max_viagem_date, 'M')
+    all_periods = pd.period_range(start=min_period, end=max_period, freq='M')
+    msgs_por_mes_p = msgs_por_mes_p.reindex(all_periods, fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    tipos_mes = df.groupby(['ano_mes', 'tipo_midia']).size().unstack(fill_value=0)
+    tipos_mes = tipos_mes.reindex(all_periods, fill_value=0)
+    
+    text_values = tipos_mes.get('text', pd.Series(0, index=tipos_mes.index)).values
+    audio_values = tipos_mes.get('audio', pd.Series(0, index=tipos_mes.index)).values
+    video_values = tipos_mes.get('video', pd.Series(0, index=tipos_mes.index)).values
+    image_values = tipos_mes.get('image', pd.Series(0, index=tipos_mes.index)).values
+    
+    # % Dias juntos
+    data_inicio = df['timestamp'].min().date()
+    primeiro_dia = min(data_inicio, viagens_df['inicio'].min().date())
+    ultimo_dia = viagens_df['fim'].max().date()
+    all_dates = pd.date_range(start=primeiro_dia, end=ultimo_dia, freq='D').date
+    
+    dias_juntos_set = set()
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio'].date()
+        fim = viagem['fim'].date()
+        current_date = inicio
+        while current_date <= fim:
+            dias_juntos_set.add(current_date)
+            current_date += timedelta(days=1)
+    
+    dias_df = pd.DataFrame({
+        'data': all_dates,
+        'juntos': [d in dias_juntos_set for d in all_dates]
+    })
+    dias_df['ano_mes'] = pd.to_datetime(dias_df['data']).dt.to_period('M')
+    
+    por_mes = dias_df.groupby('ano_mes').agg({
+        'juntos': 'sum',
+        'data': 'count'
+    }).rename(columns={'juntos': 'dias_juntos', 'data': 'total_dias'})
+    por_mes['pct_juntos'] = (por_mes['dias_juntos'] / por_mes['total_dias'] * 100)
+    por_mes = por_mes.reindex(all_periods, fill_value=0)
+    por_mes['pct_juntos'] = por_mes['pct_juntos'].fillna(0)
+    
+    pct_juntos_values = por_mes['pct_juntos'].values
+    
+    # Linha ondulada
+    if usar_linha_ondulada:
+        try:
+            from scipy.interpolate import make_interp_spline
+            dates_num = mdates.date2num(dates)
+            spline = make_interp_spline(dates_num, pct_juntos_values, k=3)
+            dates_smooth_num = np.linspace(dates_num.min(), dates_num.max(), 300)
+            pct_smooth = spline(dates_smooth_num)
+            pct_smooth = np.clip(pct_smooth, 0, 105)
+            dates_smooth = mdates.num2date(dates_smooth_num)
+        except:
+            dates_smooth = dates
+            pct_smooth = pct_juntos_values
+    else:
+        dates_smooth = dates
+        pct_smooth = pct_juntos_values
+    
+    # ========================================================================
+    # FIGURA
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(22, 10))
+    
+    ax2 = fig.add_subplot(111)
+    ax1 = ax2.twinx()
+    
+    ax1.set_zorder(ax2.get_zorder() + 1)
+    ax1.patch.set_visible(False)
+    
+    # ========================================================================
+    # LABELS (código completo da versão anterior)
+    # ========================================================================
+    
+    viagens_sorted = viagens_df.sort_values('inicio').reset_index(drop=True)
+    labels_info = []
+    
+    for idx, viagem in viagens_sorted.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        if 'Marlon' in tipo or 'BSB' in viagem['nome']:
+            pessoa = 'Marlon'
+            local = 'BSB'
+            cor_texto = COLORS_NEW['P1']
+        else:
+            pessoa = 'Letícia'
+            if 'SP' in viagem['nome'] and 'Hostel' in viagem['nome']:
+                local = 'SP (Hostel)'
+            elif 'SP' in viagem['nome'] and 'Trampo' in viagem['nome']:
+                local = 'SP (Trabalho)'
+            elif 'Sorocaba' in viagem['nome']:
+                local = 'Sorocaba'
+            else:
+                local = 'SP'
+            cor_texto = COLORS_NEW['P2']
+        
+        label_texto = f"{pessoa} @ {local}"
+        largura_chars = len(label_texto)
+        largura_dias = largura_chars * 2.5
+        
+        labels_info.append({
+            'inicio': inicio,
+            'fim': fim,
+            'inicio_num': mdates.date2num(inicio),
+            'fim_num': mdates.date2num(fim),
+            'texto': label_texto,
+            'cor': '#6c6b6bff',# cor_texto,
+            'largura_dias': largura_dias,
+            'nivel': None
+        })
+    
+    max_value = max(total_values)
+    
+    for i, label_info in enumerate(labels_info):
+        nivel_escolhido = 0
+        label_x_inicio = label_info['inicio_num'] + 1
+        label_x_fim = label_x_inicio + label_info['largura_dias']
+        
+        for nivel_teste in range(10):
+            tem_conflito = False
+            for j in range(i):
+                outro_label = labels_info[j]
+                if outro_label['nivel'] == nivel_teste:
+                    outro_x_inicio = outro_label['inicio_num'] + 1
+                    outro_x_fim = outro_x_inicio + outro_label['largura_dias']
+                    margem = 5
+                    if not (label_x_fim + margem < outro_x_inicio or 
+                            label_x_inicio - margem > outro_x_fim):
+                        tem_conflito = True
+                        break
+            if not tem_conflito:
+                nivel_escolhido = nivel_teste
+                break
+        
+        labels_info[i]['nivel'] = nivel_escolhido
+    
+    # Desenha viagens
+    for idx, viagem in viagens_sorted.iterrows():
+        ax1.axvspan(viagem['inicio'], viagem['fim'], 
+                   alpha=0.12, color=COLORS_NEW['viagens_bg'], 
+                   edgecolor='none', zorder=2)
+    
+    # Desenha labels
+    for label_info in labels_info:
+        nivel = label_info['nivel']
+        y_topo = max_value * 1.10
+        y_offset = nivel * (max_value * 0.045)
+        y_pos = y_topo - y_offset
+        
+        ax1.text(label_info['inicio'] + timedelta(days=1),
+                y_pos, label_info['texto'],
+                fontsize=10,
+                color=label_info['cor'], rotation=0,
+                va='bottom', ha='left', alpha=0.85,
+                #bbox=dict(boxstyle='round,pad=0.3', 
+                #         facecolor='white', 
+                #         edgecolor=label_info['cor'], 
+                #         alpha=0.8, linewidth=1.5),
+                zorder=15)
+    
+    # Marcos
+    ax1.axvline(x=pd.Timestamp('2024-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    ax1.axvline(x=pd.Timestamp('2025-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    
+    # ========================================================================
+    # VERDE
+    # ========================================================================
+    
+    ax2.fill_between(dates_smooth, pct_smooth, 
+                    alpha=0.12, color=COLORS_NEW['pct_juntos'])
+    
+    ax2.plot(dates_smooth, pct_smooth, 
+            linewidth=0, color=COLORS_NEW['pct_juntos'],
+            alpha=0.8)
+    
+    ax2.scatter(dates, pct_juntos_values, 
+               s=80, color=COLORS_NEW['pct_juntos'],
+               edgecolors='white', linewidths=0, zorder=5)
+    
+    for x, y in zip(dates, pct_juntos_values):
+        if y > 0:
+            ax2.text(x, y + 2.5, f'{y:.0f}%', 
+                    ha='center', va='bottom', 
+                    fontsize=13, fontweight='bold', 
+                    color=COLORS_NEW['pct_juntos'])
+    
+    ax2.set_ylabel('% de Dias Juntos no Mês', fontsize=13, fontweight='bold', 
+                   color=COLORS_NEW['pct_juntos'])
+    ax2.tick_params(axis='y', labelcolor=COLORS_NEW['pct_juntos'])
+    ax2.set_ylim(0, 120)
+    ax2.grid(False)
+    
+    # ========================================================================
+    # LINHAS
+    # ========================================================================
+    
+    ax1.plot(dates, text_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['text'], alpha=0.5)
+    ax1.plot(dates, audio_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['audio'], alpha=0.5)
+    ax1.plot(dates, video_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['video'], alpha=0.5)
+    ax1.plot(dates, image_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['image'], alpha=0.5)
+    
+    ax1.plot(dates, p1_values, linewidth=3, 
+            color=COLORS_NEW['P1'], alpha=0.95)
+    ax1.plot(dates, p2_values, linewidth=3, 
+            color=COLORS_NEW['P2'], alpha=0.95)
+    ax1.plot(dates, total_values, linewidth=1, 
+            color=COLORS_NEW['total'], alpha=0.4, linestyle='--')
+    
+    # ========================================================================
+    # FORMATAÇÃO
+    # ========================================================================
+    
+    ax1.set_xlabel('Mês/Ano', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Número de Mensagens', fontsize=13, fontweight='bold')
+    ax1.set_ylim(0, max_value * 1.13)
+    
+    tipo_linha = "Ondulada" if usar_linha_ondulada else "Reta"
+    ax1.set_title(f'Timeline Ultimate: Legendas Personalizadas ({tipo_linha})\n"Um Ano em Dados Completos"', 
+                 fontsize=17, fontweight='bold', pad=20)
+    ax1.grid(False)
+    
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax1.xaxis.set_major_locator(mdates.MonthLocator())
+    ax1.tick_params(axis='x', rotation=45)
+    
+    ax1.minorticks_off()
+    ax2.minorticks_off()
+    
+    # ========================================================================
+    # LEGENDAS PERSONALIZADAS!
+    # ========================================================================
+    
+    # LEGENDA 1: Volume (P1, P2, Total + Tipos)
+    elementos_volume = [
+        Line2D([0], [0], color=COLORS_NEW['P1'], linewidth=3, label='P1 (Marlon)'),
+        Line2D([0], [0], color=COLORS_NEW['P2'], linewidth=3, label='P2 (Letícia)'),
+        Line2D([0], [0], color=COLORS_NEW['total'], linewidth=1, linestyle='--', label='Total'),
+        Line2D([0], [0], color=COLORS_NEW['text'], linewidth=1, marker='o', label='Texto'),
+        Line2D([0], [0], color=COLORS_NEW['audio'], linewidth=1, marker='o', label='Áudio'),
+        Line2D([0], [0], color=COLORS_NEW['video'], linewidth=1, marker='o', label='Vídeo'),
+        Line2D([0], [0], color=COLORS_NEW['image'], linewidth=1, marker='o', label='Imagem'),
+    ]
+    
+    legend1 = ax1.legend(handles=elementos_volume,
+                        loc='upper left', fontsize=10, framealpha=0.95, 
+                        title='📊 Volume de Mensagens', title_fontsize=11, 
+                        edgecolor='black', fancybox=True)
+    
+    # LEGENDA 2: Contexto (Dias Juntos, Viagens, Aniversário)
+    elementos_contexto = [
+        Patch(facecolor=COLORS_NEW['pct_juntos'], alpha=0.3, 
+              edgecolor=COLORS_NEW['pct_juntos'], linewidth=2, 
+              label='% Dias Juntos'),
+        Patch(facecolor=COLORS_NEW['viagens_bg'], alpha=0.12, 
+              edgecolor='gray', linewidth=1, 
+              label='Período de Viagem'),
+        Line2D([0], [0], color='#dc2626', linewidth=2, 
+               label='Aniversário Namoro'),
+    ]
+    
+    legend2 = ax1.legend(handles=elementos_contexto,
+                        loc='lower left', fontsize=10, framealpha=0.95, 
+                        title='🗓️ Contexto Temporal', title_fontsize=11,
+                        edgecolor='black', fancybox=True)
+    
+    ax1.add_artist(legend1)
+    
+    # ========================================================================
+    # STATS
+    # ========================================================================
+    
+    total_p1 = p1_values.sum()
+    total_p2 = p2_values.sum()
+    total_geral = total_values.sum()
+    
+    stats_text = (f'📊 Msgs: {total_geral:,} | P1: {total_p1:,} ({total_p1/total_geral*100:.1f}%) | '
+                 f'P2: {total_p2:,} ({total_p2/total_geral*100:.1f}%)')
+    
+    ax1.text(0.5, -0.12, stats_text, transform=ax1.transAxes,
+            fontsize=11, fontweight='bold', ha='center',
+            bbox=dict(boxstyle='round,pad=0.6', facecolor='white', 
+                     edgecolor='black', linewidth=2, alpha=0.95))
+    
+    plt.tight_layout()
+    plt.show()
+    
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    print("✅ Timeline com legendas personalizadas!")
+    print("   • Legenda 1: Volume (P1, P2, Total + Tipos)")
+    print("   • Legenda 2: Contexto (Dias Juntos, Viagens, Aniversário)")
+
+# Gera
+plot_timeline_final_legendas_custom(df, viagens_df, usar_linha_ondulada=True)
+```
+
+```{python2}
+#| label: timeline-ultimate-final
+#| fig-cap: "Timeline Ultimate: Versão Final Completa"
+#| fig-height: 10
+
+def plot_timeline_ultimate_final(df, viagens_df, usar_linha_ondulada=True):
+    """
+    Timeline ULTIMATE - Versão Final com todas as features.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import datetime, timedelta
+    import numpy as np
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    
+    # ========================================================================
+    # PALETAS DE CORES
+    # ========================================================================
+    
+    COLORS_PALETTE_12 = {
+        'viagens_bg': '#f6d4a5ff',     # pêssego bem claro
+        'pct_juntos': '#f69e2cff',
+        'P1': '#0A0AFF',             # azul royal
+        'P2': '#FF0080',             # pink neon
+        'text':  '#0099F6',          # ciano forte
+        'audio': '#E63946',          # vermelho
+        'video': '#2ECC71',          # verde forte
+        'image': '#9C27B0',          # roxo vívido
+        'total': '#74808b'
+    }
+    
+    # ESCOLHA A PALETA AQUI!
+    COLORS_NEW = COLORS_PALETTE_12 
+    # COLORS_PALETTE_10 e 11 as melhores.
+    
+    # ========================================================================
+    # DADOS
+    # ========================================================================
+    
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    max_viagem_date = viagens_df['fim'].max()
+    min_period = msgs_por_mes_p.index.min()
+    max_period = pd.Period(max_viagem_date, 'M')
+    all_periods = pd.period_range(start=min_period, end=max_period, freq='M')
+    msgs_por_mes_p = msgs_por_mes_p.reindex(all_periods, fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    tipos_mes = df.groupby(['ano_mes', 'tipo_midia']).size().unstack(fill_value=0)
+    tipos_mes = tipos_mes.reindex(all_periods, fill_value=0)
+    
+    text_values = tipos_mes.get('text', pd.Series(0, index=tipos_mes.index)).values
+    audio_values = tipos_mes.get('audio', pd.Series(0, index=tipos_mes.index)).values
+    video_values = tipos_mes.get('video', pd.Series(0, index=tipos_mes.index)).values
+    image_values = tipos_mes.get('image', pd.Series(0, index=tipos_mes.index)).values
+    
+    # % Dias juntos
+    data_inicio = df['timestamp'].min().date()
+    primeiro_dia = min(data_inicio, viagens_df['inicio'].min().date())
+    ultimo_dia = viagens_df['fim'].max().date()
+    all_dates = pd.date_range(start=primeiro_dia, end=ultimo_dia, freq='D').date
+    
+    dias_juntos_set = set()
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio'].date()
+        fim = viagem['fim'].date()
+        current_date = inicio
+        while current_date <= fim:
+            dias_juntos_set.add(current_date)
+            current_date += timedelta(days=1)
+    
+    # CALCULA TOTAL DE DIAS JUNTOS E % DO ANO
+    total_dias_juntos = len(dias_juntos_set)
+    total_dias_periodo = (ultimo_dia - primeiro_dia).days + 1
+    pct_ano_juntos = (total_dias_juntos / total_dias_periodo * 100)
+    
+    dias_df = pd.DataFrame({
+        'data': all_dates,
+        'juntos': [d in dias_juntos_set for d in all_dates]
+    })
+    dias_df['ano_mes'] = pd.to_datetime(dias_df['data']).dt.to_period('M')
+    
+    por_mes = dias_df.groupby('ano_mes').agg({
+        'juntos': 'sum',
+        'data': 'count'
+    }).rename(columns={'juntos': 'dias_juntos', 'data': 'total_dias'})
+    por_mes['pct_juntos'] = (por_mes['dias_juntos'] / por_mes['total_dias'] * 100)
+    por_mes = por_mes.reindex(all_periods, fill_value=0)
+    por_mes['pct_juntos'] = por_mes['pct_juntos'].fillna(0)
+    
+    pct_juntos_values = por_mes['pct_juntos'].values
+    
+    # Linha ondulada
+    if usar_linha_ondulada:
+        try:
+            from scipy.interpolate import make_interp_spline
+            dates_num = mdates.date2num(dates)
+            spline = make_interp_spline(dates_num, pct_juntos_values, k=3)
+            dates_smooth_num = np.linspace(dates_num.min(), dates_num.max(), 300)
+            pct_smooth = spline(dates_smooth_num)
+            pct_smooth = np.clip(pct_smooth, 0, 105)
+            dates_smooth = mdates.num2date(dates_smooth_num)
+        except:
+            dates_smooth = dates
+            pct_smooth = pct_juntos_values
+    else:
+        dates_smooth = dates
+        pct_smooth = pct_juntos_values
+    
+    # ========================================================================
+    # FIGURA
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(22, 10))
+    
+    ax2 = fig.add_subplot(111)
+    ax1 = ax2.twinx()
+    
+    ax1.set_zorder(ax2.get_zorder() + 1)
+    ax1.patch.set_visible(False)
+    
+    # ========================================================================
+    # LABELS COM DURAÇÃO [XD]
+    # ========================================================================
+    
+    viagens_sorted = viagens_df.sort_values('inicio').reset_index(drop=True)
+    labels_info = []
+    
+    for idx, viagem in viagens_sorted.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        
+        # Calcula duração em dias
+        duracao_dias = (fim.date() - inicio.date()).days + 1
+        
+        if 'Marlon' in tipo or 'BSB' in viagem['nome']:
+            pessoa = 'Marlon'
+            local = 'BSB'
+            cor_texto = COLORS_NEW['P1']
+        else:
+            pessoa = 'Letícia'
+            if 'SP' in viagem['nome'] and 'Hostel' in viagem['nome']:
+                local = 'SP (Hostel)'
+            elif 'SP' in viagem['nome'] and 'Trampo' in viagem['nome']:
+                local = 'SP (Trabalho)'
+            elif 'Sorocaba' in viagem['nome']:
+                local = 'Sorocaba'
+            else:
+                local = 'SP'
+            cor_texto = COLORS_NEW['P2']
+        
+        # ADICIONA [XD] NO LABEL
+        #label_texto = f"{pessoa} @ {local} {duracao_dias} dias"
+        label_texto = f"{local} - {duracao_dias} dias"
+        largura_chars = len(label_texto)
+        largura_dias = largura_chars * 2.5
+        
+        labels_info.append({
+            'inicio': inicio,
+            'fim': fim,
+            'inicio_num': mdates.date2num(inicio),
+            'fim_num': mdates.date2num(fim),
+            'texto': label_texto,
+            'cor': '#6c6b6bff',  # Cinza neutro
+            'largura_dias': largura_dias,
+            'nivel': None
+        })
+    
+    max_value = max(total_values)
+    
+    # Detecção de colisão
+    for i, label_info in enumerate(labels_info):
+        nivel_escolhido = 0
+        label_x_inicio = label_info['inicio_num'] + 1
+        label_x_fim = label_x_inicio + label_info['largura_dias']
+        
+        for nivel_teste in range(10):
+            tem_conflito = False
+            for j in range(i):
+                outro_label = labels_info[j]
+                if outro_label['nivel'] == nivel_teste:
+                    outro_x_inicio = outro_label['inicio_num'] + 1
+                    outro_x_fim = outro_x_inicio + outro_label['largura_dias']
+                    margem = 5
+                    if not (label_x_fim + margem < outro_x_inicio or 
+                            label_x_inicio - margem > outro_x_fim):
+                        tem_conflito = True
+                        break
+            if not tem_conflito:
+                nivel_escolhido = nivel_teste
+                break
+        
+        labels_info[i]['nivel'] = nivel_escolhido
+    
+    # Desenha viagens
+    for idx, viagem in viagens_sorted.iterrows():
+        ax1.axvspan(viagem['inicio'], viagem['fim'], 
+                   alpha=0.12, color=COLORS_NEW['viagens_bg'], 
+                   edgecolor='none', zorder=2)
+    
+    # Desenha labels
+    for label_info in labels_info:
+        nivel = label_info['nivel']
+        y_topo = max_value * 1.10
+        y_offset = nivel * (max_value * 0.045)
+        y_pos = y_topo - y_offset
+        
+        ax1.text(label_info['inicio'] + timedelta(days=1),
+                y_pos, label_info['texto'],
+                fontsize=10,
+                color=label_info['cor'], rotation=0,
+                va='bottom', ha='left', alpha=0.85,
+                zorder=15)
+    
+    # Marcos
+    ax1.axvline(x=pd.Timestamp('2024-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    ax1.axvline(x=pd.Timestamp('2025-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    
+    # ========================================================================
+    # ONDA
+    # ========================================================================
+    
+    ax2.fill_between(dates_smooth, pct_smooth, 
+                    alpha=0.12, color=COLORS_NEW['pct_juntos'])
+    
+    ax2.plot(dates_smooth, pct_smooth, 
+            linewidth=0, color=COLORS_NEW['pct_juntos'],
+            alpha=0.8)
+    
+    ax2.scatter(dates, pct_juntos_values, 
+               s=80, color=COLORS_NEW['pct_juntos'],
+               edgecolors='white', linewidths=0, zorder=5)
+    
+    for x, y in zip(dates, pct_juntos_values):
+        if y > 0:
+            ax2.text(x, y + 2.5, f'{y:.0f}%', 
+                    ha='center', va='bottom', 
+                    fontsize=13, fontweight='bold', 
+                    color=COLORS_NEW['pct_juntos'])
+    
+    ax2.set_ylabel('% de Dias Juntos no Mes', fontsize=13, fontweight='bold', 
+                   color=COLORS_NEW['pct_juntos'])
+    ax2.tick_params(axis='y', labelcolor=COLORS_NEW['pct_juntos'])
+    ax2.set_ylim(0, 120)
+    ax2.grid(False)
+    
+    # ========================================================================
+    # LINHAS
+    # ========================================================================
+    
+    ax1.plot(dates, text_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['text'], alpha=0.5)
+    ax1.plot(dates, audio_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['audio'], alpha=0.5)
+    ax1.plot(dates, video_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['video'], alpha=0.5)
+    ax1.plot(dates, image_values, marker='o', linewidth=1, 
+            color=COLORS_NEW['image'], alpha=0.5)
+    
+    ax1.plot(dates, p1_values, linewidth=3, 
+            color=COLORS_NEW['P1'], alpha=0.95)
+    ax1.plot(dates, p2_values, linewidth=3, 
+            color=COLORS_NEW['P2'], alpha=0.95)
+    ax1.plot(dates, total_values, linewidth=1, 
+            color=COLORS_NEW['total'], alpha=0.4, linestyle='--')
+    
+    # ========================================================================
+    # FORMATAÇÃO
+    # ========================================================================
+    
+    ax1.set_xlabel('Mes/Ano', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Numero de Mensagens', fontsize=13, fontweight='bold')
+    ax1.set_ylim(0, max_value * 1.13)
+    
+    tipo_linha = "Ondulada" if usar_linha_ondulada else "Reta"
+    ax1.set_title(f'Timeline Ultimate: Versao Final Completa ({tipo_linha})\n"Um Ano em Dados Completos"', 
+                 fontsize=17, fontweight='bold', pad=20)
+    ax1.grid(False)
+    
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax1.xaxis.set_major_locator(mdates.MonthLocator())
+    ax1.tick_params(axis='x', rotation=45)
+    
+    ax1.minorticks_off()
+    ax2.minorticks_off()
+    
+    # ========================================================================
+    # 3 LEGENDAS EMPILHADAS COM bbox_to_anchor!
+    # ========================================================================
+    
+    # LEGENDA 1: Volume de Mensagens (topo)
+    elementos_volume = [
+        Line2D([0], [0], color=COLORS_NEW['P1'], linewidth=3, label='P1 (Marlon)'),
+        Line2D([0], [0], color=COLORS_NEW['P2'], linewidth=3, label='P2 (Leticia)'),
+        Line2D([0], [0], color=COLORS_NEW['total'], linewidth=1, linestyle='--', label='Total'),
+        Line2D([0], [0], color=COLORS_NEW['text'], linewidth=1, marker='o', label='Texto'),
+        Line2D([0], [0], color=COLORS_NEW['audio'], linewidth=1, marker='o', label='Audio'),
+        Line2D([0], [0], color=COLORS_NEW['video'], linewidth=1, marker='o', label='Video'),
+        Line2D([0], [0], color=COLORS_NEW['image'], linewidth=1, marker='o', label='Imagem'),
+    ]
+    
+    legend1 = ax1.legend(handles=elementos_volume,
+                        loc='upper left',
+                        bbox_to_anchor=(0.01, 0.99),  # BEM NO TOPO
+                        fontsize=10, framealpha=0.95, 
+                        title='Volume de Mensagens', title_fontsize=11, 
+                        edgecolor='none', fancybox=True, shadow=True)
+    
+    ax1.add_artist(legend1)
+
+    fig.canvas.draw()  # Força renderização
+    bbox1 = legend1.get_window_extent().transformed(ax1.transAxes.inverted())
+    altura_legend1 = bbox1.height
+    y_legend2 = 0.98 - altura_legend1 - 0.02  # 0.02 = margem
+
+
+    # LEGENDA 2: Contexto Temporal (meio)
+    elementos_contexto = [
+        Patch(facecolor=COLORS_NEW['pct_juntos'], alpha=0.3, 
+              edgecolor=COLORS_NEW['pct_juntos'], linewidth=2, 
+              label='% Dias Juntos'),
+        Patch(facecolor=COLORS_NEW['viagens_bg'], alpha=0.12, 
+              edgecolor='gray', linewidth=1, 
+              label='Periodo de Viagem'),
+        Line2D([0], [0], color='#dc2626', linewidth=2, 
+               label='Aniversario Namoro'),
+    ]
+    
+    legend2 = ax1.legend(handles=elementos_contexto,
+                        loc='upper left',
+                        bbox_to_anchor=(0.01, 0.80),  # MEIO (ajuste aqui se precisar!)
+                        fontsize=10, framealpha=0.95, 
+                        title='Contexto Temporal', title_fontsize=11,
+                        edgecolor='black', fancybox=True, shadow=True)
+    
+    ax1.add_artist(legend2)  # ADICIONA AGORA!
+    
+    # Pega a altura da legenda 2
+    fig.canvas.draw()
+    bbox2 = legend2.get_window_extent().transformed(ax1.transAxes.inverted())
+    altura_legend2 = bbox2.height
+    y_legend3 = y_legend2 - altura_legend2 - 0.02  # Mais 0.02 de margem
+
+
+    # ========================================================================
+    # LEGENDA 3: Estatísticas - COM FORMATAÇÃO CUSTOMIZADA!
+    # ========================================================================
+
+    total_p1 = p1_values.sum()
+    total_p2 = p2_values.sum()
+    total_geral = total_values.sum()
+
+    # CALCULA DIAS SEPARADOS
+    total_dias_separados = total_dias_periodo - total_dias_juntos
+
+    # CONTA NÚMERO DE VIAGENS
+    num_viagens = len(viagens_df)
+
+    # ========================================================================
+    # OPÇÃO 1: SÓ CONTORNO (TODAS MESMA COR)
+    # ========================================================================
+    stats_lines_opcao1 = [
+        f"Total Msgs: {total_geral:,}",
+        f"P1: {total_p1:,} ({total_p1/total_geral*100:.1f}%)",
+        f"P2: {total_p2:,} ({total_p2/total_geral*100:.1f}%)",
+        f"Dias Juntos: {total_dias_juntos} ({pct_ano_juntos:.1f}%)",
+        f"Dias Separados: {total_dias_separados} ({100-pct_ano_juntos:.1f}%)",
+        f"Viagens: {num_viagens}"
+    ]
+
+    elementos_stats_1 = [Line2D([0], [0], color='none', label=line) for line in stats_lines_opcao1]
+
+    legend3_opcao1 = ax1.legend(
+        handles=elementos_stats_1,
+        loc='upper left',
+        bbox_to_anchor=(0.01, 0.38),
+        fontsize=10, 
+        framealpha=0.95,
+        title='Estatisticas', 
+        title_fontsize=11,
+        # ← FORMATAÇÃO DO BOX AQUI:
+        edgecolor='#2563eb',      # Cor do contorno
+        facecolor='white',        # Cor de fundo
+        frameon=True,             # Mostra o frame
+        fancybox=True,            # Cantos arredondados
+        shadow=True,              # Sombra
+        handlelength=0,           # Remove ícones
+        handletextpad=0,          # Remove espaço dos ícones
+        labelspacing=0.5,         # Espaçamento entre linhas
+        borderpad=0.8,            # Padding interno
+        columnspacing=1.0         # Espaço entre colunas (se usar)
+    )
+
+    # ========================================================================
+    # OPÇÃO 2: SEM CONTORNO, COM LINHA EMBAIXO (bottom border simulado)
+    # ========================================================================
+
+    # Usa texto formatado com negrito
+    from matplotlib import font_manager as fm
+
+    # Cria labels com negrito antes do ":"
+    stats_lines_opcao2 = [
+        "$\\mathbf{Total\\ Msgs:}$ " + f"{total_geral:,}",
+        "$\\mathbf{P1:}$ " + f"{total_p1:,} ({total_p1/total_geral*100:.1f}%)",
+        "$\\mathbf{P2:}$ " + f"{total_p2:,} ({total_p2/total_geral*100:.1f}%)",
+        "$\\mathbf{Dias\\ Juntos:}$ " + f"{total_dias_juntos} ({pct_ano_juntos:.1f}%)",
+        "$\\mathbf{Dias\\ Separados:}$ " + f"{total_dias_separados} ({100-pct_ano_juntos:.1f}%)",
+        "$\\mathbf{Viagens:}$ " + f"{num_viagens}"
+    ]
+
+    elementos_stats_2 = [Line2D([0], [0], color='none', label=line) for line in stats_lines_opcao2]
+
+    legend3_opcao2 = ax1.legend(
+        handles=elementos_stats_2,
+        loc='upper left',
+        bbox_to_anchor=(0.01, 0.38),
+        fontsize=10,
+        framealpha=1.0,           # Opaco
+        title='Estatisticas',
+        title_fontsize=11,
+        # SEM BORDA, FUNDO BRANCO:
+        edgecolor='none',         # Sem contorno
+        facecolor='white',
+        frameon=True,
+        fancybox=False,           # Cantos retos
+        shadow=False,             # Sem sombra
+        handlelength=0,
+        handletextpad=0,
+        labelspacing=0.6,
+        borderpad=0.8,
+        # Alinhamento à esquerda:
+        alignment='left'          # ← ALINHA TEXTO À ESQUERDA
+    )
+
+    # Adiciona linha embaixo manualmente
+    bbox = legend3_opcao2.get_window_extent()
+    line = plt.Line2D(
+        [bbox.x0, bbox.x1], [bbox.y0, bbox.y0],
+        transform=fig.transFigure,
+        color='#2563eb',
+        linewidth=2
+    )
+    fig.lines.append(line)
+
+    # ========================================================================
+    # OPÇÃO 3: MINIMALISTA - SÓ BORDA INFERIOR EM CADA ITEM
+    # ========================================================================
+
+    stats_lines_opcao3 = [
+        "$\\mathbf{Total\\ Msgs:}$ " + f"{total_geral:,}",
+        "$\\mathbf{P1:}$ " + f"{total_p1:,} ({total_p1/total_geral*100:.1f}%)",
+        "$\\mathbf{P2:}$ " + f"{total_p2:,} ({total_p2/total_geral*100:.1f}%)",
+        "$\\mathbf{Dias\\ Juntos:}$ " + f"{total_dias_juntos} ({pct_ano_juntos:.1f}%)",
+        "$\\mathbf{Dias\\ Separados:}$ " + f"{total_dias_separados} ({100-pct_ano_juntos:.1f}%)",
+        "$\\mathbf{Viagens:}$ " + f"{num_viagens}"
+    ]
+
+    elementos_stats_3 = [Line2D([0], [0], color='none', label=line) for line in stats_lines_opcao3]
+
+    legend3_opcao3 = ax1.legend(
+        handles=elementos_stats_3,
+        loc='upper left',
+        bbox_to_anchor=(0.01, 0.38),
+        fontsize=10,
+        framealpha=1.0,
+        title='$\\mathbf{Estatisticas}$',  # Título em negrito também
+        title_fontsize=11,
+        # TRANSPARENTE, SEM BORDAS:
+        edgecolor='none',
+        facecolor='#f8f9fa',      # Fundo cinza claríssimo
+        frameon=True,
+        fancybox=False,
+        shadow=False,
+        handlelength=0,
+        handletextpad=0,
+        labelspacing=0.8,         # Mais espaço entre linhas
+        borderpad=1.0,
+        alignment='left'
+    )
+    
+    # IMPORTANTE: Adicionar as 3 legendas!
+    # ax1.add_artist(legend1)
+    # ax1.add_artist(legend2)
+    legend3 = legend3_opcao2
+    plt.tight_layout()
+    plt.show()
+    
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    print("✅ TIMELINE ULTIMATE FINAL!")
+    print(f"   Dias juntos: {total_dias_juntos} ({pct_ano_juntos:.1f}% do periodo)")
+    print(f"   Periodo total: {total_dias_periodo} dias")
+
+# Gera
+plot_timeline_ultimate_final(df, viagens_df, usar_linha_ondulada=True)
+```
+
+```{python}
+#| label: timeline-ultimate-final-corrigido
+#| fig-cap: "Timeline Ultimate: Versão Final Corrigida"
+#| fig-height: 10
+
+def plot_timeline_ultimate_final(df, viagens_df, usar_linha_ondulada=True):
+    """
+    Timeline ULTIMATE - Versão Final CORRIGIDA.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from datetime import datetime, timedelta
+    import numpy as np
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    
+    COLORS_PALETTE_12 = {
+        'viagens_bg': '#f6d4a5ff',
+        'pct_juntos': '#f69e2cff',
+        'P1': '#0A0AFF',
+        'P2': '#FF0080',
+        'text':  '#0099F6',
+        'audio': '#E63946',
+        'video': '#2ECC71',
+        'image': '#9C27B0',
+        'total': '#74808b'
+    }
+    
+    COLORS_NEW = COLORS_PALETTE_12
+    
+    # ========================================================================
+    # DADOS (código completo mantido)
+    # ========================================================================
+    
+    df['ano_mes'] = df['timestamp'].dt.to_period('M')
+    msgs_por_mes_p = df.groupby(['ano_mes', 'remetente']).size().unstack(fill_value=0)
+    
+    max_viagem_date = viagens_df['fim'].max()
+    min_period = msgs_por_mes_p.index.min()
+    max_period = pd.Period(max_viagem_date, 'M')
+    all_periods = pd.period_range(start=min_period, end=max_period, freq='M')
+    msgs_por_mes_p = msgs_por_mes_p.reindex(all_periods, fill_value=0)
+    
+    dates = [period.to_timestamp() for period in msgs_por_mes_p.index]
+    p1_values = msgs_por_mes_p['P1'].values
+    p2_values = msgs_por_mes_p['P2'].values
+    total_values = p1_values + p2_values
+    
+    tipos_mes = df.groupby(['ano_mes', 'tipo_midia']).size().unstack(fill_value=0)
+    tipos_mes = tipos_mes.reindex(all_periods, fill_value=0)
+    
+    text_values = tipos_mes.get('text', pd.Series(0, index=tipos_mes.index)).values
+    audio_values = tipos_mes.get('audio', pd.Series(0, index=tipos_mes.index)).values
+    video_values = tipos_mes.get('video', pd.Series(0, index=tipos_mes.index)).values
+    image_values = tipos_mes.get('image', pd.Series(0, index=tipos_mes.index)).values
+    
+    data_inicio = df['timestamp'].min().date()
+    primeiro_dia = min(data_inicio, viagens_df['inicio'].min().date())
+    ultimo_dia = viagens_df['fim'].max().date()
+    all_dates = pd.date_range(start=primeiro_dia, end=ultimo_dia, freq='D').date
+    
+    dias_juntos_set = set()
+    for idx, viagem in viagens_df.iterrows():
+        inicio = viagem['inicio'].date()
+        fim = viagem['fim'].date()
+        current_date = inicio
+        while current_date <= fim:
+            dias_juntos_set.add(current_date)
+            current_date += timedelta(days=1)
+    
+    total_dias_juntos = len(dias_juntos_set)
+    total_dias_periodo = (ultimo_dia - primeiro_dia).days + 1
+    pct_ano_juntos = (total_dias_juntos / total_dias_periodo * 100)
+    
+    dias_df = pd.DataFrame({
+        'data': all_dates,
+        'juntos': [d in dias_juntos_set for d in all_dates]
+    })
+    dias_df['ano_mes'] = pd.to_datetime(dias_df['data']).dt.to_period('M')
+    
+    por_mes = dias_df.groupby('ano_mes').agg({
+        'juntos': 'sum',
+        'data': 'count'
+    }).rename(columns={'juntos': 'dias_juntos', 'data': 'total_dias'})
+    por_mes['pct_juntos'] = (por_mes['dias_juntos'] / por_mes['total_dias'] * 100)
+    por_mes = por_mes.reindex(all_periods, fill_value=0)
+    por_mes['pct_juntos'] = por_mes['pct_juntos'].fillna(0)
+    
+    pct_juntos_values = por_mes['pct_juntos'].values
+    
+    if usar_linha_ondulada:
+        try:
+            from scipy.interpolate import make_interp_spline
+            dates_num = mdates.date2num(dates)
+            spline = make_interp_spline(dates_num, pct_juntos_values, k=3)
+            dates_smooth_num = np.linspace(dates_num.min(), dates_num.max(), 300)
+            pct_smooth = spline(dates_smooth_num)
+            pct_smooth = np.clip(pct_smooth, 0, 105)
+            dates_smooth = mdates.num2date(dates_smooth_num)
+        except:
+            dates_smooth = dates
+            pct_smooth = pct_juntos_values
+    else:
+        dates_smooth = dates
+        pct_smooth = pct_juntos_values
+    
+    # ========================================================================
+    # FIGURA
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(22, 10))
+    ax2 = fig.add_subplot(111)
+    ax1 = ax2.twinx()
+    ax1.set_zorder(ax2.get_zorder() + 1)
+    ax1.patch.set_visible(False)
+    
+    # ========================================================================
+    # LABELS
+    # ========================================================================
+    
+    viagens_sorted = viagens_df.sort_values('inicio').reset_index(drop=True)
+    labels_info = []
+    
+    for idx, viagem in viagens_sorted.iterrows():
+        inicio = viagem['inicio']
+        fim = viagem['fim']
+        tipo = viagem['tipo']
+        duracao_dias = (fim.date() - inicio.date()).days + 1
+        
+        if 'Marlon' in tipo or 'BSB' in viagem['nome']:
+            local = 'BSB'
+        else:
+            if 'Hostel' in viagem['nome']:
+                local = 'SP (Hostel)'
+            elif 'Trampo' in viagem['nome']:
+                local = 'SP (Trabalho)'
+            elif 'Sorocaba' in viagem['nome']:
+                local = 'Sorocaba'
+            else:
+                local = 'SP'
+        
+        label_texto = f"{local} - {duracao_dias} dias"
+        labels_info.append({
+            'inicio': inicio,
+            'fim': fim,
+            'inicio_num': mdates.date2num(inicio),
+            'fim_num': mdates.date2num(fim),
+            'texto': label_texto,
+            'cor': '#6c6b6bff',
+            'largura_dias': len(label_texto) * 2.5,
+            'nivel': None
+        })
+    
+    max_value = max(total_values)
+    
+    for i, label_info in enumerate(labels_info):
+        nivel_escolhido = 0
+        label_x_inicio = label_info['inicio_num'] + 1
+        label_x_fim = label_x_inicio + label_info['largura_dias']
+        
+        for nivel_teste in range(10):
+            tem_conflito = False
+            for j in range(i):
+                outro_label = labels_info[j]
+                if outro_label['nivel'] == nivel_teste:
+                    outro_x_inicio = outro_label['inicio_num'] + 1
+                    outro_x_fim = outro_x_inicio + outro_label['largura_dias']
+                    if not (label_x_fim + 5 < outro_x_inicio or label_x_inicio - 5 > outro_x_fim):
+                        tem_conflito = True
+                        break
+            if not tem_conflito:
+                nivel_escolhido = nivel_teste
+                break
+        labels_info[i]['nivel'] = nivel_escolhido
+    
+    for idx, viagem in viagens_sorted.iterrows():
+        ax1.axvspan(viagem['inicio'], viagem['fim'], 
+                   alpha=0.12, color=COLORS_NEW['viagens_bg'], 
+                   edgecolor='none', zorder=2)
+    
+    for label_info in labels_info:
+        nivel = label_info['nivel']
+        y_pos = max_value * 1.10 - (nivel * max_value * 0.045)
+        ax1.text(label_info['inicio'] + timedelta(days=1), y_pos, label_info['texto'],
+                fontsize=10, color=label_info['cor'], rotation=0,
+                va='bottom', ha='left', alpha=0.85, zorder=15)
+    
+    ax1.axvline(x=pd.Timestamp('2024-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    ax1.axvline(x=pd.Timestamp('2025-12-16'), color='#dc2626', 
+               linestyle='-', alpha=0.7, linewidth=2, zorder=10)
+    
+    # ========================================================================
+    # ONDA
+    # ========================================================================
+    
+    ax2.fill_between(dates_smooth, pct_smooth, alpha=0.12, color=COLORS_NEW['pct_juntos'])
+    ax2.plot(dates_smooth, pct_smooth, linewidth=0, color=COLORS_NEW['pct_juntos'], alpha=0.8)
+    ax2.scatter(dates, pct_juntos_values, s=80, color=COLORS_NEW['pct_juntos'],
+               edgecolors='white', linewidths=0, zorder=5)
+    
+    for x, y in zip(dates, pct_juntos_values):
+        if y > 0:
+            ax2.text(x, y + 2.5, f'{y:.0f}%', ha='center', va='bottom', 
+                    fontsize=13, fontweight='bold', color=COLORS_NEW['pct_juntos'])
+    
+    ax2.set_ylabel('% de Dias Juntos no Mes', fontsize=13, fontweight='bold', 
+                   color=COLORS_NEW['pct_juntos'])
+    ax2.tick_params(axis='y', labelcolor=COLORS_NEW['pct_juntos'])
+    ax2.set_ylim(0, 120)
+    ax2.grid(False)
+    
+    # ========================================================================
+    # LINHAS
+    # ========================================================================
+    
+    ax1.plot(dates, text_values, marker='o', linewidth=1, color=COLORS_NEW['text'], alpha=0.5)
+    ax1.plot(dates, audio_values, marker='o', linewidth=1, color=COLORS_NEW['audio'], alpha=0.5)
+    ax1.plot(dates, video_values, marker='o', linewidth=1, color=COLORS_NEW['video'], alpha=0.5)
+    ax1.plot(dates, image_values, marker='o', linewidth=1, color=COLORS_NEW['image'], alpha=0.5)
+    ax1.plot(dates, p1_values, linewidth=3, color=COLORS_NEW['P1'], alpha=0.95)
+    ax1.plot(dates, p2_values, linewidth=3, color=COLORS_NEW['P2'], alpha=0.95)
+    ax1.plot(dates, total_values, linewidth=1, color=COLORS_NEW['total'], alpha=0.4, linestyle='--')
+    
+    ax1.set_xlabel('Mes/Ano', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Numero de Mensagens', fontsize=13, fontweight='bold')
+    ax1.set_ylim(0, max_value * 1.13)
+    
+    tipo_linha = "Ondulada" if usar_linha_ondulada else "Reta"
+    ax1.set_title(f'Timeline Ultimate ({tipo_linha})\n"Um Ano em Dados Completos"', 
+                 fontsize=17, fontweight='bold', pad=20)
+    ax1.grid(False)
+    
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax1.xaxis.set_major_locator(mdates.MonthLocator())
+    ax1.tick_params(axis='x', rotation=45)
+    ax1.minorticks_off()
+    ax2.minorticks_off()
+    
+    # ========================================================================
+    # 3 LEGENDAS - SIMPLES E DIRETO!
+    # ========================================================================
+    
+    # Legenda 1
+    elementos_volume = [
+        Line2D([0], [0], color=COLORS_NEW['P1'], linewidth=3, label='P1 (Marlon)'),
+        Line2D([0], [0], color=COLORS_NEW['P2'], linewidth=3, label='P2 (Leticia)'),
+        Line2D([0], [0], color=COLORS_NEW['total'], linewidth=1, linestyle='--', label='Total'),
+        Line2D([0], [0], color=COLORS_NEW['text'], linewidth=1, marker='o', label='Texto'),
+        Line2D([0], [0], color=COLORS_NEW['audio'], linewidth=1, marker='o', label='Audio'),
+        Line2D([0], [0], color=COLORS_NEW['video'], linewidth=1, marker='o', label='Video'),
+        Line2D([0], [0], color=COLORS_NEW['image'], linewidth=1, marker='o', label='Imagem'),
+    ]
+    
+    legend1 = ax1.legend(handles=elementos_volume, loc='upper left',
+                        bbox_to_anchor=(0.01, 0.50), fontsize=10, framealpha=0.95, 
+                        title='$\\mathbf{Volume de Mensagens}$', title_fontsize=12, 
+                        edgecolor='none', facecolor='none',
+                        fancybox=False, shadow=False, alignment='left')
+                        
+    
+    # Legenda 2
+    elementos_contexto = [
+        Patch(facecolor=COLORS_NEW['pct_juntos'], alpha=0.3, 
+              edgecolor=COLORS_NEW['pct_juntos'], linewidth=2, label='% Dias Juntos'),
+        Patch(facecolor=COLORS_NEW['viagens_bg'], alpha=0.12, 
+              edgecolor='gray', linewidth=0, label='Periodo de Viagem'),
+        Line2D([0], [0], color='#dc2626', linewidth=2, label='Aniversario Namoro'),
+    ]
+    
+    legend2 = ax1.legend(handles=elementos_contexto, loc='upper left',
+                        bbox_to_anchor=(0.01, 0.70), fontsize=10, framealpha=0.95, 
+                        title='$\\mathbf{Contexto Temporal}$', title_fontsize=12,
+                        edgecolor='none', facecolor='none',
+                        fancybox=False, shadow=False, alignment='left')
+    
+    # Legenda 3
+    total_p1 = p1_values.sum()
+    total_p2 = p2_values.sum()
+    total_geral = total_values.sum()
+    total_dias_separados = total_dias_periodo - total_dias_juntos
+    num_viagens = len(viagens_df)
+    
+    stats_lines = [
+        "• $\\mathbf{Total\\ Msgs:}$ " + f"{total_geral:,}",
+        "• $\\mathbf{P1:}$ " + f"{total_p1:,} ({total_p1/total_geral*100:.1f}%)",
+        "• $\\mathbf{P2:}$ " + f"{total_p2:,} ({total_p2/total_geral*100:.1f}%)",
+        "• $\\mathbf{Dias\\ Juntos:}$ " + f"{total_dias_juntos} ({pct_ano_juntos:.1f}%)",
+        "• $\\mathbf{Dias\\ Separados:}$ " + f"{total_dias_separados} ({100-pct_ano_juntos:.1f}%)",
+        "• $\\mathbf{Viagens:}$ " + f"{num_viagens}"
+    ]
+    
+    elementos_stats = [Line2D([0], [0], color='none', label=line) for line in stats_lines]
+    
+    legend3 = ax1.legend(handles=elementos_stats, loc='upper left',
+                        bbox_to_anchor=(0.01, 0.99), fontsize=10, framealpha=1.0,
+                        title='$\\mathbf{Estatisticas}$', title_fontsize=12,
+                        edgecolor='none', facecolor='none',
+                        frameon=True, fancybox=False, shadow=False,
+                        handlelength=0, handletextpad=0,
+                        labelspacing=0.6, borderpad=0.8, alignment='left')
+    
+    ax1.add_artist(legend1)
+    ax1.add_artist(legend2)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    df.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    print("✅ Timeline gerada!")
+    print(f"   Dias juntos: {total_dias_juntos} ({pct_ano_juntos:.1f}%)")
+
+plot_timeline_ultimate_final(df, viagens_df, usar_linha_ondulada=True)
+```
+
+```{python}
+#| label: fig-animated-timeline2
+#| fig-cap: "Atividade de mensagens ao longo do tempo"
+
+import plotly.express as px
+import pandas as pd
+
+# Seu DataFrame de mensagens
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+
+fig = px.line(df_daily, 
+              x='date', 
+              y='count',
+              title='Mensagens por dia',
+              animation_frame='date')  # Isso cria a animação!
+
+fig.update_layout(
+    xaxis_title="Data",
+    yaxis_title="Número de Mensagens",
+    showlegend=False
+)
+
+fig.show()
+```
+
+```{python}
+
+#| label: fig-animated-timeline
+#| fig-cap: "Atividade de mensagens ao longo do tempo"
+
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+
+# Agrupa mensagens por dia
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Cria contador acumulativo
+df_daily['cumulative'] = df_daily['count'].cumsum()
+
+# Cria figura
+fig = go.Figure()
+
+# Adiciona traço inicial vazio
+fig.add_trace(go.Scatter(
+    x=[df_daily['date'].iloc[0]],
+    y=[df_daily['cumulative'].iloc[0]],
+    mode='lines',
+    line=dict(color='#25D366', width=3),
+    fill='tozeroy',
+    fillcolor='rgba(37, 211, 102, 0.3)'
+))
+
+# Cria frames para animação
+frames = []
+for i in range(1, len(df_daily), max(1, len(df_daily)//100)):  # 100 frames
+    frames.append(go.Frame(
+        data=[go.Scatter(
+            x=df_daily['date'][:i],
+            y=df_daily['cumulative'][:i],
+            mode='lines',
+            line=dict(color='#25D366', width=3),
+            fill='tozeroy',
+            fillcolor='rgba(37, 211, 102, 0.3)'
+        )],
+        name=str(df_daily['date'].iloc[i])
+    ))
+
+fig.frames = frames
+
+# Configura botões de animação
+fig.update_layout(
+    title='Mensagens Acumuladas ao Longo do Tempo',
+    xaxis_title='Data',
+    yaxis_title='Total de Mensagens',
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 50, 'redraw': True},
+                    'fromcurrent': True,
+                    'mode': 'immediate'
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {
+                    'frame': {'duration': 0, 'redraw': False},
+                    'mode': 'immediate'
+                }]
+            }
+        ]
+    }],
+    sliders=[{
+        'active': 0,
+        'steps': [
+            {
+                'method': 'animate',
+                'args': [[f.name], {
+                    'frame': {'duration': 0, 'redraw': True},
+                    'mode': 'immediate'
+                }],
+                'label': f.name
+            }
+            for f in frames
+        ]
+    }]
+)
+
+fig.show()
+
+```
+
+```{python}
+#| label: fig-animated-weekly
+#| fig-cap: "Mensagens por semana ao longo do ano"
+
+import plotly.express as px
+import pandas as pd
+
+# Agrupa por semana
+df['week'] = df['timestamp'].dt.to_period('W').astype(str)
+df['month'] = df['timestamp'].dt.to_period('M').astype(str)
+
+df_weekly = df.groupby(['week', 'month']).size().reset_index(name='count')
+
+# AGORA sim, animation_frame funciona!
+fig = px.bar(df_weekly,
+             x='week',
+             y='count',
+             animation_frame='day',  # Anima por mês
+             title='Mensagens Semanais',
+             labels={'count': 'Número de Mensagens', 'day': 'Semana'},
+             color='count',
+             color_continuous_scale='Greens')
+
+fig.update_layout(
+    showlegend=False,
+    xaxis_tickangle=-45
+)
+
+fig.show()
+```
+
+```{python}
+#| label: fig-heatmap-animated
+#| fig-cap: "Padrão de mensagens por hora e dia da semana"
+
+import plotly.express as px
+import pandas as pd
+
+# Prepara dados para heatmap
+df['hour'] = df['timestamp'].dt.hour
+df['weekday'] = df['timestamp'].dt.day_name()
+df['month_name'] = df['timestamp'].dt.strftime('%B %Y')
+
+# Ordem dos dias da semana
+day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+# Agrupa por hora, dia da semana e mês
+heatmap_data = df.groupby(['month_name', 'weekday', 'hour']).size().reset_index(name='count')
+
+# Cria heatmap animado
+fig = px.density_heatmap(
+    heatmap_data,
+    x='hour',
+    y='weekday',
+    z='count',
+    animation_frame='month_name',
+    title='Atividade por Hora e Dia da Semana',
+    labels={'hour': 'Hora do Dia', 'weekday': 'Dia da Semana', 'count': 'Mensagens'},
+    color_continuous_scale='Greens',
+    category_orders={'weekday': day_order}
+)
+
+fig.update_layout(
+    xaxis_title='Hora do Dia (0-23)',
+    yaxis_title='Dia da Semana'
+)
+
+fig.show()
+```
+
+------------------------------------------------------------------------
+
+```{python}
+#| label: fig-animated-daily
+#| fig-cap: "Mensagens diárias ao longo do ano"
+
+import plotly.express as px
+import pandas as pd
+
+# Agrupa por DIA (não por semana!)
+df_daily = df.groupby(df['timestamp'].dt.date).size().reset_index()
+df_daily.columns = ['date', 'count']
+df_daily['date'] = pd.to_datetime(df_daily['date'])
+df_daily = df_daily.sort_values('date')
+
+# Adiciona coluna de MÊS para animação
+df_daily['month'] = df_daily['date'].dt.to_period('M').astype(str)
+
+# Cria coluna auxiliar para o eixo X (dia do mês)
+df_daily['day_of_month'] = df_daily['date'].dt.day
+df_daily['date_label'] = df_daily['date'].dt.strftime('%d/%m')
+
+# Bar chart animado por MÊS, mostrando DIAS
+fig = px.bar(
+    df_daily,
+    x='date_label',
+    y='count',
+    animation_frame='month',
+    title='Mensagens Diárias ao Longo do Ano',
+    labels={'count': 'Número de Mensagens', 'date_label': 'Data'},
+    color='count',
+    color_continuous_scale='Greens',
+    range_color=[0, df_daily['count'].quantile(0.95)]  # Evita outliers
+)
+
+# CONTROLES DE VELOCIDADE AQUI! ⬇️
+fig.update_layout(
+    showlegend=False,
+    xaxis_tickangle=-45,
+    xaxis={'tickmode': 'linear', 'tick0': 1, 'dtick': 5},  # Mostra 1 a cada 5 dias
+    height=500,
+    # Velocidade da animação
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'y': 1.15,
+        'x': 0.1,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 300, 'redraw': True},  # ⬅️ 300ms = médio
+                    'fromcurrent': True,
+                    'mode': 'immediate',
+                    'transition': {'duration': 200}
+                }]
+            },
+            {
+                'label': '⏩ Rápido',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 100, 'redraw': True},  # ⬅️ 100ms = rápido
+                    'fromcurrent': True,
+                    'mode': 'immediate',
+                    'transition': {'duration': 50}
+                }]
+            },
+            {
+                'label': '🐌 Devagar',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 800, 'redraw': True},  # ⬅️ 800ms = lento
+                    'fromcurrent': True,
+                    'mode': 'immediate',
+                    'transition': {'duration': 500}
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {
+                    'frame': {'duration': 0, 'redraw': False},
+                    'mode': 'immediate'
+                }]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```
+
+```{python}
+#| label: fig-heatmap-weekly
+#| fig-cap: "Padrão de mensagens: animação semanal"
+
+import plotly.express as px
+import pandas as pd
+import numpy as np
+
+# Prepara dados
+df['hour'] = df['timestamp'].dt.hour
+df['weekday'] = df['timestamp'].dt.day_name()
+df['week'] = df['timestamp'].dt.to_period('W').dt.to_timestamp()  # ⬅️ Por SEMANA!
+df['week_label'] = df['week'].dt.strftime('Semana de %d/%m')
+
+# Ordem correta dos dias
+day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 
+             'Friday', 'Saturday', 'Sunday']
+day_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+# Agrupa por semana, dia e hora
+heatmap_data = df.groupby(['week', 'week_label', 'weekday', 'hour']).size().reset_index(name='count')
+
+# Mapeia dias para português
+day_map = dict(zip(day_order, day_pt))
+heatmap_data['weekday_pt'] = heatmap_data['weekday'].map(day_map)
+
+# Cria heatmap
+fig = px.density_heatmap(
+    heatmap_data,
+    x='hour',
+    y='weekday_pt',
+    z='count',
+    animation_frame='week_label',
+    title='Quando Mais Conversamos? (Por Semana)',
+    labels={'hour': 'Hora do Dia', 'weekday_pt': '', 'count': 'Mensagens'},
+    color_continuous_scale='Greens',
+    category_orders={'weekday_pt': day_pt}
+)
+
+# CONTROLES DE VELOCIDADE ⬇️
+fig.update_layout(
+    xaxis={
+        'tickmode': 'linear',
+        'tick0': 0,
+        'dtick': 2,  # Marca a cada 2 horas
+        'title': 'Hora do Dia'
+    },
+    yaxis_title='',
+    height=400,
+    # Botões de velocidade
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'y': 1.15,
+        'x': 0.1,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 500, 'redraw': True},  # ⬅️ Meio
+                    'fromcurrent': True,
+                    'transition': {'duration': 300}
+                }]
+            },
+            {
+                'label': '⏩ 2x',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 250, 'redraw': True},  # ⬅️ Rápido
+                    'fromcurrent': True,
+                    'transition': {'duration': 150}
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {
+                    'frame': {'duration': 0, 'redraw': False},
+                    'mode': 'immediate'
+                }]
+            }
+        ]
+    }]
+)
+
+fig.show()
+```
+
+```{python}
+#| label: fig-heatmap-monthly-days
+#| fig-cap: "Intensidade de mensagens por dia e hora (mensal)"
+
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+
+# Prepara dados com mês
+df['hour'] = df['timestamp'].dt.hour
+df['day'] = df['timestamp'].dt.day
+df['month_year'] = df['timestamp'].dt.strftime('%Y-%m')
+df['month_label'] = df['timestamp'].dt.strftime('%B %Y')
+
+# Agrupa
+monthly_heatmap = df.groupby(['month_year', 'month_label', 'day', 'hour']).size().reset_index(name='count')
+
+# Pivota para matriz
+months = monthly_heatmap['month_label'].unique()
+
+# Cria figura
+fig = go.Figure()
+
+# Adiciona frame inicial
+first_month = monthly_heatmap[monthly_heatmap['month_label'] == months[0]]
+pivot_data = first_month.pivot_table(values='count', index='day', columns='hour', fill_value=0)
+
+fig.add_trace(go.Heatmap(
+    z=pivot_data.values,
+    x=pivot_data.columns,
+    y=pivot_data.index,
+    colorscale='Greens',
+    colorbar=dict(title='Mensagens')
+))
+
+# Cria frames para cada mês
+frames = []
+for month in months:
+    month_data = monthly_heatmap[monthly_heatmap['month_label'] == month]
+    pivot_data = month_data.pivot_table(values='count', index='day', columns='hour', fill_value=0)
+    
+    frames.append(go.Frame(
+        data=[go.Heatmap(
+            z=pivot_data.values,
+            x=pivot_data.columns,
+            y=pivot_data.index,
+            colorscale='Greens'
+        )],
+        name=month
+    ))
+
+fig.frames = frames
+
+# Layout com controles
+fig.update_layout(
+    title='Heatmap: Dia vs Hora (Por Mês)',
+    xaxis_title='Hora do Dia',
+    yaxis_title='Dia do Mês',
+    height=600,
+    updatemenus=[{
+        'type': 'buttons',
+        'showactive': False,
+        'buttons': [
+            {
+                'label': '▶ Play',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 600, 'redraw': True},  # ⬅️ 600ms por mês
+                    'fromcurrent': True,
+                    'transition': {'duration': 400}
+                }]
+            },
+            {
+                'label': '⏩ Rápido',
+                'method': 'animate',
+                'args': [None, {
+                    'frame': {'duration': 300, 'redraw': True},
+                    'fromcurrent': True,
+                    'transition': {'duration': 200}
+                }]
+            },
+            {
+                'label': '⏸ Pause',
+                'method': 'animate',
+                'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate'}]
+            }
+        ]
+    }],
+    sliders=[{
+        'active': 0,
+        'yanchor': 'top',
+        'y': -0.1,
+        'xanchor': 'left',
+        'currentvalue': {
+            'prefix': 'Mês: ',
+            'visible': True,
+            'xanchor': 'right'
+        },
+        'steps': [
+            {
+                'method': 'animate',
+                'args': [[f.name], {
+                    'frame': {'duration': 0, 'redraw': True},
+                    'mode': 'immediate'
+                }],
+                'label': f.name
+            }
+            for f in frames
+        ]
+    }]
+)
+
+fig.show()
+```

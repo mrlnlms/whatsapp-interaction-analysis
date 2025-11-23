@@ -1,0 +1,1060 @@
+# QMD
+
+```{python}
+#| label: setup-analises-avancadas
+# Setup
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import warnings
+from matplotlib import font_manager as fm
+from emoji_cloud import EmojiCloud
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (14, 8)
+
+# Cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c',
+    'neutral': '#95a5a6'
+}
+
+# Carrega dados
+df = pd.read_csv('final_dataframe_enriched_complete.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print("✅ Setup completo!")
+print(f"📊 Dataset: {len(df):,} mensagens")
+
+with open('emoji_library.pkl', 'rb') as f:
+    lib = pickle.load(f)
+    emoji = lib['helper']
+
+print("✅ Biblioteca completa carregada!")
+
+
+```
+
+
+## 📊 Código: Análise Completa de Viagens
+
+```{python}
+#| label: analise-viagens-completa
+#| fig-cap: "Análise Detalhada: Impacto das Viagens"
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+
+# Define cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+viagens = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',  # ← CORRIGIDO (6 dias)
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+viagens_df = pd.DataFrame(viagens)
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+viagens_df['duracao_dias'] = (viagens_df['fim'] - viagens_df['inicio']).dt.days + 1  # +1 para incluir último dia
+
+print("="*80)
+print("📅 VIAGENS REGISTRADAS")
+print("="*80)
+print(f"\nTotal de viagens: {len(viagens_df)}\n")
+print(viagens_df[['nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+
+# Estatísticas
+total_dias_juntos = viagens_df['duracao_dias'].sum()
+total_dias_ano = 366  # Out/2024 a Out/2025
+pct_juntos = (total_dias_juntos / total_dias_ano) * 100
+
+print(f"\n📊 Resumo:")
+print(f"   • Total de dias juntos: {total_dias_juntos} dias")
+print(f"   • Percentual do ano: {pct_juntos:.1f}%")
+print(f"   • Viagem mais longa: {viagens_df['duracao_dias'].max()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {viagens_df['duracao_dias'].min()} dias ({viagens_df.loc[viagens_df['duracao_dias'].idxmin(), 'nome']})")
+
+print("\n" + "="*80)
+```
+
+
+# Teste do dicionário de Emojis
+
+```{python}
+#| label: analise-emojis-coloridos
+#| fig-cap: "Análise Completa de Emojis (com emojis coloridos!)"
+#| fig-height: 14
+
+def analyze_emojis_colorful(df, emoji_helper):
+    """
+    Análise completa de uso de emojis COM EMOJIS COLORIDOS.
+    """
+    import emoji as emoji_lib
+    from collections import Counter
+    
+    print("="*80)
+    print("😊 ANÁLISE DETALHADA DE EMOJIS")
+    print("="*80)
+    
+    # Filtra mensagens com conteúdo
+    df_text = df[df['conteudo'].notna()].copy()
+    
+    # ========================================================================
+    # EXTRAI TODOS OS EMOJIS
+    # ========================================================================
+    
+    def extract_emojis(text):
+        """Extrai emojis de um texto."""
+        if pd.isna(text):
+            return []
+        return [c for c in text if c in emoji_lib.EMOJI_DATA]
+    
+    print("\n🔍 Extraindo emojis...")
+    
+    df_text['emojis_list'] = df_text['conteudo'].apply(extract_emojis)
+    df_text['emoji_count'] = df_text['emojis_list'].apply(len)
+    
+    # Todos os emojis
+    all_emojis = []
+    emojis_p1 = []
+    emojis_p2 = []
+    
+    for idx, row in df_text.iterrows():
+        emojis = row['emojis_list']
+        all_emojis.extend(emojis)
+        
+        if row['remetente'] == 'P1':
+            emojis_p1.extend(emojis)
+        else:
+            emojis_p2.extend(emojis)
+    
+    # Contadores
+    counter_all = Counter(all_emojis)
+    counter_p1 = Counter(emojis_p1)
+    counter_p2 = Counter(emojis_p2)
+    
+    print(f"\n📊 Estatísticas Gerais:")
+    print(f"   • Total de emojis: {len(all_emojis):,}")
+    print(f"   • Emojis únicos: {len(counter_all)}")
+    print(f"   • Msgs com emoji: {(df_text['emoji_count'] > 0).sum():,} ({(df_text['emoji_count'] > 0).sum()/len(df_text)*100:.1f}%)")
+    print(f"   • Média por mensagem: {df_text['emoji_count'].mean():.2f}")
+    
+    print(f"\n👥 Por Participante:")
+    print(f"   • P1: {len(emojis_p1):,} emojis ({len(emojis_p1)/len(all_emojis)*100:.1f}%)")
+    print(f"   • P2: {len(emojis_p2):,} emojis ({len(emojis_p2)/len(all_emojis)*100:.1f}%)")
+    
+    # ========================================================================
+    # VISUALIZAÇÕES COM EMOJIS COLORIDOS
+    # ========================================================================
+    
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.35, wspace=0.3)
+    
+    # ------------------------------------------------------------------------
+    # 1. Top 20 Emojis GERAL (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax1 = fig.add_subplot(gs[0, :])
+    
+    top_20 = counter_all.most_common(20)
+    counts_top = [e[1] for e in top_20]
+    
+    bars = ax1.barh(range(len(top_20)), counts_top, color='#4dabf7', alpha=0.6, edgecolor='black')
+    
+    # Labels só com números (emojis virão como imagens)
+    ax1.set_yticks(range(len(top_20)))
+    ax1.set_yticklabels([f"     {c:,}" for e, c in top_20], fontsize=12)
+    
+    # ADICIONA EMOJIS COLORIDOS!
+    for i, (emoji_char, count) in enumerate(top_20):
+        emoji_helper.add_emoji(ax1, emoji_char, -max(counts_top)*0.08, i, zoom=0.08)
+    
+    ax1.set_xlabel('Frequência', fontsize=12, fontweight='bold')
+    ax1.set_title('Top 20 Emojis Mais Usados (Geral)', fontsize=14, fontweight='bold')
+    ax1.invert_yaxis()
+    ax1.grid(axis='x', alpha=0.3)
+    ax1.set_xlim(-max(counts_top)*0.1, max(counts_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 2. Top 15 P1 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax2 = fig.add_subplot(gs[1, 0])
+    
+    top_p1 = counter_p1.most_common(15)
+    counts_p1_top = [e[1] for e in top_p1]
+    
+    bars_p1 = ax2.barh(range(len(top_p1)), counts_p1_top, color=COLORS['P1'], alpha=0.6, edgecolor='black')
+    
+    ax2.set_yticks(range(len(top_p1)))
+    ax2.set_yticklabels([f"     {c:,}" for e, c in top_p1], fontsize=11)
+    
+    # ADICIONA EMOJIS COLORIDOS!
+    for i, (emoji_char, count) in enumerate(top_p1):
+        emoji_helper.add_emoji(ax2, emoji_char, -max(counts_p1_top)*0.08, i, zoom=0.08)
+    
+    ax2.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax2.set_title('Top 15 Emojis P1 (Marlon)', fontsize=13, fontweight='bold', color=COLORS['P1'])
+    ax2.invert_yaxis()
+    ax2.grid(axis='x', alpha=0.3)
+    ax2.set_xlim(-max(counts_p1_top)*0.1, max(counts_p1_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 3. Top 15 P2 (COM EMOJIS COLORIDOS!)
+    # ------------------------------------------------------------------------
+    ax3 = fig.add_subplot(gs[1, 1])
+    
+    top_p2 = counter_p2.most_common(15)
+    counts_p2_top = [e[1] for e in top_p2]
+    
+    bars_p2 = ax3.barh(range(len(top_p2)), counts_p2_top, color=COLORS['P2'], alpha=0.6, edgecolor='black')
+    
+    ax3.set_yticks(range(len(top_p2)))
+    ax3.set_yticklabels([f"     {c:,}" for e, c in top_p2], fontsize=11)
+    
+    # ADICIONA EMOJIS COLORIDOS!
+    for i, (emoji_char, count) in enumerate(top_p2):
+        emoji_helper.add_emoji(ax3, emoji_char, -max(counts_p2_top)*0.08, i, zoom=0.08)
+    
+    ax3.set_xlabel('Frequência', fontsize=11, fontweight='bold')
+    ax3.set_title('Top 15 Emojis P2 (Letícia)', fontsize=13, fontweight='bold', color=COLORS['P2'])
+    ax3.invert_yaxis()
+    ax3.grid(axis='x', alpha=0.3)
+    ax3.set_xlim(-max(counts_p2_top)*0.1, max(counts_p2_top)*1.1)
+    
+    # ------------------------------------------------------------------------
+    # 4. Evolução Mensal
+    # ------------------------------------------------------------------------
+    ax4 = fig.add_subplot(gs[2, :])
+    
+    df_text['ano_mes'] = df_text['timestamp'].dt.to_period('M')
+    emoji_por_mes = df_text.groupby('ano_mes')['emoji_count'].sum()
+    msgs_por_mes = df_text.groupby('ano_mes').size()
+    emoji_ratio_mes = (emoji_por_mes / msgs_por_mes)
+    
+    meses_dates = [m.to_timestamp() for m in emoji_por_mes.index]
+    
+    ax4_twin = ax4.twinx()
+    
+    # Linha: total de emojis
+    line1 = ax4.plot(meses_dates, emoji_por_mes.values, marker='o', linewidth=3, 
+                     markersize=8, color=COLORS['P2'], label='Total de Emojis', zorder=3)
+    ax4.fill_between(meses_dates, emoji_por_mes.values, alpha=0.2, color=COLORS['P2'])
+    
+    # Linha: ratio
+    line2 = ax4_twin.plot(meses_dates, emoji_ratio_mes.values, marker='s', linewidth=2, 
+                          markersize=7, color=COLORS['P1'], label='Emojis por Mensagem', 
+                          linestyle='--', zorder=3)
+    
+    ax4.set_xlabel('Mês', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Total de Emojis', fontsize=12, fontweight='bold', color=COLORS['P2'])
+    ax4_twin.set_ylabel('Emojis por Mensagem', fontsize=12, fontweight='bold', color=COLORS['P1'])
+    ax4.set_title('Evolução do Uso de Emojis ao Longo do Ano', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Formata eixo X
+    import matplotlib.dates as mdates
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator())
+    ax4.tick_params(axis='x', rotation=45)
+    
+    # Legenda combinada
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper left', fontsize=11)
+    
+    plt.suptitle('Análise Completa de Emojis\n"A Linguagem Visual da Conexão"', 
+                fontsize=16, fontweight='bold', y=0.995)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Limpa coluna temporária
+    df_text.drop(columns=['ano_mes'], inplace=True, errors='ignore')
+    
+    # Emojis únicos
+    print(f"\n💎 Emojis Únicos:")
+    p1_only = set(counter_p1.keys()) - set(counter_p2.keys())
+    p2_only = set(counter_p2.keys()) - set(counter_p1.keys())
+    
+    print(f"   • Só P1 usa: {len(p1_only)} emojis")
+    if len(p1_only) > 0:
+        print(f"      {' '.join(list(p1_only)[:20])}")
+    
+    print(f"   • Só P2 usa: {len(p2_only)} emojis")
+    if len(p2_only) > 0:
+        print(f"      {' '.join(list(p2_only)[:20])}")
+    
+    print("\n" + "="*80)
+    
+    return counter_all, counter_p1, counter_p2
+
+# Executa análise COM EMOJIS COLORIDOS!
+emoji_all, emoji_p1, emoji_p2 = analyze_emojis_colorful(df, emoji)
+```
+
+
+----
+
+```{python}
+#| label: emoji-cloud
+#| fig-cap: "Nuvem de Emojis - Visualização Criativa"
+#| fig-height: 10
+
+def create_emoji_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Cria nuvem de emojis usando scatter plot com tamanhos proporcionais.
+    """
+    import numpy as np
+    
+    # Pega top N emojis (quanto mais, mais denso)
+    top_emojis = counter.most_common(100)  # Top 100
+    
+    fig, ax = plt.subplots(figsize=(16, 10))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    # Gera posições aleatórias (evitando sobreposição)
+    np.random.seed(42)
+    positions = []
+    
+    for emoji_char, count in top_emojis:
+        # Tamanho proporcional à frequência
+        # Normaliza entre 0.05 e 0.25
+        max_count = top_emojis[0][1]
+        size = 0.10 + (count / max_count) * 0.10
+        
+        # Tenta encontrar posição sem sobreposição
+        max_attempts = 50
+        for _ in range(max_attempts):
+            x = np.random.uniform(5, 95)
+            y = np.random.uniform(5, 95)
+            
+            # Verifica sobreposição com emojis já colocados
+            overlap = False
+            for px, py, ps in positions:
+                distance = np.sqrt((x - px)**2 + (y - py)**2)
+                if distance < (size + ps) * 100:  # Buffer de espaço
+                    overlap = True
+                    break
+            
+            if not overlap:
+                positions.append((x, y, size))
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                break
+    
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem criada com {len(positions)} emojis")
+
+# Cria nuvens
+print("🎨 Criando nuvens de emojis...\n")
+
+create_emoji_cloud(emoji_all, emoji, "Nuvem de Emojis - Geral")
+```
+
+---
+
+
+```{python}
+#| label: emoji-cloud-circular
+#| fig-cap: "Nuvem Circular de Emojis"
+#| fig-height: 12
+
+def create_circular_emoji_cloud(counter, emoji_helper, title="Universo de Emojis"):
+    """
+    Cria nuvem circular de emojis (tipo sistema solar).
+    """
+    import numpy as np
+    
+    top_emojis = counter.most_common(80)
+    
+    fig, ax = plt.subplots(figsize=(14, 14))
+    ax.set_xlim(-60, 60)
+    ax.set_ylim(-60, 60)
+    ax.axis('off')
+    ax.set_aspect('equal')
+    
+    # Centro: emoji mais usado
+    top_emoji, top_count = top_emojis[0]
+    emoji_helper.add_emoji(ax, top_emoji, 0, 0, zoom=0.4)
+    ax.text(0, -8, f"{top_count:,}x", ha='center', fontsize=14, 
+            fontweight='bold', color='#2c3e50')
+    
+    # Órbitas circulares
+    n_orbits = 5
+    emojis_per_orbit = [1, 8, 15, 25, 31]  # Total = 80
+    orbit_radii = [12, 22, 32, 42, 52]
+    
+    idx = 1  # Começa do segundo (primeiro está no centro)
+    
+    for orbit_idx in range(n_orbits):
+        n_emojis = emojis_per_orbit[orbit_idx]
+        radius = orbit_radii[orbit_idx]
+        
+        angles = np.linspace(0, 2*np.pi, n_emojis, endpoint=False)
+        
+        for angle in angles:
+            if idx >= len(top_emojis):
+                break
+            
+            emoji_char, count = top_emojis[idx]
+            
+            x = radius * np.cos(angle)
+            y = radius * np.sin(angle)
+            
+            # Tamanho inversamente proporcional à órbita
+            size = 0.50 - (orbit_idx * 0.1)
+            
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+            
+            # Adiciona contagem (opcional, fica poluído)
+            # ax.text(x, y-3, f"{count}", ha='center', fontsize=7, color='gray')
+            
+            idx += 1
+    
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    
+    # Adiciona círculos de órbita (decorativo)
+    for radius in orbit_radii:
+        circle = plt.Circle((0, 0), radius, color='lightgray', 
+                           fill=False, linestyle='--', alpha=0.3)
+        ax.add_patch(circle)
+    
+    plt.tight_layout()
+    plt.show()
+
+create_circular_emoji_cloud(emoji_all, emoji, "🌌 Universo de Emojis")
+```
+
+
+
+```{python}
+#| label: install-emoji-cloud
+
+# Instala biblioteca
+import subprocess
+import sys
+
+try:
+    from emoji_cloud import EmojiCloud
+    print("✅ emoji_cloud já instalada!")
+except ImportError:
+    print("📦 Instalando emoji_cloud...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "emoji-cloud"])
+    from emoji_cloud import EmojiCloud
+    print("✅ Instalada com sucesso!")
+```
+
+```{python}
+#| label: emoji-cloud-lib
+#| fig-cap: "Nuvem de Emojis (biblioteca especializada)"
+#| fig-height: 10
+
+from emoji_cloud import EmojiCloud
+from collections import Counter
+
+def create_emoji_wordcloud(counter, title="Nuvem de Emojis"):
+    """
+    Cria wordcloud de emojis usando biblioteca especializada.
+    """
+    # Prepara dados (emoji_cloud espera dicionário)
+    emoji_freq = dict(counter.most_common(100))
+    
+    # Cria cloud
+    emoji_cloud = EmojiCloud(
+        font_path=None,  # Usa fonte padrão
+        width=1600,
+        height=1000,
+        background_color='white',
+        max_font_size=120,
+        min_font_size=20,
+        colormap='viridis'  # Ou: 'plasma', 'rainbow', 'cool'
+    )
+    
+    # Gera
+    emoji_cloud.generate_from_frequencies(emoji_freq)
+    
+    # Plota
+    fig, ax = plt.subplots(figsize=(16, 10))
+    ax.imshow(emoji_cloud, interpolation='bilinear')
+    ax.axis('off')
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    plt.tight_layout()
+    plt.show()
+
+# Cria para cada grupo
+create_emoji_wordcloud(emoji_all, "☁️ Nuvem de Emojis - Geral")
+create_emoji_wordcloud(emoji_p1, "☁️ Nuvem de Emojis - Marlon")
+create_emoji_wordcloud(emoji_p2, "☁️ Nuvem de Emojis - Letícia")
+```
+
+
+
+
+
+```{python}
+#| label: emoji-cloud-circular
+#| fig-cap: "Nuvem Circular de Emojis"
+#| fig-height: 12
+
+def create_circular_emoji_cloud(counter, emoji_helper, title="Universo de Emojis"):
+    """
+    Cria nuvem circular de emojis (tipo sistema solar).
+    """
+    import numpy as np
+    
+    top_emojis = counter.most_common(80)
+    
+    fig, ax = plt.subplots(figsize=(14, 14))
+    ax.set_xlim(-60, 60)
+    ax.set_ylim(-60, 60)
+    ax.axis('off')
+    ax.set_aspect('equal')
+    
+    # Centro: emoji mais usado
+    top_emoji, top_count = top_emojis[0]
+    emoji_helper.add_emoji(ax, top_emoji, 0, 0, zoom=0.4)
+    ax.text(0, -8, f"{top_count:,}x", ha='center', fontsize=14, 
+            fontweight='bold', color='#2c3e50')
+    
+    # Órbitas circulares
+    n_orbits = 5
+    emojis_per_orbit = [1, 8, 15, 25, 31]  # Total = 80
+    orbit_radii = [12, 22, 32, 42, 52]
+    
+    idx = 1  # Começa do segundo (primeiro está no centro)
+    
+    for orbit_idx in range(n_orbits):
+        n_emojis = emojis_per_orbit[orbit_idx]
+        radius = orbit_radii[orbit_idx]
+        
+        angles = np.linspace(0, 2*np.pi, n_emojis, endpoint=False)
+        
+        for angle in angles:
+            if idx >= len(top_emojis):
+                break
+            
+            emoji_char, count = top_emojis[idx]
+            
+            x = radius * np.cos(angle)
+            y = radius * np.sin(angle)
+            
+            # Tamanho inversamente proporcional à órbita
+            size = 0.15 - (orbit_idx * 0.02)
+            
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+            
+            idx += 1
+    
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    
+    # Adiciona círculos de órbita (decorativo)
+    for radius in orbit_radii:
+        circle = plt.Circle((0, 0), radius, color='lightgray', 
+                           fill=False, linestyle='--', alpha=0.3)
+        ax.add_patch(circle)
+    
+    plt.tight_layout()
+    plt.show()
+
+# Cria nuvens circulares
+print("🌌 Criando universos de emojis...\n")
+
+create_circular_emoji_cloud(emoji_all, emoji, "🌌 Universo de Emojis - Geral")
+create_circular_emoji_cloud(emoji_p1, emoji, "🌌 Universo de Emojis - Marlon")
+create_circular_emoji_cloud(emoji_p2, emoji, "🌌 Universo de Emojis - Letícia")
+```
+
+
+
+```{python}
+#| label: emoji-cloud-random
+#| fig-cap: "Nuvem Aleatória de Emojis"
+#| fig-height: 10
+
+def create_random_emoji_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Cria nuvem de emojis com posicionamento aleatório e anti-sobreposição.
+    """
+    import numpy as np
+    
+    # Top 100 emojis
+    top_emojis = counter.most_common(100)
+    
+    fig, ax = plt.subplots(figsize=(16, 10))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    # Seed para reprodutibilidade
+    np.random.seed(42)
+    
+    positions = []
+    max_count = top_emojis[0][1]
+    
+    for emoji_char, count in top_emojis:
+        # Tamanho proporcional à frequência
+        # Mapeia frequência para zoom (0.05 a 0.25)
+        size = 0.05 + (count / max_count) * 0.15
+        
+        # Tenta encontrar posição sem sobreposição
+        placed = False
+        for attempt in range(100):
+            x = np.random.uniform(size*100 + 5, 95 - size*100)
+            y = np.random.uniform(size*100 + 5, 95 - size*100)
+            
+            # Verifica sobreposição
+            overlap = False
+            for px, py, ps in positions:
+                distance = np.sqrt((x - px)**2 + (y - py)**2)
+                min_distance = (size + ps) * 80  # Buffer
+                
+                if distance < min_distance:
+                    overlap = True
+                    break
+            
+            if not overlap:
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                positions.append((x, y, size))
+                placed = True
+                break
+        
+        if not placed:
+            # Se não conseguiu colocar, força em posição aleatória menor
+            x = np.random.uniform(10, 90)
+            y = np.random.uniform(10, 90)
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size*0.7)
+    
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    
+    # Adiciona fundo sutil
+    ax.set_facecolor('#f8f9fa')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem criada com {len(positions)} emojis posicionados")
+
+# Cria nuvens aleatórias
+print("☁️ Criando nuvens de emojis...\n")
+
+create_random_emoji_cloud(emoji_all, emoji, "☁️ Nuvem de Emojis - Geral")
+create_random_emoji_cloud(emoji_p1, emoji, "☁️ Nuvem de Emojis - Marlon")
+create_random_emoji_cloud(emoji_p2, emoji, "☁️ Nuvem de Emojis - Letícia")
+```
+
+
+
+
+
+```{python}
+#| label: emoji-cloud-improved
+#| fig-cap: "Nuvem Melhorada de Emojis"
+#| fig-height: 10
+
+def create_improved_emoji_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Nuvem de emojis MELHORADA: mais densa, tamanhos mais variados.
+    """
+    import numpy as np
+    
+    # Top 150 emojis (mais denso)
+    top_emojis = counter.most_common(150)
+    
+    fig, ax = plt.subplots(figsize=(18, 12))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    np.random.seed(42)
+    
+    positions = []
+    max_count = top_emojis[0][1]
+    min_count = top_emojis[-1][1]
+    
+    # AJUSTE 1: Range de tamanhos maior (0.04 a 0.35)
+    for emoji_char, count in top_emojis:
+        # Escala logarítmica para maior variação
+        log_ratio = np.log(count) / np.log(max_count)
+        size = 0.04 + log_ratio * 0.31  # Tamanhos de 0.04 a 0.35
+        
+        # AJUSTE 2: Buffer menor = mais denso
+        placed = False
+        for attempt in range(150):  # Mais tentativas
+            x = np.random.uniform(size*80 + 3, 97 - size*80)
+            y = np.random.uniform(size*80 + 3, 97 - size*80)
+            
+            # AJUSTE 3: Buffer reduzido (de 80 para 50)
+            overlap = False
+            for px, py, ps in positions:
+                distance = np.sqrt((x - px)**2 + (y - py)**2)
+                min_distance = (size + ps) * 50  # MENOR buffer = mais denso
+                
+                if distance < min_distance:
+                    overlap = True
+                    break
+            
+            if not overlap:
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                positions.append((x, y, size))
+                placed = True
+                break
+        
+        # Se não conseguiu, força com tamanho menor
+        if not placed:
+            x = np.random.uniform(8, 92)
+            y = np.random.uniform(8, 92)
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size*0.5)
+    
+    ax.set_title(title, fontsize=20, fontweight='bold', pad=20)
+    ax.set_facecolor('#fafafa')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem criada com {len(positions)} emojis")
+    print(f"   • Tamanho mínimo: {0.04:.2f}")
+    print(f"   • Tamanho máximo: {0.35:.2f}")
+
+# Cria nuvens melhoradas
+print("☁️ Criando nuvens MELHORADAS...\n")
+
+create_improved_emoji_cloud(emoji_all, emoji, "☁️ Nuvem de Emojis - Geral")
+create_improved_emoji_cloud(emoji_p1, emoji, "☁️ Nuvem de Emojis - Marlon")
+create_improved_emoji_cloud(emoji_p2, emoji, "☁️ Nuvem de Emojis - Letícia")
+```
+
+
+```{python}
+#| label: emoji-cloud-ultra-dense
+#| fig-cap: "Nuvem Ultra-Densa de Emojis"
+#| fig-height: 10
+
+def create_ultra_dense_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Nuvem ULTRA DENSA com grid + aleatoriedade.
+    """
+    import numpy as np
+    
+    top_emojis = counter.most_common(200)  # MAIS emojis
+    
+    fig, ax = plt.subplots(figsize=(18, 12))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    np.random.seed(42)
+    
+    max_count = top_emojis[0][1]
+    
+    # Grid base para distribuição inicial
+    grid_size = 15  # 15x15 = 225 posições
+    positions_used = set()
+    
+    for emoji_char, count in top_emojis:
+        # Tamanho com escala LOG (diferença maior)
+        log_ratio = np.log1p(count) / np.log1p(max_count)
+        size = 0.03 + log_ratio * 0.32
+        
+        placed = False
+        
+        # Tenta posições em grid primeiro
+        for _ in range(50):
+            grid_x = np.random.randint(0, grid_size)
+            grid_y = np.random.randint(0, grid_size)
+            
+            if (grid_x, grid_y) not in positions_used:
+                # Converte grid para coordenadas + jitter
+                x = (grid_x / grid_size) * 90 + 5 + np.random.uniform(-2, 2)
+                y = (grid_y / grid_size) * 90 + 5 + np.random.uniform(-2, 2)
+                
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                positions_used.add((grid_x, grid_y))
+                placed = True
+                break
+        
+        # Se grid está cheio, coloca aleatório
+        if not placed:
+            x = np.random.uniform(5, 95)
+            y = np.random.uniform(5, 95)
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size*0.6)
+    
+    ax.set_title(title, fontsize=20, fontweight='bold', pad=20)
+    ax.set_facecolor('#f5f5f5')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem ultra-densa: {len(positions_used)} posições usadas")
+
+# Testa versão ultra-densa
+print("🌩️ Criando nuvens ULTRA-DENSAS...\n")
+
+create_ultra_dense_cloud(emoji_all, emoji, "🌩️ Nuvem Ultra-Densa - Geral")
+create_ultra_dense_cloud(emoji_p1, emoji, "🌩️ Nuvem Ultra-Densa - Marlon")
+create_ultra_dense_cloud(emoji_p2, emoji, "🌩️ Nuvem Ultra-Densa - Letícia")
+```
+
+
+
+
+
+
+
+```{python}
+#| label: emoji-cloud-large
+#| fig-cap: "Nuvem de Emojis - Tamanhos Grandes"
+#| fig-height: 12
+
+def create_large_emoji_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Nuvem de emojis com TAMANHOS GRANDES e bem visíveis.
+    Combina distribuição aleatória com emojis do tamanho do circular.
+    """
+    import numpy as np
+    
+    # MENOS emojis, mas MAIORES
+    top_emojis = counter.most_common(60)  # Só 60 para não poluir
+    
+    fig, ax = plt.subplots(figsize=(16, 12))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    np.random.seed(42)
+    
+    positions = []
+    max_count = top_emojis[0][1]
+    
+    for emoji_char, count in top_emojis:
+        # TAMANHOS MAIORES: 0.10 a 0.40 (como no circular)
+        log_ratio = np.log1p(count) / np.log1p(max_count)
+        size = 0.10 + log_ratio * 0.30
+        
+        placed = False
+        for attempt in range(200):
+            x = np.random.uniform(size*100 + 5, 95 - size*100)
+            y = np.random.uniform(size*100 + 5, 95 - size*100)
+            
+            # Buffer GRANDE para emojis grandes não sobreporem
+            overlap = False
+            for px, py, ps in positions:
+                distance = np.sqrt((x - px)**2 + (y - py)**2)
+                min_distance = (size + ps) * 90  # Buffer grande
+                
+                if distance < min_distance:
+                    overlap = True
+                    break
+            
+            if not overlap:
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                positions.append((x, y, size))
+                placed = True
+                break
+        
+        if not placed and len(positions) < 50:
+            # Força em espaço vazio se ainda tiver poucas
+            x = np.random.uniform(15, 85)
+            y = np.random.uniform(15, 85)
+            emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size*0.7)
+            positions.append((x, y, size*0.7))
+    
+    ax.set_title(title, fontsize=20, fontweight='bold', pad=20)
+    ax.set_facecolor('white')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem criada com {len(positions)} emojis GRANDES")
+
+# Cria nuvens com emojis grandes
+print("🎨 Criando nuvens com emojis GRANDES...\n")
+
+create_large_emoji_cloud(emoji_all, emoji, "🎨 Nuvem de Emojis - Geral")
+create_large_emoji_cloud(emoji_p1, emoji, "🎨 Nuvem de Emojis - Marlon")
+create_large_emoji_cloud(emoji_p2, emoji, "🎨 Nuvem de Emojis - Letícia")
+```
+
+```{python}
+#| label: emoji-cloud-hero
+#| fig-cap: "Nuvem de Emojis - Destaques Grandes"
+#| fig-height: 12
+
+def create_hero_emoji_cloud(counter, emoji_helper, title="Nuvem de Emojis"):
+    """
+    Top 3 GIGANTES no centro, resto distribuído em volta.
+    """
+    import numpy as np
+    
+    top_emojis = counter.most_common(70)
+    
+    fig, ax = plt.subplots(figsize=(16, 12))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+    
+    np.random.seed(42)
+    positions = []
+    
+    # TOP 3 no centro (GIGANTES)
+    hero_positions = [
+        (50, 50, 0.45),  # #1 - GIGANTE no centro
+        (30, 50, 0.30),  # #2 - Grande à esquerda
+        (70, 50, 0.30),  # #3 - Grande à direita
+    ]
+    
+    for i in range(min(3, len(top_emojis))):
+        emoji_char, count = top_emojis[i]
+        x, y, size = hero_positions[i]
+        emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+        positions.append((x, y, size))
+    
+    # Resto em volta (tamanhos decrescentes)
+    for emoji_char, count in top_emojis[3:]:
+        # Tamanhos médios: 0.08 a 0.20
+        idx = top_emojis.index((emoji_char, count))
+        size = 0.20 - (idx / len(top_emojis)) * 0.12
+        
+        placed = False
+        for attempt in range(150):
+            # Tende para as bordas
+            if np.random.random() > 0.3:
+                x = np.random.uniform(5, 95)
+                y = np.random.choice([
+                    np.random.uniform(5, 25),    # Top
+                    np.random.uniform(75, 95)    # Bottom
+                ])
+            else:
+                x = np.random.choice([
+                    np.random.uniform(5, 20),    # Left
+                    np.random.uniform(80, 95)    # Right
+                ])
+                y = np.random.uniform(5, 95)
+            
+            overlap = False
+            for px, py, ps in positions:
+                distance = np.sqrt((x - px)**2 + (y - py)**2)
+                if distance < (size + ps) * 70:
+                    overlap = True
+                    break
+            
+            if not overlap:
+                emoji_helper.add_emoji(ax, emoji_char, x, y, zoom=size)
+                positions.append((x, y, size))
+                placed = True
+                break
+    
+    ax.set_title(title, fontsize=20, fontweight='bold', pad=20)
+    ax.set_facecolor('white')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"✅ Nuvem Hero criada: 3 gigantes + {len(positions)-3} em volta")
+
+# Cria nuvens Hero
+print("🌟 Criando nuvens HERO...\n")
+
+create_hero_emoji_cloud(emoji_all, emoji, "🌟 Nuvem Hero - Geral")
+create_hero_emoji_cloud(emoji_p1, emoji, "🌟 Nuvem Hero - Marlon")
+create_hero_emoji_cloud(emoji_p2, emoji, "🌟 Nuvem Hero - Letícia")
+```
