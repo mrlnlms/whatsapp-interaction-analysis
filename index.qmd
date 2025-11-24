@@ -11,11 +11,11 @@ format:
 
 ## Sobre este projeto
 
-Este projeto transforma um export bruto do WhatsApp (\~92K mensagens, \~5MB) em um dataset estruturado para análise de padrões de comunicação ao longo de 1 ano de relacionamento.
+Este projeto transforma um export bruto do WhatsApp (~92K mensagens, ~5MB) em um dataset estruturado para análise de padrões de comunicação ao longo de 1 ano de relacionamento.
 
 O pipeline completo demonstra práticas de **Data Engineering** e **Data Science**, desde a investigação inicial do arquivo bruto até análises avançadas com clustering e visualizações.
 
-------------------------------------------------------------------------
+---
 
 ## Pipeline de Dados
 
@@ -36,12 +36,12 @@ flowchart LR
     ANALYSIS --> H[Comunicação]
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Documentos do Projeto
 
 | Fase | Documento | Descrição |
-|------------------|---------------------------|---------------------------|
+|------|-----------|-----------|
 | — | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo bruto |
 | Cleaning | [01-data-cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | Wrangling | [02-data-wrangling](notebooks/02-data-wrangling.qmd) | Parsing, vinculação de mídia, transcrição |
@@ -49,30 +49,30 @@ flowchart LR
 | Analysis | [04-eda](notebooks/04-eda.qmd) | Análise exploratória |
 | Analysis | [05-advanced-analysis](notebooks/05-advanced-analysis.qmd) | Clustering, PCA, radar charts |
 
-------------------------------------------------------------------------
+---
 
 ## Dataset Final
 
-| Métrica           | Valor                        |
-|-------------------|------------------------------|
-| **Mensagens**     | 91.924                       |
-| **Features**      | 35                           |
-| **Período**       | Out/2024 — Out/2025          |
+| Métrica | Valor |
+|---------|-------|
+| **Mensagens** | 91.924 |
+| **Features** | 35 |
+| **Período** | Out/2024 — Out/2025 |
 | **Participantes** | 2 (anonimizados como P1, P2) |
 
 ### Categorias de Features
 
--   **Base:** timestamp, remetente, tipo_midia, conteudo
--   **Temporais:** dia_semana, periodo_dia, mes, ano, is_weekend
--   **Texto:** char_count, word_count, has_emoji, has_question, has_exclamation
--   **Conversacionais:** tempo_resposta, is_reply_quick, is_conversation_start
--   **Contextuais:** contexto_relacional, is_juntos, sentiment_score
+- **Base:** timestamp, remetente, tipo_midia, conteudo
+- **Temporais:** dia_semana, periodo_dia, mes, ano, is_weekend
+- **Texto:** char_count, word_count, has_emoji, has_question, has_exclamation
+- **Conversacionais:** tempo_resposta, is_reply_quick, is_conversation_start
+- **Contextuais:** contexto_relacional, is_juntos, sentiment_score
 
-------------------------------------------------------------------------
+---
 
 ## Estrutura do Projeto
 
-```         
+```
 whatsapp-ds-analytics/
 ├── index.qmd                 # Este documento
 ├── assets/images/            # Diagramas e recursos estáticos
@@ -83,9 +83,9 @@ whatsapp-ds-analytics/
 └── docs/                     # Documentação adicional
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Links Úteis
 
--   [Dicionário de Dados](docs/data-dictionary.md)
--   [Como organizar seus dados](data/README.md)
+- [Dicionário de Dados](docs/data-dictionary.md)
+- [Como organizar seus dados](data/README.md)
