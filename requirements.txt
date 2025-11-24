@@ -1,0 +1,43 @@
+# =============================================================================
+# WhatsApp DS Analytics - Dependências
+# =============================================================================
+
+# Jupyter (necessário pro Quarto executar código Python)
+jupyter
+nbformat
+nbclient
+ipykernel
+
+# Data manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow
+
+# Visualization
+matplotlib>=3.7.0
+plotly>=5.15.0
+seaborn>=0.12.0
+wordcloud>=1.9.0
+
+# Progress bars
+tqdm
+
+# API de transcrição (Groq/Whisper)
+groq
+
+# Análise de sentimento
+transformers
+torch
+
+# Estatística e Machine Learning
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Análise de Correspondência Múltipla (MCA)
+prince
+
+# Variáveis de ambiente
+python-dotenv
+
+# Utilitários
+python-dateutil

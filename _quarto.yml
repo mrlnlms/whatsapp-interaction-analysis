@@ -1,0 +1,73 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "WhatsApp DS Analytics"
+  description: "Pipeline de Data Science para análise de conversas do WhatsApp"
+  
+  navbar:
+    title: "WhatsApp DS Analytics"
+    left:
+      - href: index.qmd
+        text: Home
+      - text: "Notebooks"
+        menu:
+          - href: notebooks/00-data-profiling.qmd
+            text: "00 - Data Profiling"
+          - href: notebooks/01-data-cleaning.qmd
+            text: "01 - Data Cleaning"
+          - href: notebooks/02-data-wrangling.qmd
+            text: "02 - Data Wrangling"
+          - href: notebooks/03-feature-engineering.qmd
+            text: "03 - Feature Engineering"
+          - href: notebooks/04-eda.qmd
+            text: "04 - EDA"
+          - href: notebooks/05-advanced-analysis.qmd
+            text: "05 - Advanced Analysis"
+      - href: docs/data-dictionary.md
+        text: "Dicionário de Dados"
+    
+    tools:
+      - icon: github
+        href: https://github.com/mrlnlms/whatsapp-ds-analytics
+
+  sidebar:
+    style: "docked"
+    search: true
+    contents:
+      - section: "Projeto"
+        contents:
+          - index.qmd
+          - docs/data-dictionary.md
+      - section: "Data Preparation"
+        contents:
+          - notebooks/00-data-profiling.qmd
+          - notebooks/01-data-cleaning.qmd
+          - notebooks/02-data-wrangling.qmd
+          - notebooks/03-feature-engineering.qmd
+      - section: "Data Analysis"
+        contents:
+          - notebooks/04-eda.qmd
+          - notebooks/05-advanced-analysis.qmd
+
+  page-footer:
+    center: |
+      Desenvolvido por [@mrlnlms](https://github.com/mrlnlms)
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    code-overflow: wrap
+    highlight-style: github
+
+execute:
+  warning: false
+  message: false
+  echo: true
+  freeze: auto
+  jupyter: whatsapp-ds
