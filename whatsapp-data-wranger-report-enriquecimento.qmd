@@ -1,0 +1,664 @@
+---
+title: "Enriquecimento do Dataset - Análises Temporais e Métricas Avançadas"
+author: "Marlon"
+format: html
+---
+
+# Enriquecimento do Dataset - Parte 2
+
+Este notebook continua o enriquecimento do dataset com análises temporais, métricas avançadas de texto e padrões conversacionais.
+
+## Setup Inicial
+
+```{python}
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+# Configurações do pandas
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.width', None)
+
+print("✅ Bibliotecas carregadas!")
+```
+
+## Carregamento dos Dados
+
+```{python}
+# Carrega DataFrame enriquecido v1
+df = pd.read_csv('final_dataframe_enriched_v1.csv')
+
+# Converte timestamp para datetime
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print(f"📊 Dataset carregado:")
+print(f"   • Linhas: {len(df):,}")
+print(f"   • Colunas: {len(df.columns)}")
+print(f"\n📋 Colunas atuais:")
+for i, col in enumerate(df.columns, 1):
+    print(f"   {i:2}. {col}")
+
+print(f"\n📅 Período dos dados:")
+print(f"   • Início: {df['timestamp'].min()}")
+print(f"   • Fim: {df['timestamp'].max()}")
+print(f"   • Duração: {(df['timestamp'].max() - df['timestamp'].min()).days} dias")
+```
+
+---
+
+## 1. Enriquecimento Temporal ⏰
+
+Adiciona colunas relacionadas ao contexto temporal das mensagens.
+
+```{python}
+def enrich_temporal_features(df):
+    """
+    Adiciona features temporais:
+    - dia_semana: Nome do dia da semana
+    - periodo_dia: Madrugada/Manhã/Tarde/Noite
+    - mes: Nome do mês
+    - ano: Ano
+    - is_weekend: Se é fim de semana
+    """
+    print("🔄 Enriquecendo com features temporais...\n")
+    
+    df_temp = df.copy()
+    
+    # ========================================
+    # 1. DIA DA SEMANA
+    # ========================================
+    print("📅 Extraindo dia da semana...")
+    
+    # Map: 0=Segunda, 1=Terça, ..., 6=Domingo
+    dias_semana = {
+        0: 'Segunda',
+        1: 'Terça',
+        2: 'Quarta',
+        3: 'Quinta',
+        4: 'Sexta',
+        5: 'Sábado',
+        6: 'Domingo'
+    }
+    
+    df_temp['dia_semana'] = df_temp['timestamp'].dt.dayofweek.map(dias_semana)
+    
+    print(f"   ✅ Distribuição por dia da semana:")
+    for dia, count in df_temp['dia_semana'].value_counts().sort_index().items():
+        pct = (count / len(df_temp) * 100)
+        print(f"      • {dia}: {count:,} ({pct:.1f}%)")
+    
+    # ========================================
+    # 2. PERÍODO DO DIA
+    # ========================================
+    print("\n🌅 Identificando período do dia...")
+    
+    def get_periodo_dia(hora):
+        if 0 <= hora < 6:
+            return 'Madrugada'
+        elif 6 <= hora < 12:
+            return 'Manhã'
+        elif 12 <= hora < 18:
+            return 'Tarde'
+        else:
+            return 'Noite'
+    
+    df_temp['periodo_dia'] = df_temp['timestamp'].dt.hour.apply(get_periodo_dia)
+    
+    print(f"   ✅ Distribuição por período:")
+    for periodo, count in df_temp['periodo_dia'].value_counts().items():
+        pct = (count / len(df_temp) * 100)
+        print(f"      • {periodo}: {count:,} ({pct:.1f}%)")
+    
+    # ========================================
+    # 3. MÊS
+    # ========================================
+    print("\n📆 Extraindo mês...")
+    
+    meses = {
+        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+    }
+    
+    df_temp['mes'] = df_temp['timestamp'].dt.month.map(meses)
+    
+    print(f"   ✅ Distribuição por mês (top 5):")
+    for mes, count in df_temp['mes'].value_counts().head(5).items():
+        pct = (count / len(df_temp) * 100)
+        print(f"      • {mes}: {count:,} ({pct:.1f}%)")
+    
+    # ========================================
+    # 4. ANO
+    # ========================================
+    print("\n📅 Extraindo ano...")
+    
+    df_temp['ano'] = df_temp['timestamp'].dt.year
+    
+    print(f"   ✅ Distribuição por ano:")
+    for ano, count in df_temp['ano'].value_counts().sort_index().items():
+        pct = (count / len(df_temp) * 100)
+        print(f"      • {ano}: {count:,} ({pct:.1f}%)")
+    
+    # ========================================
+    # 5. FIM DE SEMANA
+    # ========================================
+    print("\n🎉 Identificando fins de semana...")
+    
+    # Sábado=5, Domingo=6
+    df_temp['is_weekend'] = df_temp['timestamp'].dt.dayofweek.isin([5, 6])
+    
+    weekend_count = df_temp['is_weekend'].sum()
+    weekday_count = (~df_temp['is_weekend']).sum()
+    
+    print(f"   ✅ Distribuição:")
+    print(f"      • Semana: {weekday_count:,} ({weekday_count/len(df_temp)*100:.1f}%)")
+    print(f"      • Fim de semana: {weekend_count:,} ({weekend_count/len(df_temp)*100:.1f}%)")
+    
+    # ========================================
+    # RESUMO
+    # ========================================
+    print("\n" + "="*80)
+    print("✅ ENRIQUECIMENTO TEMPORAL CONCLUÍDO!")
+    print("="*80)
+    print(f"\n📊 5 novas colunas adicionadas:")
+    print(f"   • dia_semana")
+    print(f"   • periodo_dia")
+    print(f"   • mes")
+    print(f"   • ano")
+    print(f"   • is_weekend")
+    print("="*80 + "\n")
+    
+    return df_temp
+
+# Executa enriquecimento temporal
+df_enriched = enrich_temporal_features(df)
+```
+
+### Visualização dos Dados Temporais
+
+```{python}
+# Primeiras linhas com features temporais
+print("🔍 Primeiras 10 linhas com features temporais:")
+print("="*100)
+df_enriched[['timestamp', 'remetente', 'dia_semana', 'periodo_dia', 'mes', 'ano', 'is_weekend']].head(10)
+```
+
+```{python}
+# Análise cruzada: dia da semana × período do dia
+print("\n📊 Mensagens por dia da semana e período:")
+print("="*100)
+pd.crosstab(df_enriched['dia_semana'], df_enriched['periodo_dia'], margins=True)
+```
+
+---
+
+## 2. Métricas Avançadas de Texto 📝
+
+```{python}
+def enrich_text_metrics(df):
+    """
+    Adiciona métricas avançadas de texto:
+    - char_count: Total de caracteres
+    - avg_word_length: Média de tamanho das palavras
+    - has_question: Tem pergunta (?)
+    - has_exclamation: Tem exclamação (!)
+    - is_all_caps: Tudo maiúsculo
+    - line_breaks: Número de quebras de linha
+    """
+    print("🔄 Enriquecendo com métricas avançadas de texto...\n")
+    
+    df_text = df.copy()
+    
+    # ========================================
+    # 1. CHAR_COUNT
+    # ========================================
+    print("📏 Contando caracteres...")
+    
+    df_text['char_count'] = df_text['conteudo'].str.len().fillna(0).astype(int)
+    
+    avg_chars = df_text[df_text['char_count'] > 0]['char_count'].mean()
+    max_chars = df_text['char_count'].max()
+    
+    print(f"   ✅ Média de caracteres: {avg_chars:.1f}")
+    print(f"   ✅ Máximo: {max_chars:,}")
+    
+    # ========================================
+    # 2. AVG_WORD_LENGTH
+    # ========================================
+    print("\n📊 Calculando média de tamanho de palavras...")
+    
+    def calc_avg_word_length(text):
+        if pd.isna(text) or len(text.strip()) == 0:
+            return 0.0
+        words = text.split()
+        if len(words) == 0:
+            return 0.0
+        return sum(len(word) for word in words) / len(words)
+    
+    df_text['avg_word_length'] = df_text['conteudo'].apply(calc_avg_word_length)
+    
+    avg_word_len = df_text[df_text['avg_word_length'] > 0]['avg_word_length'].mean()
+    
+    print(f"   ✅ Média geral: {avg_word_len:.2f} caracteres/palavra")
+    
+    # ========================================
+    # 3. HAS_QUESTION
+    # ========================================
+    print("\n❓ Detectando perguntas...")
+    
+    df_text['has_question'] = df_text['conteudo'].str.contains(r'\?', regex=True, na=False)
+    
+    questions_count = df_text['has_question'].sum()
+    
+    print(f"   ✅ Mensagens com pergunta: {questions_count:,} ({questions_count/len(df_text)*100:.1f}%)")
+    
+    # ========================================
+    # 4. HAS_EXCLAMATION
+    # ========================================
+    print("\n❗ Detectando exclamações...")
+    
+    df_text['has_exclamation'] = df_text['conteudo'].str.contains(r'!', regex=True, na=False)
+    
+    exclamation_count = df_text['has_exclamation'].sum()
+    
+    print(f"   ✅ Mensagens com exclamação: {exclamation_count:,} ({exclamation_count/len(df_text)*100:.1f}%)")
+    
+    # ========================================
+    # 5. IS_ALL_CAPS
+    # ========================================
+    print("\n🔠 Detectando mensagens em CAPS...")
+    
+    def is_all_caps(text):
+        if pd.isna(text) or len(text.strip()) == 0:
+            return False
+        # Remove números e pontuação para análise
+        letters = ''.join(c for c in text if c.isalpha())
+        if len(letters) < 3:  # Precisa ter pelo menos 3 letras
+            return False
+        return letters.isupper()
+    
+    df_text['is_all_caps'] = df_text['conteudo'].apply(is_all_caps)
+    
+    caps_count = df_text['is_all_caps'].sum()
+    
+    print(f"   ✅ Mensagens em CAPS: {caps_count:,} ({caps_count/len(df_text)*100:.2f}%)")
+    
+    # ========================================
+    # 6. LINE_BREAKS
+    # ========================================
+    print("\n↩️  Contando quebras de linha...")
+    
+    df_text['line_breaks'] = df_text['conteudo'].str.count(r'\n').fillna(0).astype(int)
+    
+    total_breaks = df_text['line_breaks'].sum()
+    msgs_with_breaks = (df_text['line_breaks'] > 0).sum()
+    
+    print(f"   ✅ Mensagens com quebras: {msgs_with_breaks:,} ({msgs_with_breaks/len(df_text)*100:.1f}%)")
+    print(f"   ✅ Total de quebras: {total_breaks:,}")
+    
+    # ========================================
+    # RESUMO
+    # ========================================
+    print("\n" + "="*80)
+    print("✅ MÉTRICAS AVANÇADAS DE TEXTO CONCLUÍDAS!")
+    print("="*80)
+    print(f"\n📊 6 novas colunas adicionadas:")
+    print(f"   • char_count")
+    print(f"   • avg_word_length")
+    print(f"   • has_question")
+    print(f"   • has_exclamation")
+    print(f"   • is_all_caps")
+    print(f"   • line_breaks")
+    print("="*80 + "\n")
+    
+    return df_text
+
+# Executa enriquecimento de métricas de texto
+df_enriched = enrich_text_metrics(df_enriched)
+```
+
+### Visualização das Métricas de Texto
+
+```{python}
+# Primeiras linhas com métricas de texto
+print("🔍 Primeiras 10 linhas com métricas de texto:")
+print("="*100)
+df_enriched[['conteudo', 'char_count', 'word_count', 'avg_word_length', 'has_question', 'has_exclamation']].head(10)
+```
+
+---
+
+## 3. Padrões Conversacionais 💬
+
+```{python}
+def enrich_conversational_patterns(df):
+    """
+    Adiciona padrões conversacionais:
+    - tempo_resposta_segundos: Tempo até próxima mensagem (segundos)
+    - is_first_of_day: Primeira mensagem do dia
+    - msgs_seguidas: Número de mensagens seguidas do mesmo remetente
+    - is_reply_quick: Resposta rápida (<5 minutos)
+    """
+    print("🔄 Enriquecendo com padrões conversacionais...\n")
+    
+    df_conv = df.copy()
+    df_conv = df_conv.sort_values('timestamp').reset_index(drop=True)
+    
+    # ========================================
+    # 1. TEMPO_RESPOSTA_SEGUNDOS
+    # ========================================
+    print("⏱️  Calculando tempo de resposta...")
+    
+    df_conv['tempo_resposta_segundos'] = df_conv['timestamp'].diff().dt.total_seconds()
+    
+    # Primeira mensagem não tem tempo de resposta
+    df_conv.loc[0, 'tempo_resposta_segundos'] = None
+    
+    avg_response = df_conv['tempo_resposta_segundos'].mean()
+    median_response = df_conv['tempo_resposta_segundos'].median()
+    
+    print(f"   ✅ Tempo médio de resposta: {avg_response/60:.1f} minutos")
+    print(f"   ✅ Mediana: {median_response/60:.1f} minutos")
+    
+    # ========================================
+    # 2. IS_FIRST_OF_DAY
+    # ========================================
+    print("\n🌅 Identificando primeira mensagem do dia...")
+    
+    df_conv['data_only'] = df_conv['timestamp'].dt.date
+    df_conv['is_first_of_day'] = df_conv['data_only'] != df_conv['data_only'].shift(1)
+    df_conv = df_conv.drop(columns=['data_only'])
+    
+    first_of_day_count = df_conv['is_first_of_day'].sum()
+    
+    print(f"   ✅ Primeiras mensagens do dia: {first_of_day_count:,}")
+    
+    # ========================================
+    # 3. MSGS_SEGUIDAS
+    # ========================================
+    print("\n🔁 Contando mensagens seguidas...")
+    
+    # Identifica quando o remetente muda
+    df_conv['remetente_mudou'] = df_conv['remetente'] != df_conv['remetente'].shift(1)
+    
+    # Cria grupos de mensagens seguidas
+    df_conv['grupo_msgs'] = df_conv['remetente_mudou'].cumsum()
+    
+    # Conta mensagens em cada grupo
+    df_conv['msgs_seguidas'] = df_conv.groupby('grupo_msgs').cumcount() + 1
+    
+    # Remove colunas auxiliares
+    df_conv = df_conv.drop(columns=['remetente_mudou', 'grupo_msgs'])
+    
+    max_seguidas = df_conv['msgs_seguidas'].max()
+    avg_seguidas = df_conv['msgs_seguidas'].mean()
+    
+    print(f"   ✅ Máximo de mensagens seguidas: {max_seguidas}")
+    print(f"   ✅ Média: {avg_seguidas:.1f}")
+    
+    # ========================================
+    # 4. IS_REPLY_QUICK
+    # ========================================
+    print("\n⚡ Identificando respostas rápidas (<5 min)...")
+    
+    # Resposta rápida = menos de 5 minutos (300 segundos)
+    df_conv['is_reply_quick'] = (df_conv['tempo_resposta_segundos'] < 300) & (df_conv['tempo_resposta_segundos'].notna())
+    
+    quick_replies = df_conv['is_reply_quick'].sum()
+    
+    print(f"   ✅ Respostas rápidas: {quick_replies:,} ({quick_replies/len(df_conv)*100:.1f}%)")
+    
+    # ========================================
+    # RESUMO
+    # ========================================
+    print("\n" + "="*80)
+    print("✅ PADRÕES CONVERSACIONAIS CONCLUÍDOS!")
+    print("="*80)
+    print(f"\n📊 4 novas colunas adicionadas:")
+    print(f"   • tempo_resposta_segundos")
+    print(f"   • is_first_of_day")
+    print(f"   • msgs_seguidas")
+    print(f"   • is_reply_quick")
+    print("="*80 + "\n")
+    
+    return df_conv
+
+# Executa enriquecimento de padrões conversacionais
+df_enriched = enrich_conversational_patterns(df_enriched)
+```
+
+### Visualização dos Padrões Conversacionais
+
+```{python}
+# Primeiras linhas com padrões conversacionais
+print("🔍 Primeiras 15 linhas com padrões conversacionais:")
+print("="*100)
+df_enriched[['timestamp', 'remetente', 'tempo_resposta_segundos', 'msgs_seguidas', 'is_reply_quick']].head(15)
+```
+
+---
+
+## Exportação Final
+
+```{python}
+def export_enriched_v2(df):
+    """
+    Exporta versão final enriquecida (v2) com todas as features.
+    """
+    import os
+    
+    print("🔄 Exportando DataFrame enriquecido v2...\n")
+    
+    # Exporta CSV
+    filename = 'final_dataframe_enriched_v2.csv'
+    df.to_csv(filename, index=False, encoding='utf-8')
+    
+    file_size = os.path.getsize(filename)
+    file_size_mb = file_size / (1024 * 1024)
+    
+    print("="*80)
+    print("🎉 EXPORTAÇÃO CONCLUÍDA!")
+    print("="*80)
+    
+    print(f"\n✅ Arquivo exportado:")
+    print(f"   📄 {filename}")
+    print(f"   📊 {len(df):,} linhas × {len(df.columns)} colunas")
+    print(f"   💾 {file_size_mb:.2f} MB\n")
+    
+    print("📋 Todas as colunas ({}):\n".format(len(df.columns)))
+    
+    # Agrupa colunas por categoria
+    colunas_base = ['timestamp', 'remetente', 'tipo_midia', 'status_midia', 'conteudo', 'arquivo_midia', 'linha_original', 'data', 'hora']
+    colunas_content = ['has_link', 'has_emoji', 'word_count']
+    colunas_temporal = ['dia_semana', 'periodo_dia', 'mes', 'ano', 'is_weekend']
+    colunas_text_metrics = ['char_count', 'avg_word_length', 'has_question', 'has_exclamation', 'is_all_caps', 'line_breaks']
+    colunas_conversational = ['tempo_resposta_segundos', 'is_first_of_day', 'msgs_seguidas', 'is_reply_quick']
+    
+    print("   🔹 Colunas Base (9):")
+    for col in colunas_base:
+        if col in df.columns:
+            print(f"      • {col}")
+    
+    print("\n   🔹 Análise de Conteúdo (3):")
+    for col in colunas_content:
+        if col in df.columns:
+            print(f"      • {col}")
+    
+    print("\n   🔹 Features Temporais (5):")
+    for col in colunas_temporal:
+        if col in df.columns:
+            print(f"      • {col}")
+    
+    print("\n   🔹 Métricas de Texto (6):")
+    for col in colunas_text_metrics:
+        if col in df.columns:
+            print(f"      • {col}")
+    
+    print("\n   🔹 Padrões Conversacionais (4):")
+    for col in colunas_conversational:
+        if col in df.columns:
+            print(f"      • {col}")
+    
+    print("\n" + "="*80)
+    print("✨ Dataset totalmente enriquecido e pronto para análises!")
+    print("="*80 + "\n")
+    
+    return filename
+
+# Exporta versão final enriquecida
+v2_file = export_enriched_v2(df_enriched)
+```
+
+---
+
+## Resumo Final
+
+```{python}
+# Info completa do DataFrame
+print("\n📊 Informações completas do DataFrame enriquecido:")
+print("="*100)
+df_enriched.info()
+```
+
+```{python}
+# Estatísticas descritivas
+print("\n📈 Estatísticas descritivas das colunas numéricas:")
+print("="*100)
+df_enriched.describe()
+df_enriched.info()
+```
+
+
+```{python}
+def enrich_final_features(df):
+    """
+    Adiciona últimas features essenciais:
+    - msg_size_category: Categorização de tamanho
+    - hora_numerica: Hora exata (0-23)
+    - gap_horas: Gap em horas
+    - is_conversation_start: Indica nova conversa (gap > 2h)
+    """
+    print("🔄 Adicionando features finais...\n")
+    
+    df_final = df.copy()
+    
+    # ========================================
+    # 1. MSG_SIZE_CATEGORY
+    # ========================================
+    print("📏 Categorizando tamanho das mensagens...")
+    
+    def categorize_size(word_count):
+        if word_count == 0:
+            return 'Vazia'
+        elif word_count <= 10:
+            return 'Curta'
+        elif word_count <= 30:
+            return 'Média'
+        elif word_count <= 100:
+            return 'Longa'
+        else:
+            return 'Muito Longa'
+    
+    df_final['msg_size_category'] = df_final['word_count'].apply(categorize_size)
+    
+    print(f"   ✅ Distribuição por categoria:")
+    for cat, count in df_final['msg_size_category'].value_counts().items():
+        pct = (count / len(df_final) * 100)
+        print(f"      • {cat}: {count:,} ({pct:.1f}%)")
+    
+    # ========================================
+    # 2. HORA_NUMERICA
+    # ========================================
+    print("\n⏰ Extraindo hora numérica...")
+    
+    df_final['hora_numerica'] = df_final['timestamp'].dt.hour
+    
+    print(f"   ✅ Hora numérica extraída (0-23)")
+    
+    # Distribuição por horário
+    hora_dist = df_final['hora_numerica'].value_counts().sort_index()
+    hora_pico = hora_dist.idxmax()
+    
+    print(f"   📊 Horário de pico: {hora_pico}h ({hora_dist[hora_pico]:,} mensagens)")
+    
+    # ========================================
+    # 3. GAP_HORAS
+    # ========================================
+    print("\n⏱️  Calculando gap em horas...")
+    
+    df_final['gap_horas'] = df_final['tempo_resposta_segundos'] / 3600
+    
+    # Primeira mensagem fica None
+    avg_gap = df_final['gap_horas'].mean()
+    median_gap = df_final['gap_horas'].median()
+    
+    print(f"   ✅ Gap médio: {avg_gap:.2f} horas")
+    print(f"   ✅ Mediana: {median_gap:.2f} horas")
+    
+    # ========================================
+    # 4. IS_CONVERSATION_START
+    # ========================================
+    print("\n💬 Identificando início de conversas...")
+    
+    # Conversa nova = gap > 2 horas OU primeira mensagem do dia
+    df_final['is_conversation_start'] = (
+        (df_final['gap_horas'] > 2) | 
+        (df_final['is_first_of_day'])
+    )
+    
+    # Primeira mensagem também é início
+    df_final.loc[0, 'is_conversation_start'] = True
+    
+    conversation_starts = df_final['is_conversation_start'].sum()
+    
+    print(f"   ✅ Inícios de conversa: {conversation_starts:,}")
+    print(f"   📊 Média de msgs por conversa: {len(df_final) / conversation_starts:.1f}")
+    
+    # ========================================
+    # RESUMO
+    # ========================================
+    print("\n" + "="*80)
+    print("✅ FEATURES FINAIS ADICIONADAS!")
+    print("="*80)
+    print(f"\n📊 4 novas colunas:")
+    print(f"   • msg_size_category")
+    print(f"   • hora_numerica")
+    print(f"   • gap_horas")
+    print(f"   • is_conversation_start")
+    
+    print(f"\n📈 Total de colunas: {len(df_final.columns)}")
+    print("="*80 + "\n")
+    
+    return df_final
+
+# Executa enriquecimento final
+df_enriched = enrich_final_features(df_enriched)
+```
+
+
+
+
+```{python}
+# Exporta versão final
+def export_final_enriched(df):
+    """Exporta DataFrame completamente enriquecido."""
+    import os
+    
+    filename = 'final_dataframe_enriched_complete.csv'
+    df.to_csv(filename, index=False, encoding='utf-8')
+    
+    file_size = os.path.getsize(filename)
+    file_size_mb = file_size / (1024 * 1024)
+    
+    print("🎉 DATASET FINAL COMPLETO!")
+    print("="*80)
+    print(f"📄 {filename}")
+    print(f"📊 {len(df):,} linhas × {len(df.columns)} colunas")
+    print(f"💾 {file_size_mb:.2f} MB")
+    print("="*80)
+    
+    return filename
+
+final_file = export_final_enriched(df_enriched)
+```

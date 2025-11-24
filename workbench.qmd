@@ -1,0 +1,48 @@
+# My Workbench
+
+
+```{python}
+    import pandas as pd
+    import numpy as np
+    df = pd.read_csv('output_files/df_master_final_aggr.csv')
+```
+
+```{python}
+    df.info()
+    df.sample(10)
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Categorias e ângulos
+categorias = radar_norm.columns.tolist()
+angles = np.linspace(0, 2 * np.pi, len(categorias), endpoint=False).tolist()
+angles += angles[:1]
+
+# Plot
+fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True))
+
+cores = {'P1': '#2E86AB', 'P2': '#E84855'}
+nomes = {'P1': 'Marlon', 'P2': 'Letícia'}
+
+for pessoa in radar_norm.index:
+    valores = radar_norm.loc[pessoa].tolist()
+    valores += valores[:1]
+    
+    ax.plot(angles, valores, 'o-', linewidth=2.5, label=nomes[pessoa], color=cores[pessoa])
+    ax.fill(angles, valores, alpha=0.2, color=cores[pessoa])
+
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(categorias, size=12)
+ax.set_ylim(0, 1)
+
+plt.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1), fontsize=12)
+plt.title('Perfil de Comunicação\nMarlon vs Letícia', size=16, fontweight='bold', pad=20)
+
+plt.tight_layout()
+plt.show()
+```
+

@@ -1,0 +1,70 @@
+
+ANÁLISE COMPLETA DE MATCHING: MENSAGENS ↔ ARQUIVOS
+===================================================
+
+DADOS TOTAIS:
+- Arquivos físicos na pasta: 1.255
+- Mensagens de mídia no texto: 11.723 (778 attached + 10.945 omitted)
+
+MATCHES BEM-SUCEDIDOS:
+✅ Mensagens 'attached': 778 (100.0%)
+✅ Mensagens 'omitted' pareadas: 67 (0.6%)
+✅ TOTAL de arquivos com referência no texto: 845 / 1.255 (67.3%)
+
+DADOS NÃO PAREADOS:
+❌ Arquivos órfãos (sem referência no texto): 410
+❌ Mensagens omitted sem arquivo físico: 9.542
+
+DESCOBERTA PRINCIPAL:
+=====================
+A exportação do WhatsApp foi PARCIAL em termos de arquivos físicos:
+
+- TEXTO: Completo de Out/2024 a Out/2025
+- ARQUIVOS: Apenas de 21/Ago/2025 em diante
+
+Detalhamento:
+-------------
+- Mensagens Out/2024 - 20/Ago/2025: 9.119 sem arquivo físico
+- Mensagens 21/Ago/2025 - Out/2025: 826 processadas
+  - 778 attached (já tinham arquivo)
+  - 48 omitted com arquivo encontrado
+
+DISTRIBUIÇÃO DOS ÓRFÃOS (410 arquivos):
+- Agosto (21-31): 59 arquivos
+- Setembro: 154 arquivos  
+- Outubro: 253 arquivos (maioria em out/20)
+
+Por que são órfãos?
+-------------------
+Esses 410 arquivos existem fisicamente mas:
+1. Podem ter sido deletados do chat após exportação do texto
+2. Podem ser duplicatas com nomes diferentes
+3. Podem ter timestamps incompatíveis (diferença >24h)
+4. Podem ser de tipos mapeados incorretamente
+
+TIPOS MAIS AFETADOS (sem arquivo):
+- audio: 3.949 mensagens
+- video_note: 2.978 mensagens
+- photo: 1.492 mensagens
+- sticker: 1.010 mensagens
+
+CONCLUSÃO:
+==========
+✅ Os 845 arquivos pareados estão CORRETOS e validados
+❌ As 9.542 mensagens sem arquivo são de períodos onde o WhatsApp 
+   NÃO exportou os arquivos físicos
+⚠️  Os 410 órfãos são arquivos recentes sem referência clara no texto
+
+RECOMENDAÇÃO:
+=============
+Considerar a exportação como tendo 3 grupos:
+1. Período completo (texto + arquivos): 21/Ago - Out/2025 ✅
+2. Período só texto: Out/2024 - 20/Ago/2025 ⚠️
+3. Arquivos órfãos: Investigar individualmente 🔍
+
+ARQUIVOS GERADOS:
+=================
+- final_dataframe_enriched.csv - DataFrame com file_paths preenchidos
+- orphan_files.csv - Lista dos 410 órfãos com metadados
+- match_summary.csv - Estatísticas do matching
+- final_report.txt - Este relatório

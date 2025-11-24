@@ -1,0 +1,605 @@
+---
+title: "🗺️ Análise Exploratória: Juntos vs Separados"
+subtitle: "Como as viagens impactam nossa comunicação?"
+author: "Marlon"
+date: today
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: true
+    toc-depth: 2
+    code-fold: true
+execute:
+  echo: true
+  warning: false
+---
+
+# 🎯 Objetivo
+
+Explorar como o **contexto relacional** (juntos, separados, pré/pós viagem) impacta os padrões de comunicação do casal.
+
+---
+
+# 📦 Setup
+
+```{python}
+#| label: setup
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Configurações
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("husl")
+
+# Cores do projeto
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c',
+    'juntos': '#2ecc71',
+    'rotina': '#95a5a6',
+    'pre_viagem': '#f39c12',
+    'pos_viagem': '#9b59b6'
+}
+
+# Carrega os dados
+df = pd.read_csv('output_files/df_master_final_aggr.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+df['data'] = pd.to_datetime(df['data'])
+
+print(f"✅ Dados carregados: {len(df):,} mensagens")
+print(f"✅ Período: {df['data'].min().date()} até {df['data'].max().date()}")
+```
+
+---
+
+# 📊 Visão Geral do Contexto Relacional
+
+```{python}
+#| label: visao-geral
+
+print("="*60)
+print("📊 DISTRIBUIÇÃO POR CONTEXTO RELACIONAL")
+print("="*60)
+
+# Contagem
+contagem = df['contexto_relacional'].value_counts()
+print(f"\n{contagem}")
+
+# Percentuais
+print(f"\n📊 Percentuais:")
+for ctx, count in contagem.items():
+    pct = count / len(df) * 100
+    print(f"   {ctx:15s}: {count:,} msgs ({pct:.1f}%)")
+
+# Dias únicos por contexto
+print(f"\n📅 Dias únicos por contexto:")
+for ctx in df['contexto_relacional'].unique():
+    dias = df[df['contexto_relacional'] == ctx]['data'].nunique()
+    print(f"   {ctx:15s}: {dias} dias")
+```
+
+## 📈 Gráfico de Pizza
+
+```{python}
+#| label: pizza-contexto
+
+fig = px.pie(
+    df, 
+    names='contexto_relacional',
+    title='📊 Distribuição de Mensagens por Contexto',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    hole=0.4
+)
+
+fig.update_traces(textposition='inside', textinfo='percent+label')
+fig.update_layout(height=500)
+fig.show()
+```
+
+---
+
+# 💬 Volume de Mensagens
+
+## Por Contexto
+
+```{python}
+#| label: volume-contexto
+
+# Agrupa por dia e contexto
+daily = df.groupby(['data', 'contexto_relacional']).size().reset_index(name='msgs')
+
+# Estatísticas por contexto
+print("="*60)
+print("📊 VOLUME DIÁRIO DE MENSAGENS POR CONTEXTO")
+print("="*60)
+
+stats = daily.groupby('contexto_relacional')['msgs'].agg(['mean', 'median', 'std', 'min', 'max'])
+stats = stats.round(1)
+print(stats)
+```
+
+```{python}
+#| label: boxplot-volume
+
+fig = px.box(
+    daily,
+    x='contexto_relacional',
+    y='msgs',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='📊 Volume Diário de Mensagens por Contexto',
+    labels={'msgs': 'Mensagens por Dia', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+## 📈 Comparação: Juntos vs Separados
+
+```{python}
+#| label: juntos-vs-separados
+
+# Agrupa por dia
+daily_juntos = df.groupby(['data', 'is_juntos']).size().reset_index(name='msgs')
+
+# Estatísticas
+print("="*60)
+print("📊 JUNTOS vs SEPARADOS - Volume Diário")
+print("="*60)
+
+for juntos in [True, False]:
+    dados = daily_juntos[daily_juntos['is_juntos'] == juntos]['msgs']
+    label = "JUNTOS" if juntos else "SEPARADOS"
+    print(f"\n{label}:")
+    print(f"   Média: {dados.mean():.1f} msgs/dia")
+    print(f"   Mediana: {dados.median():.1f} msgs/dia")
+    print(f"   Máximo: {dados.max()} msgs/dia")
+
+# Razão
+media_separados = daily_juntos[~daily_juntos['is_juntos']]['msgs'].mean()
+media_juntos = daily_juntos[daily_juntos['is_juntos']]['msgs'].mean()
+razao = media_separados / media_juntos
+
+print(f"\n🔥 INSIGHT: Vocês mandam {razao:.1f}x MAIS mensagens quando SEPARADOS!")
+```
+
+---
+
+# 😊 Análise de Sentimento
+
+## Por Contexto
+
+```{python}
+#| label: sentiment-contexto
+
+# Filtra só mensagens com sentiment
+df_sent = df[df['sentiment_score'].notna()].copy()
+
+print("="*60)
+print("📊 SENTIMENTO MÉDIO POR CONTEXTO")
+print("="*60)
+
+sent_stats = df_sent.groupby('contexto_relacional')['sentiment_score'].agg(['mean', 'median', 'std', 'count'])
+sent_stats = sent_stats.round(3)
+print(sent_stats)
+```
+
+```{python}
+#| label: barplot-sentiment
+
+# Calcula média por contexto
+sent_mean = df_sent.groupby('contexto_relacional')['sentiment_score'].mean().reset_index()
+
+fig = px.bar(
+    sent_mean,
+    x='contexto_relacional',
+    y='sentiment_score',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='😊 Sentimento Médio por Contexto Relacional',
+    labels={'sentiment_score': 'Sentimento Médio (-2 a +2)', 'contexto_relacional': 'Contexto'}
+)
+
+fig.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="Neutro")
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+## 📊 Distribuição de Sentimento
+
+```{python}
+#| label: violin-sentiment
+
+fig = px.violin(
+    df_sent,
+    x='contexto_relacional',
+    y='sentiment_score',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    box=True,
+    title='📊 Distribuição de Sentimento por Contexto',
+    labels={'sentiment_score': 'Sentimento (-2 a +2)', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+---
+
+# ⏰ Padrões Temporais
+
+## Horário por Contexto
+
+```{python}
+#| label: horario-contexto
+
+# Agrupa por hora e contexto
+hourly = df.groupby(['hora_numerica', 'contexto_relacional']).size().reset_index(name='msgs')
+
+fig = px.line(
+    hourly,
+    x='hora_numerica',
+    y='msgs',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='⏰ Padrão de Horário por Contexto',
+    labels={'hora_numerica': 'Hora do Dia', 'msgs': 'Número de Mensagens'}
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+## 📅 Dia da Semana por Contexto
+
+```{python}
+#| label: dia-semana-contexto
+
+# Ordem dos dias
+ordem_dias = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+# Agrupa
+weekly = df.groupby(['dia_semana', 'contexto_relacional']).size().reset_index(name='msgs')
+
+fig = px.bar(
+    weekly,
+    x='dia_semana',
+    y='msgs',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    barmode='group',
+    title='📅 Mensagens por Dia da Semana e Contexto',
+    labels={'dia_semana': 'Dia da Semana', 'msgs': 'Mensagens'},
+    category_orders={'dia_semana': ordem_dias}
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+---
+
+# 👥 Comparação P1 vs P2
+
+## Volume por Remetente e Contexto
+
+```{python}
+#| label: remetente-contexto
+
+# Agrupa
+remetente_ctx = df.groupby(['contexto_relacional', 'remetente']).size().reset_index(name='msgs')
+
+fig = px.bar(
+    remetente_ctx,
+    x='contexto_relacional',
+    y='msgs',
+    color='remetente',
+    color_discrete_map={'P1': COLORS['P1'], 'P2': COLORS['P2']},
+    barmode='group',
+    title='👥 Quem Fala Mais em Cada Contexto?',
+    labels={'msgs': 'Mensagens', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+## Sentimento por Remetente e Contexto
+
+```{python}
+#| label: sentiment-remetente-contexto
+
+sent_rem = df_sent.groupby(['contexto_relacional', 'remetente'])['sentiment_score'].mean().reset_index()
+
+fig = px.bar(
+    sent_rem,
+    x='contexto_relacional',
+    y='sentiment_score',
+    color='remetente',
+    color_discrete_map={'P1': COLORS['P1'], 'P2': COLORS['P2']},
+    barmode='group',
+    title='😊 Sentimento Médio: P1 vs P2 por Contexto',
+    labels={'sentiment_score': 'Sentimento Médio', 'contexto_relacional': 'Contexto'}
+)
+
+fig.add_hline(y=0, line_dash="dash", line_color="gray")
+fig.update_layout(height=500)
+fig.show()
+```
+
+---
+
+# 📝 Tamanho das Mensagens
+
+```{python}
+#| label: tamanho-msgs
+
+# Estatísticas de tamanho por contexto
+print("="*60)
+print("📝 TAMANHO MÉDIO DAS MENSAGENS (palavras)")
+print("="*60)
+
+tamanho = df.groupby('contexto_relacional')['word_count'].agg(['mean', 'median', 'std'])
+tamanho = tamanho.round(2)
+print(tamanho)
+```
+
+```{python}
+#| label: boxplot-tamanho
+
+fig = px.box(
+    df[df['word_count'] > 0],
+    x='contexto_relacional',
+    y='word_count',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='📝 Tamanho das Mensagens por Contexto',
+    labels={'word_count': 'Palavras por Mensagem', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_yaxes(range=[0, 50])  # Limita para melhor visualização
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+---
+
+# 😀 Uso de Emoji
+
+```{python}
+#| label: emoji-contexto
+
+# Percentual de mensagens com emoji
+emoji_pct = df.groupby('contexto_relacional')['has_emoji'].mean() * 100
+
+print("="*60)
+print("😀 USO DE EMOJI POR CONTEXTO")
+print("="*60)
+
+for ctx, pct in emoji_pct.items():
+    print(f"   {ctx:15s}: {pct:.1f}% das mensagens têm emoji")
+```
+
+```{python}
+#| label: barplot-emoji
+
+emoji_df = emoji_pct.reset_index()
+emoji_df.columns = ['contexto_relacional', 'pct_emoji']
+
+fig = px.bar(
+    emoji_df,
+    x='contexto_relacional',
+    y='pct_emoji',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='😀 Percentual de Mensagens com Emoji',
+    labels={'pct_emoji': '% com Emoji', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+---
+
+# ⚡ Tempo de Resposta
+
+```{python}
+#| label: tempo-resposta
+
+# Filtra respostas válidas (< 1 hora)
+df_resp = df[(df['tempo_resposta_segundos'] > 0) & (df['tempo_resposta_segundos'] < 3600)].copy()
+df_resp['tempo_resposta_min'] = df_resp['tempo_resposta_segundos'] / 60
+
+print("="*60)
+print("⚡ TEMPO MÉDIO DE RESPOSTA (minutos)")
+print("="*60)
+
+resp_stats = df_resp.groupby('contexto_relacional')['tempo_resposta_min'].agg(['mean', 'median'])
+resp_stats = resp_stats.round(2)
+print(resp_stats)
+```
+
+```{python}
+#| label: boxplot-resposta
+
+fig = px.box(
+    df_resp,
+    x='contexto_relacional',
+    y='tempo_resposta_min',
+    color='contexto_relacional',
+    color_discrete_map=COLORS,
+    title='⚡ Tempo de Resposta por Contexto',
+    labels={'tempo_resposta_min': 'Minutos', 'contexto_relacional': 'Contexto'}
+)
+
+fig.update_yaxes(range=[0, 30])  # Limita para melhor visualização
+fig.update_layout(height=500, showlegend=False)
+fig.show()
+```
+
+---
+
+# 📅 Timeline das Viagens
+
+```{python}
+#| label: timeline-viagens
+
+# Carrega viagens
+viagens_df = pd.read_csv('output_files/viagens.csv')
+viagens_df['inicio'] = pd.to_datetime(viagens_df['inicio'])
+viagens_df['fim'] = pd.to_datetime(viagens_df['fim'])
+
+# Agrupa mensagens por dia
+daily_msgs = df.groupby('data').size().reset_index(name='msgs')
+daily_msgs['data'] = pd.to_datetime(daily_msgs['data'])
+
+# Plot
+fig = go.Figure()
+
+# Linha de mensagens
+fig.add_trace(go.Scatter(
+    x=daily_msgs['data'],
+    y=daily_msgs['msgs'],
+    mode='lines',
+    name='Mensagens',
+    line=dict(color='#3498db', width=1),
+    fill='tozeroy',
+    fillcolor='rgba(52, 152, 219, 0.3)'
+))
+
+# Adiciona retângulos para viagens
+for _, viagem in viagens_df.iterrows():
+    fig.add_vrect(
+        x0=viagem['inicio'],
+        x1=viagem['fim'],
+        fillcolor="rgba(46, 204, 113, 0.3)",
+        layer="below",
+        line_width=0,
+        annotation_text=viagem['nome'],
+        annotation_position="top left",
+        annotation=dict(font_size=8, textangle=-90)
+    )
+
+fig.update_layout(
+    title='📅 Timeline: Volume de Mensagens + Viagens (áreas verdes)',
+    xaxis_title='Data',
+    yaxis_title='Mensagens por Dia',
+    height=500,
+    showlegend=False
+)
+
+fig.show()
+```
+
+---
+
+# 🔥 Heatmap: Hora × Dia × Contexto
+
+```{python}
+#| label: heatmap-contexto
+
+# Para cada contexto, cria um heatmap
+for contexto in ['juntos', 'rotina', 'pre_viagem', 'pos_viagem']:
+    df_ctx = df[df['contexto_relacional'] == contexto]
+    
+    # Pivot
+    heatmap_data = df_ctx.groupby(['dia_semana', 'hora_numerica']).size().reset_index(name='msgs')
+    heatmap_pivot = heatmap_data.pivot(index='dia_semana', columns='hora_numerica', values='msgs').fillna(0)
+    
+    # Reordena dias
+    ordem_dias = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    heatmap_pivot = heatmap_pivot.reindex(ordem_dias)
+    
+    fig = px.imshow(
+        heatmap_pivot,
+        labels=dict(x="Hora", y="Dia", color="Msgs"),
+        title=f'🔥 Heatmap: {contexto.upper()}',
+        color_continuous_scale='YlOrRd',
+        aspect='auto'
+    )
+    
+    fig.update_layout(height=300)
+    fig.show()
+```
+
+---
+
+# 📊 Resumo Final
+
+```{python}
+#| label: resumo-final
+
+print("="*70)
+print("📊 RESUMO: IMPACTO DO CONTEXTO RELACIONAL")
+print("="*70)
+
+# Volume
+print("\n📬 VOLUME DE MENSAGENS:")
+for ctx in ['juntos', 'rotina', 'pre_viagem', 'pos_viagem']:
+    media = daily[daily['contexto_relacional'] == ctx]['msgs'].mean()
+    print(f"   {ctx:15s}: {media:.0f} msgs/dia em média")
+
+# Sentimento
+print("\n😊 SENTIMENTO MÉDIO:")
+for ctx in ['juntos', 'rotina', 'pre_viagem', 'pos_viagem']:
+    media = df_sent[df_sent['contexto_relacional'] == ctx]['sentiment_score'].mean()
+    emoji = "😊" if media > 0 else "😐" if media > -0.2 else "😔"
+    print(f"   {ctx:15s}: {media:+.3f} {emoji}")
+
+# Emoji
+print("\n😀 USO DE EMOJI:")
+for ctx in ['juntos', 'rotina', 'pre_viagem', 'pos_viagem']:
+    pct = df[df['contexto_relacional'] == ctx]['has_emoji'].mean() * 100
+    print(f"   {ctx:15s}: {pct:.1f}%")
+
+# Insight principal
+media_sep = daily[daily['contexto_relacional'] == 'rotina']['msgs'].mean()
+media_jun = daily[daily['contexto_relacional'] == 'juntos']['msgs'].mean()
+
+print("\n" + "="*70)
+print("💡 INSIGHT PRINCIPAL:")
+print("="*70)
+print(f"""
+Quando SEPARADOS (rotina): {media_sep:.0f} msgs/dia
+Quando JUNTOS: {media_jun:.0f} msgs/dia
+
+→ Vocês mandam {media_sep/media_jun:.1f}x MAIS mensagens quando estão LONGE!
+→ Isso mostra que o WhatsApp COMPENSA a distância física.
+→ Quando juntos, vocês VIVEM a relação ao invés de digitar.
+""")
+```
+
+---
+
+# 💕 Conclusão
+
+::: {.callout-tip}
+## A História que os Dados Contam
+
+**Quando estão JUNTOS:**
+- Menos mensagens (vivendo, não digitando!)
+- Sentimento mais neutro (não precisam expressar tanto por texto)
+- Menos emoji (o carinho é físico)
+
+**Quando estão SEPARADOS:**
+- MUITO mais mensagens (compensando a distância)
+- Mais expressivos por texto
+- Mais emoji (carinho digital)
+
+**O WhatsApp é o abraço de vocês quando estão longe.** 💕
+:::
+
+---
+
+*Análise gerada em: {today}*

@@ -1,0 +1,518 @@
+---
+title: "📁 Organização dos Arquivos Finais - WhatsApp Data Analysis"
+subtitle: "Documentação e consolidação dos datasets do projeto"
+author: "Marlon"
+date: today
+format:
+  html:
+    self-contained: true
+    theme: cosmo
+    toc: false
+    toc-depth: 2
+    code-fold: true
+execute:
+  echo: true
+  warning: false
+---
+
+# 🎯 Objetivo
+
+Este documento organiza e documenta os **arquivos finais** do projeto de análise de dados do WhatsApp, consolidando tudo na pasta `output_files/` para facilitar o uso futuro.
+
+---
+
+# 📊 Resumo do Projeto
+
+```{python}
+#| label: resumo
+#| echo: false
+
+print("""
+╔══════════════════════════════════════════════════════════════╗
+║              WHATSAPP DATA ANALYSIS PROJECT                  ║
+╠══════════════════════════════════════════════════════════════╣
+║  📅 Período dos dados: Out/2024 - Nov/2025 (~1 ano)          ║
+║  💬 Total de mensagens: 91,924                               ║
+║  👥 Participantes: P1 (Marlon) e P2 (Letícia)                ║
+║  🎙️ Áudios/vídeos transcritos: 695                           ║
+║  🧠 Mensagens com sentiment: 61,543                          ║
+║  📊 Features criadas: 33 colunas                             ║
+╚══════════════════════════════════════════════════════════════╝
+""")
+```
+
+---
+
+# 🗂️ Criando Pasta output_files
+
+```{python}
+#| label: criar-pasta
+
+import os
+import shutil
+import pandas as pd
+
+# Cria pasta output_files
+os.makedirs('output_files', exist_ok=True)
+print("✅ Pasta 'output_files/' criada!")
+```
+
+---
+
+# 📦 Arquivos Principais
+
+## 1. 🏆 df_master_final.csv (PRINCIPAL)
+
+**O arquivo mais importante do projeto!**
+
+```{python}
+#| label: master-csv
+
+# Copia o arquivo master
+shutil.copy('output/df_master_final.csv', 'output_files/df_master_final.csv')
+
+# Carrega e mostra info
+df = pd.read_csv('output_files/df_master_final.csv')
+
+print("="*60)
+print("📊 df_master_final.csv - DATASET PRINCIPAL")
+print("="*60)
+print(f"\n📏 Dimensões: {len(df):,} linhas × {len(df.columns)} colunas")
+print(f"\n📋 Colunas:")
+for i, col in enumerate(df.columns, 1):
+    print(f"   {i:2d}. {col}")
+
+print(f"\n📊 Estatísticas:")
+print(f"   • Mensagens com sentiment: {df['sentiment_score'].notna().sum():,}")
+print(f"   • Mensagens sem sentiment: {df['sentiment_score'].isna().sum():,}")
+print(f"   • Período: {df['timestamp'].min()} até {df['timestamp'].max()}")
+
+print("\n✅ Copiado para: output_files/df_master_final.csv")
+```
+
+### Descrição das Colunas:
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `timestamp` | datetime | Data e hora da mensagem |
+| `remetente` | str | P1 (Marlon) ou P2 (Letícia) |
+| `tipo_midia` | str | text, audio, video, image, sticker, etc. |
+| `status_midia` | str | attached, omitted, transcribed |
+| `conteudo` | str | Texto da mensagem ou transcrição |
+| `arquivo_midia` | str | Nome do arquivo de mídia (se houver) |
+| `linha_original` | int | Linha correspondente no raw-data.txt |
+| `data` | date | Data da mensagem |
+| `hora` | time | Hora da mensagem |
+| `has_link` | bool | Contém URL? |
+| `has_emoji` | bool | Contém emoji? |
+| `word_count` | int | Número de palavras |
+| `dia_semana` | str | Segunda, Terça, etc. |
+| `periodo_dia` | str | Madrugada, Manhã, Tarde, Noite |
+| `mes` | str | Nome do mês |
+| `ano` | int | Ano |
+| `is_weekend` | bool | É fim de semana? |
+| `char_count` | int | Número de caracteres |
+| `avg_word_length` | float | Tamanho médio das palavras |
+| `has_question` | bool | Contém "?" |
+| `has_exclamation` | bool | Contém "!" |
+| `is_all_caps` | bool | Texto todo em maiúsculas? |
+| `line_breaks` | int | Número de quebras de linha |
+| `tempo_resposta_segundos` | float | Tempo desde última mensagem |
+| `is_first_of_day` | bool | Primeira mensagem do dia? |
+| `msgs_seguidas` | int | Mensagens seguidas do mesmo remetente |
+| `is_reply_quick` | bool | Resposta rápida (<5min)? |
+| `msg_size_category` | str | Vazia, Curta, Média, Longa, Muito Longa |
+| `hora_numerica` | int | Hora (0-23) |
+| `gap_horas` | float | Gap em horas desde última mensagem |
+| `is_conversation_start` | bool | Início de conversa (gap > 4h)? |
+| `sentiment_score` | float | Score de sentimento (-2 a +2) |
+| `sentiment_label` | str | 1 star a 5 stars |
+
+---
+
+## 2. 📄 final_dataframe_enriched_complete.csv (Base Enriquecida)
+
+```{python}
+#| label: enriched-csv
+
+# Copia
+shutil.copy('final_dataframe_enriched_complete.csv', 'output_files/final_dataframe_enriched_complete.csv')
+
+df_enriched = pd.read_csv('output_files/final_dataframe_enriched_complete.csv')
+
+print("="*60)
+print("📊 final_dataframe_enriched_complete.csv")
+print("="*60)
+print(f"📏 Dimensões: {len(df_enriched):,} linhas × {len(df_enriched.columns)} colunas")
+print(f"📝 Descrição: Base enriquecida com todas as features (SEM sentiment)")
+print("\n✅ Copiado para: output_files/final_dataframe_enriched_complete.csv")
+```
+
+---
+
+## 3. 📄 final_dataframe.csv (Base Original Processada)
+
+```{python}
+#| label: original-csv
+
+# Copia
+shutil.copy('final_dataframe.csv', 'output_files/final_dataframe.csv')
+
+df_orig = pd.read_csv('output_files/final_dataframe.csv')
+
+print("="*60)
+print("📊 final_dataframe.csv")
+print("="*60)
+print(f"📏 Dimensões: {len(df_orig):,} linhas × {len(df_orig.columns)} colunas")
+print(f"📝 Descrição: Primeira versão do DataFrame (menos features)")
+print("\n✅ Copiado para: output_files/final_dataframe.csv")
+```
+
+---
+
+## 4. 📄 sentiment_timeline.csv (Série Temporal de Sentimento)
+
+```{python}
+#| label: timeline-csv
+
+# Copia
+shutil.copy('output/sentiment_timeline.csv', 'output_files/sentiment_timeline.csv')
+
+timeline = pd.read_csv('output_files/sentiment_timeline.csv')
+
+print("="*60)
+print("📊 sentiment_timeline.csv")
+print("="*60)
+print(f"📏 Dimensões: {len(timeline)} semanas")
+print(f"📝 Descrição: Sentimento médio agregado por semana")
+print(f"📋 Colunas: {list(timeline.columns)}")
+print("\n✅ Copiado para: output_files/sentiment_timeline.csv")
+```
+
+---
+
+## 5. 📄 daily_with_clusters.csv (Agregado Diário + Clusters)
+
+```{python}
+#| label: daily-csv
+
+# Copia (se existir)
+if os.path.exists('daily_with_clusters.csv'):
+    shutil.copy('daily_with_clusters.csv', 'output_files/daily_with_clusters.csv')
+    daily = pd.read_csv('output_files/daily_with_clusters.csv')
+    
+    print("="*60)
+    print("📊 daily_with_clusters.csv")
+    print("="*60)
+    print(f"📏 Dimensões: {len(daily)} dias × {len(daily.columns)} colunas")
+    print(f"📝 Descrição: Métricas agregadas por DIA + clusters (análise com GPT)")
+    print(f"📋 Colunas: {list(daily.columns)}")
+    print("\n✅ Copiado para: output_files/daily_with_clusters.csv")
+else:
+    print("⚠️ daily_with_clusters.csv não encontrado")
+```
+
+---
+
+## 6. 📄 Arquivos TXT
+
+```{python}
+#| label: txt-files
+
+txts = [
+    ('raw-data.txt', 'Arquivo original exportado do WhatsApp'),
+    ('final_data_clean.txt', 'Versão limpa e padronizada'),
+    ('final_data_text_only.txt', 'Apenas mensagens de texto (sem mídias)'),
+]
+
+print("="*60)
+print("📄 ARQUIVOS TXT")
+print("="*60)
+
+for arquivo, descricao in txts:
+    if os.path.exists(arquivo):
+        shutil.copy(arquivo, f'output_files/{arquivo}')
+        with open(arquivo, 'r', encoding='utf-8') as f:
+            linhas = len(f.readlines())
+        print(f"\n📄 {arquivo}")
+        print(f"   Linhas: {linhas:,}")
+        print(f"   Descrição: {descricao}")
+        print(f"   ✅ Copiado!")
+    else:
+        print(f"\n⚠️ {arquivo} não encontrado")
+```
+
+---
+
+## 7. 📄 Transcrições
+
+```{python}
+#| label: transcricoes
+
+if os.path.exists('output/for_transcription_complete.csv'):
+    shutil.copy('output/for_transcription_complete.csv', 'output_files/transcricoes_complete.csv')
+    trans = pd.read_csv('output_files/transcricoes_complete.csv')
+    
+    print("="*60)
+    print("📊 transcricoes_complete.csv")
+    print("="*60)
+    print(f"📏 Dimensões: {len(trans)} arquivos")
+    print(f"📝 Descrição: Transcrições de áudios/vídeos via Groq/Whisper")
+    completas = trans['transcription_status'].eq('completed').sum() if 'transcription_status' in trans.columns else 'N/A'
+    print(f"📊 Transcrições completas: {completas}")
+    print("\n✅ Copiado para: output_files/transcricoes_complete.csv")
+```
+
+---
+
+# 📋 Resumo dos Arquivos
+
+```{python}
+#| label: resumo-final
+
+import os
+
+print("="*60)
+print("📁 CONTEÚDO FINAL DA PASTA output_files/")
+print("="*60)
+
+total_size = 0
+for f in sorted(os.listdir('output_files')):
+    path = f'output_files/{f}'
+    size = os.path.getsize(path) / (1024*1024)
+    total_size += size
+    print(f"   {f:50s} ({size:6.2f} MB)")
+
+print(f"\n📦 Tamanho total: {total_size:.2f} MB")
+```
+
+---
+
+# 🚀 Como Usar
+
+## Carregando o Dataset Principal:
+
+```python
+import pandas as pd
+
+# Carrega o dataset master (com sentiment)
+df = pd.read_csv('output_files/df_master_final.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print(f"✅ {len(df):,} mensagens carregadas")
+print(f"✅ {df['sentiment_score'].notna().sum():,} com análise de sentimento")
+```
+
+## Carregando o Agregado Diário:
+
+```python
+# Para análises por DIA (clusters, ACM, etc.)
+daily = pd.read_csv('output_files/daily_with_clusters.csv')
+daily['data'] = pd.to_datetime(daily['data'])
+
+print(f"✅ {len(daily)} dias carregados")
+```
+
+## Carregando a Timeline de Sentimento:
+
+```python
+# Para visualização temporal de sentimento
+timeline = pd.read_csv('output_files/sentiment_timeline.csv')
+timeline['week'] = pd.to_datetime(timeline['week'])
+
+print(f"✅ {len(timeline)} semanas carregadas")
+```
+
+---
+
+# 📝 Notas Importantes
+
+::: {.callout-important}
+## Arquivo Principal
+
+Use **`df_master_final.csv`** para todas as análises! Ele contém:
+- Todas as 91,924 mensagens
+- 33 features
+- Análise de sentimento (61,543 mensagens)
+- Sem duplicatas
+- Dados validados
+:::
+
+::: {.callout-note}
+## Sobre as Duplicatas de Conteúdo
+
+Algumas mensagens têm conteúdo idêntico (ex: "ok", "sim", tabelas de preço). 
+**Isso é comportamento REAL**, não bug! Cada uma tem `linha_original` única.
+:::
+
+::: {.callout-tip}
+## Pipeline Validado
+
+```
+raw-data.txt (97,333 linhas)
+    ↓ [91,968 com timestamp]
+final_dataframe.csv (91,924 linhas)
+    ↓ [+31 features]
+final_dataframe_enriched_complete.csv
+    ↓ [+sentiment BERT]
+df_master_final.csv (91,924 × 33) ✅
+```
+:::
+
+---
+
+# ✅ Conclusão
+
+Todos os arquivos principais foram organizados na pasta `output_files/`.
+
+**Para continuar o projeto, use os imports:**
+```{python}
+#| eval: false
+#| code-fold: false
+# ============================================================
+# 📦 TEMPLATE - CARREGAMENTO DOS DADOS WHATSAPP
+# ============================================================
+# Use este arquivo como ponto de partida para qualquer análise
+# Todos os dados já estão limpos e validados!
+# ============================================================
+```
+
+```{python}
+#| eval: false
+#| code-fold: false
+import pandas as pd
+import numpy as np
+
+print("="*60)
+print("📦 CARREGANDO DADOS DO PROJETO WHATSAPP")
+print("="*60)
+```
+
+
+```{python}
+#| eval: false
+#| code-fold: false
+# ------------------------------------------------------------
+# 1. DATASET PRINCIPAL (91k mensagens + sentiment)
+# ------------------------------------------------------------
+df = pd.read_csv('output_files/df_master_final.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+df['data'] = pd.to_datetime(df['data'])
+
+print(f"\n✅ df (master)")
+print(f"   {len(df):,} mensagens × {len(df.columns)} colunas")
+print(f"   Com sentiment: {df['sentiment_score'].notna().sum():,}")
+```
+
+```{python}
+#| eval: false
+#| code-fold: false
+# ------------------------------------------------------------
+# 2. AGREGADO DIÁRIO (para análises por dia, ACM, clusters)
+# ------------------------------------------------------------
+daily = pd.read_csv('output_files/daily_with_clusters.csv')
+if 'data' in daily.columns:
+    daily['data'] = pd.to_datetime(daily['data'])
+
+print(f"\n✅ daily (agregado diário)")
+print(f"   {len(daily)} dias × {len(daily.columns)} colunas")
+```
+
+```{python}
+#| eval: false
+#| code-fold: false
+# ------------------------------------------------------------
+# 3. TIMELINE DE SENTIMENTO (agregado semanal)
+# ------------------------------------------------------------
+sentiment_timeline = pd.read_csv('output_files/sentiment_timeline.csv')
+sentiment_timeline['week'] = pd.to_datetime(sentiment_timeline['week'])
+
+print(f"\n✅ sentiment_timeline")
+print(f"   {len(sentiment_timeline)} semanas")
+
+# ------------------------------------------------------------
+# 4. TRANSCRIÇÕES (áudios/vídeos)
+# ------------------------------------------------------------
+transcricoes = pd.read_csv('output_files/transcricoes_complete.csv')
+
+print(f"\n✅ transcricoes")
+print(f"   {len(transcricoes)} arquivos")
+```
+
+```{python}
+#| eval: true
+#| code-fold: true
+# ------------------------------------------------------------
+# RESUMO
+# ------------------------------------------------------------
+print("\n" + "="*60)
+print("🎉 TUDO CARREGADO!")
+print("="*60)
+print("""
+📊 Variáveis disponíveis:
+   • df                 → Dataset principal (91k msgs)
+   • daily              → Agregado por dia (~365 dias)
+   • sentiment_timeline → Sentimento por semana
+   • transcricoes       → Transcrições de áudio/vídeo
+
+📅 Período: Out/2024 - Nov/2025
+👥 Participantes: P1 (Marlon) e P2 (Letícia)
+""")
+```
+
+# Viagens e datas
+
+```{python}
+#| eval: false
+#| code-fold: false
+# Importa as funções
+from viagens import criar_viagens_df, gerar_datas_juntos, criar_contexto_relacional
+
+# Ou carrega direto do CSV
+viagens_df = pd.read_csv('output_files/viagens.csv', parse_dates=['inicio', 'fim', 'marco_especial'])
+datas_juntos = pd.read_csv('output_files/datas_juntos.csv', parse_dates=['data'])['data'].tolist()
+```
+
+---
+
+# 🚀 TEMPLATE ATUALIZADO:
+
+```{python}
+#| eval: false
+#| code-fold: false
+
+import pandas as pd
+
+# Dataset principal COM viagens
+df = pd.read_csv('output_files/df_master_final_aggr.csv')
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print(f"✅ {len(df):,} mensagens")
+print(f"✅ {df['is_juntos'].sum():,} quando juntos")
+print(f"✅ Contextos: {df['contexto_relacional'].unique().tolist()}")
+
+# Análises rápidas
+df.groupby('contexto_relacional')['sentiment_score'].mean()
+df.groupby('is_juntos')['word_count'].mean()
+```
+
+## 🎯 AGORA VOCÊ PODE:
+
+```{python}
+#| eval: false
+#| code-fold: false
+
+# Comparar sentimento: juntos vs separados
+df.groupby('is_juntos')['sentiment_score'].mean()
+
+# Comparar por contexto
+df.groupby('contexto_relacional')['sentiment_score'].mean()
+
+# Ver volume de msgs por contexto
+df.groupby('contexto_relacional').size()
+
+# Filtrar só mensagens quando juntos
+df_juntos = df[df['is_juntos']]
+```
+
+Dados organizados e prontos! 🔥

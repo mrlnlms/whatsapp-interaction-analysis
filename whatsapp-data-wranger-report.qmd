@@ -1,0 +1,4001 @@
+---
+title: "😀 WhatsApp Data Wrangling: Transformando Conversas em Dados Estruturados"
+author: "Marlon"
+date: today
+format:
+  html:
+    code-overflow: wrap
+    code-line-numbers: false
+    code-fold: false
+    toc: false
+    toc-depth: 3
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+  echo: false
+---
+
+# How to fight and win all whatsapp raw-data export edge-cases
+
+## O que você encontrará aqui
+
+Este relatório está estruturado como uma **pipeline progressiva**, onde cada etapa:
+
+1.  **Discute** o problema encontrado
+2.  **Propõe** uma solução técnica
+3.  **Implementa** o código necessário
+4.  **Visualiza** os resultados
+5.  **Avalia** o impacto da transformação
+
+Ao final, teremos três artefatos principais, derivados do raw-data:
+
+-   `cleaned-data.txt` → Versão padronizada com marcadores
+-   `text_only_data.txt` → Versão ultra-limpa para análise textual
+-   `final_dataframe.csv` → Dataset estruturado para análise quantitativa
+
+# Introdução & configuração do ambiênte
+
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas.
+
+Como estudante de ciência de dados e interessado em análises qualitativas e aprendizado de novas ferramentas, fazer um projeto de data-wrangling com Python nestes dados, incluindo transcrição de mídias e enriquecimento da base, ou seja, dos dados brutos, documentando todo processo usando Quarto (.qmd) parece uma abordagem desafiadora e profissional.
+
+Desta forma este projeto tem como objetivo transformar um arquivo bruto de exportação do WhatsApp (`raw-data.txt`) em um conjunto de dados estruturado, analisável e reprodutível. Neste relatório, documentarei cada etapa do processo de data wrangling, desde a leitura inicial do arquivo até a criação do DataFrame final.
+
+::: callout-note
+## Contexto do Estudo de Caso
+
+Como estudo de caso para este projeto vou utilizar o histórico de \~1 ano de mensagens entre minha namorada e eu. Essa escolha se deu por conta de um desejo de fazer algumas análises textuais sobre nosso 1 ano de namoro que está muito próximo.
+
+Do ponto de vista técnico, a escolha de trabalhar com este formatos de texto apresentam desafios especificos (*edge cases*) como caracteres especiais e emojis, tags ou textos padrão para representar envios de mídia ou arquivos, mensagens fragmentadas, formatos inconsistentes entre outras coisas que iremos tratar com este projeto.
+:::
+
+::: {.callout-tip collapse="true"}
+## Possibilidades Futuras
+
+Uma possibilidade que vejo após ter os dados aqui tratados, é criar outras bases, como:
+
+-   Datas de viagens - OK!
+-   Fotos tiradas e seus locais (via API do Google Photos, se possível)
+-   Timeline completa do namoro
+
+Seria interessante ter uma visualização integrada de todos esses momentos!
+:::
+
+------------------------------------------------------------------------
+
+## Setup
+
+Vamos iniciar o setup do pipeline configurando, instalando e importando os pacotes e definindo as variáveis globais que serão utilizadas.
+
+::: {.callout-note collapse="true"}
+## Setup info
+
+```{python}
+#| label: setup
+#| echo: true
+
+# Importando pacotes necessários
+import pandas as pd
+import re
+from datetime import datetime
+import os
+
+```
+
+```{python}
+#| label: setup-paths
+#| echo: true
+
+# Definindo caminhos dos arquivos
+
+# Arquivo bruto exportado do WhatsApp (raw-data)
+RAW_DATA_PATH = 'raw-data.txt' 
+
+# Arquivos intermediários e finais
+#CLEANED_DATA_PATH = 'cleaned-data.txt'
+#TEXT_ONLY_DATA_PATH = 'text_only_data.txt'
+#FINAL_DATAFRAME_PATH = 'final_dataframe.csv'
+```
+:::
+
+### Carregando os dados brutos
+
+Agora vamos importar e carregar os dados para extrair informações básicas do arquivo usando apenas seus metadados e contagem de linhas.
+
+:::: {.callout-note collapse="true"}
+## Info & Statistics
+
+::: callout-note
+## Sobre os dados
+
+-   **Fonte:** Exportação de conversa privada do WhatsApp
+-   **Período:** \[inserir período dos dados\]
+-   **Participantes:** 2 pessoas
+-   **Tamanho original:** \~90.000 linhas, \~5MB
+:::
+
+```{python}
+from file_metadata import get_metadata_for_quarto
+import pandas as pd
+
+# Obtém dados formatados
+info_geral, densidade = get_metadata_for_quarto(RAW_DATA_PATH)
+
+# Converte para DataFrames
+df_info = pd.DataFrame(info_geral)
+df_densidade = pd.DataFrame(densidade)
+```
+
+### Informações Gerais do Arquivo
+
+```{python}
+#| echo: false
+
+# Esconde o índice para melhor visualização (.style.hide())
+df_info.style.hide(axis='index')
+```
+
+### Estatísticas de Densidade de Caracteres e Linhas e Tamanho do Arquivo
+
+```{python}
+#| echo: false
+
+# Esconde o índice para melhor visualização (.style.hide())
+df_densidade.style.hide(axis='index')
+```
+::::
+
+::: {.callout-tip collapse="false"}
+### Insights Iniciais
+
+-   O arquivo contém aproximadamente \~95k linhas, o que indica um volume considerável de mensagens.
+-   O tamanho do arquivo é de cerca de 5MB, sugerindo que há uma quantidade significativa de texto, possivelmente incluindo mídias ou caracteres especiais.
+-   A densidade média de caracteres por linha é de aproximadamente 55, o que pode indicar mensagens relativamente curtas ou fragmentadas.
+-   Fazendo uma estimativa de quantidade de mensagens, considerando que cada mensagem ocupa em média 1.1 linhas (devido a quebras de linha), podemos inferir que há cerca de \~70.000 mensagens reais no arquivo. Ao converter em um dataframe, teremos um dataset robusto para análise, apesar do seu tamanho. Fazendo uma comparação, o dataset SMS Spam Collection, muito utilizado em estudos de NLP, contém apenas 5.574 mensagens.
+-   Caso contém \~90K linhas e tem um tamanho de \~5MB, o que podemos considerar um arquivo levemente pesado. . Em termos de caracteres, a densidade média de 55 caracteres por linha sugere que as mensagens são relativamente curtas, o que é típico em conversas de mensagens instantâneas. Porém, como estamos considerando converter audios e vídeos em texto, essa métrica pode aumentar significativamente, necessitando de mais espaço de armazenamento e processamento, além de nova análise de densidade pós processamento dos dados.
+-   Um aspecto a se levar em consideração desde já é que boa parte do conteúdo textual é timestamp e marcadores de remetente, portanto em termos de conteúdo de mensagem em si essas estatísticas serão reduzidas, seja entre duas pessoas ou conversas em grupo.
+:::
+
+------------------------------------------------------------------------
+
+# Análise Exploratória dos Dados
+
+## Anatomia dos Dados Brutos
+
+Antes de qualquer processamento, precisamos entender **com o que estamos lidando**. Ao exportar uma conversa, o WhatsApp gera um arquivo `.txt` com um formato semi-estruturado.
+
+![](assets/data-overview_2025-11-21%2010.35.55.gif)
+
+> *Dados brutos exportado do Whatsapp – histórico de \~1 ano de troca de mensagens visualizado no editor do Positron.*
+
+A partir de uma análise visual rápida nos dados, podemos notar uma estrutura básica, que parece simples:
+
+-   `[DD/MM/YY, HH:MM:SS] Remetente: Mensagem`
+
+De fato, a estrutura dos dados parece simples, porém através de uma análise exploratória feita anteriormente em cima das padronizações existentes no conteúdo apresentam uma complexidade bastante grande, como é possível ver na tabela abaixo com a amostra de diversas partes do "banco de dados" (linhas do `raw-data.txt`).
+
+::: {.callout-tip collapse="true"}
+## Tabela com amostras do conteúdo do arquivo
+
+```{python}
+from content_preview import multi_position_preview_dataframe
+
+# Visualiza 7 linhas em 5 posições diferentes
+df_preview = multi_position_preview_dataframe(
+    file_path='raw-data.txt',
+    n_lines=7,
+    positions=[0, 25, 50, 75, 100],
+    insert_separator=True
+)
+
+# Exibe o DataFrame
+df_preview.style.hide(axis='index')
+```
+:::
+
+Alguns exemplos de padrões identificados notáveis são:
+
+-   Existência de caractéres invísiveis que demarcam partes do conteúdo (na imagem, marcadores em vermelho)
+
+-   Mensagens com links entre as mensagens ou links sozinhos. O mesmo com emojis.
+
+-   Áudio, video omitidos, e registrados na linha em questão, após o remetente
+
+-   Áudio, video anexados que são representados pelos seus respectivos nomes de arquivo, sendo que estes foram salvos na exportação do Whatsapp.
+
+-   Mensagens contendo emojis, caracteres especiais.
+
+E principalmente: **Quebras de linha**. Este aspecto representa uma redução quando pensamos em termos de número de linhas em relação ao total de mensagens enviadas.
+
+A seguir vamos descrever cada um dos padrões e estruturas existentes no documento (`raw-data`).
+
+::: {.callout-note collapse="true"}
+## Padrões nos dados -- Elementos estruturais
+
+Antes de mergulharmos nos diferentes tipos de mensagens, é importante entender os elementos estruturais que compõem cada linha do arquivo exportado.
+
+### Timestamps
+
+Todas as mensagens iniciam com um timestamp no formato `[DD/MM/YY, HH:MM:SS]`.
+
+> 💡 O formato de data e hora **pode variar** dependendo das configurações regionais do dispositivo.
+
+**Exemplo:**
+
+-   `[12/05/23, 14:23:45] Marlon: Oi, tudo bem?`
+
+------------------------------------------------------------------------
+
+### Remetentes
+
+Após o timestamp, vem o nome do remetente seguido de dois pontos (`:`).
+
+> 💡 Alguns remetentes podem ter nomes que incluem **caracteres especiais** ou **emojis** (ex.: `Lê 🖤`).
+
+**Exemplo:**
+
+-   `[12/05/23, 14:23:45] Lê 🖤: Olá!`
+-   `[12/05/23, 14:23:45] Marlon: Oi, tudo bem?`
+
+------------------------------------------------------------------------
+
+### Caractere Invisível (`[U+200E]`)
+
+O caractere invisível `[U+200E]` (Left-to-Right Mark) aparece com frequência nos dados exportados. Esse caractere é usado para controle de direção do texto, especialmente em mensagens que misturam idiomas com direções diferentes (como inglês e árabe).
+
+**Padrões de ocorrência:**
+
+-   Aparece no início de linhas de mídia anexada ou omitida
+-   Aparece após o remetente em mensagens editadas ou deletadas
+-   Aparece em mensagens de chamadas e erros
+
+**Exemplos:**
+
+-   `[U+200E][19/10/24, 13:53:25] Marlon: [U+200E]image omitted`
+-   `[12/05/23, 14:23:45] Marlon: [U+200E]This message was deleted`
+
+------------------------------------------------------------------------
+
+### Linhas de Continuação
+
+Mensagens longas podem se estender por várias linhas. **Linhas que não começam com um timestamp** são continuações da mensagem anterior.
+
+**Exemplo:**
+
+-   (linha N): `[24/10/24, 09:21:38] Marlon: Se tiver muito absurdo dá pra vc ver se não tem sua trupe daí também que tope ir, sla`
+-   (linha N+1): `Mais tarde te dou um salve dnv`
+
+------------------------------------------------------------------------
+
+## Taxonomia de Mensagens
+
+Agora que conhecemos os elementos estruturais básicos, vamos explorar os diferentes tipos de mensagens presentes no arquivo.
+
+### Mensagens de Texto
+
+As mensagens de texto são o tipo mais comum e podem apresentar diversas combinações de conteúdo.
+
+#### Texto Puro
+
+Mensagens contendo apenas texto simples, sem emojis ou links.
+
+**Exemplo:**
+
+-   `[12/05/23, 14:23:45] Lê 🖤: Oi, tudo bem?`
+
+------------------------------------------------------------------------
+
+#### Texto com Emojis
+
+Mensagens podem conter emojis sozinhos ou combinados com texto.
+
+**Exemplos:**
+
+-   `[12/05/23, 14:23:45] Lê 🖤: Olha que fofo esse cachorro! 🐶❤`
+-   `[12/05/23, 14:23:45] Marlon: 😂🤣😍`
+
+------------------------------------------------------------------------
+
+#### Texto com Links
+
+Links podem aparecer sozinhos ou incorporados em mensagens de texto.
+
+**Exemplos:**
+
+-   `[12/05/23, 14:23:45] Lê 🖤: https://another-example.com`
+-   `[12/05/23, 14:23:45] Marlon: Olha esse site incrível: https://example.com`
+
+------------------------------------------------------------------------
+
+#### Sinais com Caracteres (Emoticons)
+
+Representações de expressões usando caracteres ASCII, como `:))`, `:D`, `:P`.
+
+**Exemplos:**
+
+-   `[21/08/25, 21:37:58] Marlon: :))`
+-   `[12/05/23, 14:23:45] Marlon: :P 😂`
+
+------------------------------------------------------------------------
+
+#### Combinações Múltiplas
+
+Mensagens podem combinar texto, emojis, sinais e links simultaneamente.
+
+**Exemplos:**
+
+-   `[12/05/23, 14:23:45] Lê 🖤: :D Estou tão feliz hoje! 😂`
+-   `[12/05/23, 14:23:45] Marlon: :P 😂 Veja isso: https://funny-video.com`
+-   `[12/05/23, 14:23:45] Marlon: Confira este vídeo incrível! 😂 https://video-example.com`
+
+------------------------------------------------------------------------
+
+### Mensagens de Mídia
+
+As mensagens de mídia podem ter sido **omitidas** ou **anexadas** durante o processo de exportação.
+
+#### Mídias Omitidas
+
+Quando a exportação não inclui os arquivos de mídia, o WhatsApp indica o tipo de mídia que foi enviado.
+
+> 💡 Todas as mídias omitidas são precedidas pelo caractere invisível `[U+200E]`.
+
+**Tipos de mídia omitida:**
+
+-   **Áudio:** `[U+200E]audio omitted`
+-   **Imagem:** `[U+200E]image omitted`
+-   **Vídeo:** `[U+200E]video omitted`
+-   **Vídeo Note:** `[U+200E]video note omitted`
+-   **Sticker:** `[U+200E]sticker omitted`
+-   **GIF:** `[U+200E]GIF omitted`
+-   **Documento:** `NOME_ARQUIVO.pdf • [U+200E]42 pages [U+200E]document omitted`
+
+**Exemplos:**
+
+-   `[U+200E][12/04/22, 15:33:29] Marlon: [U+200E]audio omitted`
+-   `[U+200E][12/05/23, 14:23:45] Marlon: [U+200E]sticker omitted`
+-   `[U+200E][12/05/23, 14:23:45] Marlon: CARTA IMAGINA JUNTOS DISTRIBUIÇÃO (PJ).pdf • [U+200E]42 pages [U+200E]document omitted`
+
+------------------------------------------------------------------------
+
+#### Mídias Anexadas
+
+Quando a exportação inclui os arquivos de mídia, eles são referenciados com o padrão `<attached: filename.ext>`.
+
+> 💡 Os nomes dos arquivos geralmente seguem o padrão: `NÚMERO-TIPO-DATA-HORA.extensão`
+
+**Tipos de mídia anexada:**
+
+-   **Áudio:** `<attached: -0000015-AUDIO-2025-08-21-21-31-39.opus>`
+-   **Imagem:** `<attached: 00000001-PHOTO-2025-08-21-22-06-35.jpg>`
+-   **Vídeo:** `<attached: 00001238-VIDEO-2025-09-03-13-50-07.mp4>`
+-   **Sticker:** `<attached: 00000298-STICKER-2025-08-25-09-10-40.webp>`
+
+**Exemplos:**
+
+-   `[U+200E][03/01/25, 21:09:56] Lê 🖤: [U+200E]<attached: -0000015-AUDIO-2025-08-21-21-31-39.opus>`
+-   `[U+200E][03/01/25, 21:09:56] Marlon: [U+200E]<attached: 00000001-PHOTO-2025-08-21-22-06-35.jpg>`
+
+------------------------------------------------------------------------
+
+#### Múltiplas Mídias em Sequência
+
+Quando múltiplas mídias são enviadas de uma vez, a mensagem inicial fica **vazia**, seguida por várias linhas de anexos.
+
+> 💡 Este padrão é crucial para o processamento: mensagens vazias podem indicar o envio de múltiplos anexos.
+
+**Exemplo:** - `[24/08/25, 16:38:36] Lê 🖤:` - `[U+200E][24/08/25, 16:38:37] Lê 🖤: [U+200E]<attached: 00000282-PHOTO-2025-08-24-16-38-38.jpg>` - `[U+200E][24/08/25, 16:38:38] Lê 🖤: [U+200E]<attached: 00000283-PHOTO-2025-08-24-16-38-39.jpg>` - `[U+200E][24/08/25, 16:38:38] Lê 🖤: [U+200E]<attached: 00000284-PHOTO-2025-08-24-16-38-39.jpg>`
+
+------------------------------------------------------------------------
+
+#### Contatos Anexados
+
+Contatos compartilhados são salvos como arquivos `.vcf`.
+
+**Exemplos:**
+
+-   `[U+200E][09/12/24, 12:50:13] Marlon: [U+200E]<attached: -0001788-Lu mãe.vcf>`
+-   `[U+200E][09/12/24, 12:50:13] Marlon: [U+200E]<attached: -0052176-[U+200E]The Plug and 2 other contacts.vcf>`
+
+------------------------------------------------------------------------
+
+### Mensagens Especiais
+
+Certas mensagens têm características únicas que as diferenciam das mensagens convencionais.
+
+#### Mensagens Editadas
+
+Mensagens que foram editadas após o envio são marcadas com `<This message was edited>` no final.
+
+> 💡 O caractere invisível `[U+200E]` aparece **após o remetente** em mensagens editadas.
+
+**Exemplo:**
+
+-   `[12/05/23, 14:23:45] Marlon: [U+200E]Sample Text....<This message was edited>`
+
+------------------------------------------------------------------------
+
+#### Mensagens Deletadas
+
+Mensagens deletadas são substituídas pelo texto `This message was deleted`.
+
+**Exemplo:**
+
+-   \[12/04/22, 15:33:29\] Marlon: \[U+200E\]This message was deleted
+
+------------------------------------------------------------------------
+
+#### Chamadas de Voz e Vídeo
+
+Chamadas são registradas no histórico com informações sobre o status.
+
+**Tipos de registro:**
+
+-   **Chamada perdida:**
+
+-   `[12/04/22, 15:33:29] Lê 🖤: [U+200E]Missed voice call. [U+200E]Click to call back`
+
+-   **Chamada atendida em outro dispositivo:**
+
+-   `[12/04/22, 15:33:29] Lê 🖤: [U+200E]Voice call. [U+200E]Answered on other device`
+
+------------------------------------------------------------------------
+
+#### Erros de Exibição
+
+Algumas mensagens não podem ser exibidas e geram um aviso.
+
+**Exemplo:**
+
+-   `[U+200E]This message can't be displayed here. Please open [U+200E]WhatsApp on your phone to view the message.`
+:::
+
+**Resumo dos Padrões Identificados**
+
+Esta seção consolida todos os padrões encontrados para referência rápida durante o desenvolvimento do pipeline.
+
+::: panel-tabset
+## Elementos Estruturais
+
+-   **Timestamps:** `[DD/MM/YY, HH:MM:SS]`
+-   **Remetentes:** Nome seguido de `:`
+-   **Caractere invisível:** `[U+200E]` em contextos específicos
+-   **Linhas de continuação:** Sem timestamp, continuam mensagem anterior
+
+## Tipos de Mensagem
+
+-   **Texto puro:** Mensagens normais
+-   **Mídia omitida:** `audio omitted`, `image omitted`, etc.
+-   **Mídia anexada:** `<attached: filename.ext>`
+-   **Editadas:** Marcadas com `<This message was edited>`
+-   **Deletadas:** `This message was deleted`
+-   **Sistema:** Chamadas, erros, etc.
+:::
+
+------------------------------------------------------------------------
+
+# Tratamento inicial dos dados
+
+Com base na análise exploratória, nos deparamos com diversos desafios que serão tratados neste pipeline.
+
+### Caracter Especial
+
+**Vamos remover o caracter `[U+200E]`** como primeiro passo neste tratamento. Vamos remover todaos ocorrências desse caracter e salvar uma cópia do `raw-data.txt` com essa única diferença, chamado `raw-data_cln1.txt`
+
+::: {.callout-note collapse="true" appearance="simple"}
+### Mais sobre `[U+200E]`
+
+O U+200E (Left-to-Right Mark) é um caractere de formatação invisível usado na composição de textos bidirecionais que misturam scripts da esquerda para direita (como latim e cirílico) e scripts da direita para esquerda (como árabe, siríaco e hebraico) (Wikipedia).
+
+Este caractere foi adicionado ao Unicode na versão 1.1 em junho de 1993 e pertence ao bloco "General Punctuation" UnicodePlus.
+:::
+
+##### **Execução**
+
+::: {.callout-note collapse="true"}
+## Limpeza e Auditoria do tratamento
+
+```{python}
+# identificar todas ocorrências do caracter \`[U+200E]\` no documento e remove-lo.
+# salvar `raw-data_cln1.txt` com essa alteração.
+
+def remove_invisible_char(input_file='raw-data.txt', output_file='raw-data_cln1.txt'):
+    """Remove todas as ocorrências do caractere invisível U+200E."""
+    
+    # Caractere invisível a ser removido
+    invisible_char = '\u200e'
+    
+    # Contador de ocorrências
+    total_occurrences = 0
+    
+    # Ler, processar e escrever
+    with open(input_file, 'r', encoding='utf-8') as f_in:
+        with open(output_file, 'w', encoding='utf-8') as f_out:
+            for line in f_in:
+                occurrences = line.count(invisible_char)
+                total_occurrences += occurrences
+                cleaned_line = line.replace(invisible_char, '')
+                f_out.write(cleaned_line)
+    
+
+    print(f"✅ Arquivo limpo salvo: {output_file}")
+    print(f" Total de ocorrências removidas: {total_occurrences:,}")
+
+    return total_occurrences
+
+print("🔄 Iniciando limpeza do arquivo...\n")
+
+total_removed = remove_invisible_char()
+```
+
+```{python}
+# Comparar os dois dois documentos tecnicamente (os, tamanho, numero de linhas iguais etc -- auditoria da conversão)
+
+def audit_conversion(original_file='raw-data.txt', cleaned_file='raw-data_cln1.txt'):
+    """Compara os dois arquivos e gera relatório de auditoria."""
+    
+    import file_metadata as fm
+    
+    # Metadados de ambos os arquivos
+    meta_original = fm.get_file_metadata(original_file)
+    meta_cleaned = fm.get_file_metadata(cleaned_file)
+    
+    # Diferença de tamanho
+    size_diff = meta_original['size_bytes'] - meta_cleaned['size_bytes']
+    reduction_pct = (size_diff / meta_original['size_bytes'] * 100) if meta_original['size_bytes'] > 0 else 0
+    
+    # print("\n" + "="*70)
+    print("🔍 AUDITORIA DA CONVERSÃO")
+    print("-"*70 + "\n")
+    
+    print(f"📄 Arquivo Original: {original_file}")
+    print(f"   ├─ Tamanho: {meta_original['size_formatted']}")
+    print(f"   └─ Linhas: {meta_original['total_lines']:,}\n")
+    
+    print(f"📄 Arquivo Limpo: {cleaned_file}")
+    print(f"   ├─ Tamanho: {meta_cleaned['size_formatted']}")
+    print(f"   └─ Linhas: {meta_cleaned['total_lines']:,}\n")
+    
+    print(f"📊 Diferenças:")
+    print(f"   ├─ Caracteres removidos: {size_diff:,} bytes")
+    print(f"   ├─ Redução de tamanho: {reduction_pct:.2f}%")
+    print(f"   └─ Linhas: {'✅ Iguais' if meta_original['total_lines'] == meta_cleaned['total_lines'] else '❌ Diferentes'}")
+    
+    # print("\n" + "="*70)
+    
+    return {
+        'original': meta_original,
+        'cleaned': meta_cleaned,
+        'bytes_removed': size_diff,
+        'reduction_percent': reduction_pct,
+        'lines_match': meta_original['total_lines'] == meta_cleaned['total_lines']
+    }
+  
+audit_results = audit_conversion()
+```
+:::
+
+`✅ Arquivo Base Limpo Gerado`
+
+O arquivo `raw-data_cln1.txt` foi criado com sucesso, mantendo a integridade estrutural (`{python} f"{audit_results['cleaned']['total_lines']:,}"` linhas) e reduzindo `{python} f"{audit_results['reduction_percent']:.2f}%"` do tamanho através da remoção de `{python} f"{total_removed:,}"` caracteres invisíveis de formatação. Este arquivo será a base para os próximos tratamentos do pipeline.
+
+::: {.callout-caution collapse="true"}
+## 💡 Insights sobre a Remoção do Caractere U+200E
+
+**Impacto da remoção:**
+
+Alta densidade no arquivo: Com 48.699 ocorrências removidas resultando em 243.430 bytes, cada ocorrência do U+200E ocupa 5 bytes na codificação UTF-8 (confirmando que é E2 80 8E em hexadecimal) Presença sistemática: A alta frequência (quase 50% das linhas do arquivo contêm pelo menos uma ocorrência) sugere que o WhatsApp insere este caractere de forma programática durante a exportação Uso pelo WhatsApp: Padrões de regex para parsing de exports do WhatsApp frequentemente incluem (?:\u200E\|\u200F)\* no início das expressões, indicando que este caractere é esperado nas exportações Stack Overflow, especialmente em linhas de mídia anexada/omitida e mensagens de sistema
+
+**Benefícios da limpeza:**
+
+Redução de 4.61% no tamanho: Economia significativa de espaço sem perda de conteúdo informacional, facilitando processamento e armazenamento Simplificação do parsing: Remove complexidade desnecessária para análises em português/inglês (idiomas left-to-right), evitando problemas com regex e processamento de texto Integridade preservada: O número de linhas permanece idêntico (97.333), confirmando que a remoção foi cirúrgica e não afetou a estrutura do documento Preparação para NLP: Texto mais limpo para análises de processamento de linguagem natural, eliminando ruído que poderia interferir em tokenização e embeddings
+:::
+
+------------------------------------------------------------------------
+
+#### Mensagens multi-linha e linhas vazias
+
+::: {.callout-note collapse="false"}
+#### Características das Mensagens
+
+-   Os remetentes podem conter caracteres especiais e emojis. Se for da escolha do usuário não anonimizar, precisa considerar os caracteres.
+-   As mensagens contem dados extremamente desestruturados, ou seja, usam caracteres especiais, emojis, espaços em branco, quebras de linha e todo tipo de caracter que o o WhatsApp possibite enviar. Neste sentido, o primeiro requisito é que durante o processamento, esses caracteres e a estrutura do texto original se mantenham.
+:::
+
+-   As linhas vazias `[time-stamp] Remetente:` Indicam múltiplos anexos, pois por padrão mensagens de mídias seguem sequencialmente. **Iremos excluir essas linhas**, uma vez que essa mensagem vazia está representada pelas mensagens de mídia seguintes (omitidas ou não).
+
+    -   As mensagens seguintes a uma mensagem vazia, por padrão é do tipo mídia (que iremos definir posteriormente) não serão tratadas como mensagens de multi-linha ou agregadas. A ideia é entender cada mídia como uma mensagen individual
+
+-   As linhas que não começam com `[U+200E]` ou `time-stamp` são mensagens relativas a linhas anteriores que usam quebras de linha. Tais linhas devem ser agregadas recursivamente até a última linha que inicia com `[U+200E]` ou `time-stamp`. Esse tratamento serve para criar e salvar um dataframe inicial bastante básico, convertendo cada linhas do `.txt` para uma coluna do `data-frame`. Com isso, exibir no `.mqd` a comparação entre o arquivo `raw-data` exportado e o `raw-data` original a diferença entr o número de linhas e o número de mensagens, que no caso, no data-frame, foram agrupadas e com isso uma redução de linhas irá ocorrer.
+
+    -   Esse data-frame deve salvar a **relação da linha do `.txt` em uma coluna do data-frame**, pois conforme forem existindo mensagens multi linha o indíce começa a se perder.
+    -   Exibir comparação entre arquivos salvos.
+
+------------------------------------------------------------------------
+
+### Linhas Vazias
+
+As linhas vazias aparecem em diferentes contextos no arquivo exportado e podem ser removidas sem perda de informação, reduzindo o tamanho do arquivo e facilitando o processamento posterior.
+
+#### Caso 1: Timestamp vazio seguido de múltiplas mídias
+
+Quando múltiplas mídias são enviadas simultaneamente, o WhatsApp registra uma linha com timestamp e remetente vazios, seguida imediatamente por outros timestamps com as mídias anexadas.
+
+**Padrão identificado:**
+
+-   `[24/08/25, 16:38:36] Lê 🖤:`
+-   `[24/08/25, 16:38:37] Lê 🖤: <attached: 00000282-PHOTO-2025-08-24-16-38-38.jpg>`
+-   `[24/08/25, 16:38:38] Lê 🖤: <attached: 00000283-PHOTO-2025-08-24-16-38-39.jpg>`
+
+**Ação:** Remover a primeira linha (timestamp vazio), mantendo apenas as linhas com mídias anexadas.
+
+:::: {.callout-note collapse="true"}
+## Análise e Execução - Caso 1
+
+```{python}
+def analyze_case1_empty_timestamps(file_path='raw-data_cln1.txt'):
+    """
+    Identifica timestamps vazios seguidos de MÚLTIPLAS mídias consecutivas (≥2).
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    media_patterns = [
+        '<attached:',
+        'audio omitted',
+        'image omitted',
+        'video omitted',
+        'sticker omitted',
+        'GIF omitted',
+        'document omitted'
+    ]
+    
+    count_case1 = 0
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    for i in range(len(lines) - 2):  # -2 para verificar próximas 2 linhas
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        next_next = lines[i + 2].strip()
+        
+        # Timestamp vazio + próxima linha é timestamp
+        if (re.match(timestamp_pattern, current) and 
+            current.endswith(':') and 
+            re.match(timestamp_pattern, next_line)):
+            
+            # VALIDAÇÕES:
+            # 1. Próxima linha deve ter mídia
+            has_media_next = any(pattern in next_line for pattern in media_patterns)
+            
+            # 2. Linha seguinte TAMBÉM deve ser timestamp com mídia (múltiplas mídias)
+            has_media_next_next = (re.match(timestamp_pattern, next_next) and 
+                                   any(pattern in next_next for pattern in media_patterns))
+            
+            if has_media_next and has_media_next_next:
+                count_case1 += 1
+    
+    print(f"📊 Caso 1 - Timestamps vazios (múltiplas mídias ≥2): {count_case1:,} ocorrências")
+    return count_case1
+
+case1_count = analyze_case1_empty_timestamps()
+```
+
+> **Ação:** Verificar se as mensagens foram filtradas corretamente.
+
+::: {.callout-note collapse="true"}
+## 📋 Exemplos de timestamps vazios (múltiplas mídias):
+
+```{python}
+def list_case1_examples(file_path='raw-data_cln1.txt', max_examples=10):
+    """
+    Lista exemplos de timestamps vazios seguidos de MÚLTIPLAS mídias consecutivas (≥2).
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    media_patterns = [
+        '<attached:',
+        'audio omitted',
+        'image omitted',
+        'video omitted',
+        'sticker omitted',
+        'GIF omitted',
+        'document omitted'
+    ]
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    examples = []
+    
+    for i in range(len(lines) - 2):  # -2 para verificar próximas 2 linhas
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        next_next = lines[i + 2].strip()
+        
+        # Timestamp vazio + próxima linha é timestamp
+        if (re.match(timestamp_pattern, current) and 
+            current.endswith(':') and 
+            re.match(timestamp_pattern, next_line)):
+            
+            # VALIDAÇÕES: múltiplas mídias consecutivas
+            has_media_next = any(pattern in next_line for pattern in media_patterns)
+            has_media_next_next = (re.match(timestamp_pattern, next_next) and 
+                                   any(pattern in next_next for pattern in media_patterns))
+            
+            if has_media_next and has_media_next_next:
+                # Captura a linha vazia e as mídias subsequentes
+                example = {
+                    'linha_numero': i + 1,
+                    'linha_vazia': current,
+                    'midias': []
+                }
+                
+                # Coleta TODAS as mídias subsequentes consecutivas
+                j = i + 1
+                while j < len(lines):
+                    line = lines[j].strip()
+                    
+                    # Para se não for timestamp
+                    if not re.match(timestamp_pattern, line):
+                        break
+                    
+                    # Verifica se é mídia
+                    is_media = any(pattern in line for pattern in media_patterns)
+                    if is_media:
+                        example['midias'].append(line)
+                        j += 1
+                    else:
+                        break
+                
+                examples.append(example)
+                
+                if len(examples) >= max_examples:
+                    break
+    
+    # Exibe os exemplos
+    # print(f"**📋 Listando {len(examples)} exemplos de timestamps vazios (múltiplas mídias):**\n")
+    # print("="*80)
+    
+    for idx, ex in enumerate(examples, 1):
+        print("-"*80)
+        print(f"\n🔹 Exemplo {idx} (linha {ex['linha_numero']}):")
+        print(f"   Linha vazia: {ex['linha_vazia']}")
+        print(f"   Mídias subsequentes ({len(ex['midias'])}):")
+        for media in ex['midias']:
+            print(f"      → {media}")
+        # print("-"*80)
+    
+    return examples
+
+# Lista os primeiros 10 casos
+examples = list_case1_examples(max_examples=10)
+```
+:::
+::::
+
+Após analisar todas 39 mensagens, foi constatado que este filtro identificou corretamente as mensagens vazias que seguem de mídias. Um ponto observado é que as vezes esse padrão que estamos usando pega mensagens de outro remetente, porém isso não tem impacto no processamento desses dados. Assim, vamos executar a remoção e comparar os 3 arquivos. A ideia é salvar um novo arquivo com essas alterações
+
+# Agora, vamos remover
+
+```{python}
+def remove_case1_empty_timestamps(input_file='raw-data_cln1.txt', 
+                                  output_file='raw-data_cln2.txt'):
+    """
+    Remove timestamps vazios seguidos de múltiplas mídias consecutivas (≥2).
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    media_patterns = [
+        '<attached:',
+        'audio omitted',
+        'image omitted',
+        'video omitted',
+        'sticker omitted',
+        'GIF omitted',
+        'document omitted'
+    ]
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned_lines = []
+    lines_to_skip = set()  # Índices das linhas a pular
+    
+    # Primeira passada: identifica linhas a remover
+    for i in range(len(lines) - 2):
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        next_next = lines[i + 2].strip()
+        
+        # Timestamp vazio + múltiplas mídias
+        if (re.match(timestamp_pattern, current) and 
+            current.endswith(':') and 
+            re.match(timestamp_pattern, next_line)):
+            
+            has_media_next = any(pattern in next_line for pattern in media_patterns)
+            has_media_next_next = (re.match(timestamp_pattern, next_next) and 
+                                   any(pattern in next_next for pattern in media_patterns))
+            
+            if has_media_next and has_media_next_next:
+                lines_to_skip.add(i)  # Marca para remoção
+    
+    # Segunda passada: cria arquivo sem linhas vazias
+    for i, line in enumerate(lines):
+        if i not in lines_to_skip:
+            cleaned_lines.append(line)
+    
+    # Salva arquivo limpo
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(cleaned_lines)
+    
+    lines_removed = len(lines_to_skip)
+    
+    print(f"✅ Arquivo salvo: {output_file}")
+    print(f"📉 Linhas removidas: {lines_removed:,}")
+    print(f"📊 Total de linhas: {len(lines):,} → {len(cleaned_lines):,}")
+    
+    return lines_removed
+
+# Executa a remoção
+case1_removed = remove_case1_empty_timestamps()
+
+```
+
+```{python}
+def compare_cleaning_stages():
+    """
+    Compara os 3 estágios de limpeza do arquivo.
+    """
+    import file_metadata as fm
+    
+    # Obtém metadados dos 3 arquivos
+    meta_raw = fm.get_file_metadata('raw-data.txt')
+    meta_cln1 = fm.get_file_metadata('raw-data_cln1.txt')
+    meta_cln2 = fm.get_file_metadata('raw-data_cln2.txt')
+    
+    print("\n" + "="*80)
+    print("📊 COMPARAÇÃO DOS ESTÁGIOS DE LIMPEZA")
+    print("="*80 + "\n")
+    
+    # Tabela de comparação
+    print(f"{'Estágio':<25} {'Linhas':<15} {'Tamanho':<15} {'Δ Linhas':<15} {'Δ Tamanho'}")
+    print("-"*80)
+    
+    # Raw data
+    print(f"{'raw-data.txt':<25} {meta_raw['total_lines']:>14,} {meta_raw['size_formatted']:>14} {'-':>14} {'-':>14}")
+    
+    # Após remover U+200E
+    lines_diff_1 = meta_raw['total_lines'] - meta_cln1['total_lines']
+    size_diff_1 = meta_raw['size_bytes'] - meta_cln1['size_bytes']
+    pct_1 = (size_diff_1 / meta_raw['size_bytes'] * 100) if meta_raw['size_bytes'] > 0 else 0
+    
+    print(f"{'raw-data_cln1.txt':<25} {meta_cln1['total_lines']:>14,} {meta_cln1['size_formatted']:>14} "
+          f"{lines_diff_1:>14,} {f'-{pct_1:.2f}%':>14}")
+    
+    # Após remover timestamps vazios
+    lines_diff_2 = meta_cln1['total_lines'] - meta_cln2['total_lines']
+    size_diff_2 = meta_cln1['size_bytes'] - meta_cln2['size_bytes']
+    pct_2 = (size_diff_2 / meta_cln1['size_bytes'] * 100) if meta_cln1['size_bytes'] > 0 else 0
+    
+    print(f"{'raw-data_cln2.txt':<25} {meta_cln2['total_lines']:>14,} {meta_cln2['size_formatted']:>14} "
+          f"{f'-{lines_diff_2}':>14} {f'-{pct_2:.2f}%':>14}")
+    
+    print("-"*80)
+    
+    # Total acumulado
+    total_lines_removed = meta_raw['total_lines'] - meta_cln2['total_lines']
+    total_size_removed = meta_raw['size_bytes'] - meta_cln2['size_bytes']
+    total_pct = (total_size_removed / meta_raw['size_bytes'] * 100) if meta_raw['size_bytes'] > 0 else 0
+    
+    print(f"{'TOTAL REDUZIDO':<25} {f'-{total_lines_removed}':>14} "
+          f"{fm.get_file_size_formatted(total_size_removed):>14} {'-':>14} {f'-{total_pct:.2f}%':>14}")
+    
+    print("\n" + "="*80)
+    
+    print("\n💡 RESUMO:")
+    print(f"   • Remoção U+200E: {size_diff_1:,} bytes ({pct_1:.2f}%)")
+    print(f"   • Remoção timestamps vazios: {size_diff_2:,} bytes ({pct_2:.2f}%)")
+    print(f"   • Redução total acumulada: {total_size_removed:,} bytes ({total_pct:.2f}%)")
+    print(f"   • Linhas removidas: {total_lines_removed:,}")
+    print("="*80 + "\n")
+    
+    return {
+        'stage1_lines': lines_diff_1,
+        'stage1_bytes': size_diff_1,
+        'stage2_lines': lines_diff_2,
+        'stage2_bytes': size_diff_2,
+        'total_lines': total_lines_removed,
+        'total_bytes': total_size_removed,
+        'total_percent': total_pct
+    }
+
+# Executa comparação
+comparison = compare_cleaning_stages()
+```
+
+------------------------------------------------------------------------
+
+#### Caso 2: Linhas completamente vazias entre mensagens
+
+Linhas vazias que aparecem entre mensagens distintas, geralmente resultantes de quebras de linha desnecessárias.
+
+**Padrão identificado:**
+
+```         
+sample message!
+
+[24/08/25, 16:38:37] Lê 🖤: sample message.
+```
+
+**Ação:** Remover essas linhas vazias.
+
+```{python}
+def investigate_empty_lines(file_path='raw-data_cln2.txt'):
+    """
+    Investiga todas as linhas vazias no arquivo.
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    empty_lines = []
+    
+    for i, line in enumerate(lines, start=1):
+        # Verifica se linha está vazia (só whitespace ou \n)
+        if not line.strip():
+            context = {
+                'linha_numero': i,
+                'linha_anterior': lines[i-2].strip() if i > 1 else 'N/A',
+                'linha_vazia': repr(line),  # Mostra caracteres invisíveis
+                'proxima_linha': lines[i].strip() if i < len(lines) else 'N/A'
+            }
+            empty_lines.append(context)
+    
+    print(f"🔍 Total de linhas vazias encontradas: {len(empty_lines)}\n")
+    
+    if empty_lines:
+        print("="*80)
+        for idx, ctx in enumerate(empty_lines[:10], 1):  # Mostra primeiras 10
+            print(f"\n📍 Linha vazia #{idx} (posição {ctx['linha_numero']}):")
+            print(f"   Anterior: {ctx['linha_anterior'][:80]}...")
+            print(f"   Vazia: {ctx['linha_vazia']}")
+            print(f"   Próxima: {ctx['proxima_linha'][:80]}...")
+            print("-"*80)
+    else:
+        print("✅ Nenhuma linha vazia encontrada!")
+    
+    return empty_lines
+
+# Investiga
+empty_investigation = investigate_empty_lines()
+```
+
+```{python}
+def analyze_case2_empty_lines_fixed(file_path='raw-data_cln2.txt'):
+    """
+    Identifica linhas vazias ANTES de timestamps (entre mensagens).
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    
+    count_case2 = 0
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    for i in range(len(lines) - 1):
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        
+        # Linha vazia + próxima linha é TIMESTAMP (indica fim de mensagem anterior)
+        if not current and next_line and re.match(timestamp_pattern, next_line):
+            count_case2 += 1
+    
+    print(f"📊 Caso 2 - Linhas vazias ANTES de timestamps: {count_case2:,} ocorrências")
+    return count_case2
+
+case2_count_fixed = analyze_case2_empty_lines_fixed()
+```
+
+::: {.callout-note collapse="true"}
+## Análise e Execução - Caso 2
+
+```{python}
+def analyze_case2_empty_lines(file_path='raw-data_cln2.txt'):
+    """
+    Identifica linhas completamente vazias entre mensagens.
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    
+    count_case2 = 0
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    for i in range(len(lines) - 1):
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        
+        # Linha vazia seguida de timestamp
+        if not current and re.match(timestamp_pattern, next_line):
+            count_case2 += 1
+    
+    print(f"📊 Caso 2 - Linhas vazias entre mensagens: {count_case2:,} ocorrências")
+    return count_case2
+
+case2_count = analyze_case2_empty_lines()
+```
+
+```{python}
+def remove_case2_empty_lines(input_file='raw-data_cln2.txt', 
+                             output_file='raw-data_cln3.txt'):
+    """
+    Remove linhas completamente vazias entre mensagens.
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned_lines = []
+    
+    for i in range(len(lines)):
+        current = lines[i].strip()
+        
+        # Se linha vazia, verifica se próxima é timestamp
+        if not current and i < len(lines) - 1:
+            next_line = lines[i + 1].strip()
+            if re.match(timestamp_pattern, next_line):
+                continue  # Pula linha vazia
+        
+        cleaned_lines.append(lines[i])
+    
+    # Salva arquivo limpo
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(cleaned_lines)
+    
+    lines_removed = len(lines) - len(cleaned_lines)
+    
+    print(f"✅ Arquivo salvo: {output_file}")
+    print(f"📉 Linhas removidas: {lines_removed:,}")
+    print(f"📊 Total de linhas: {len(lines):,} → {len(cleaned_lines):,}")
+    
+    return lines_removed
+
+case2_removed = remove_case2_empty_lines()
+```
+:::
+
+------------------------------------------------------------------------
+
+```{python}
+def analyze_case2_internal_empty_lines(file_path='raw-data_cln2.txt'):
+    """
+    Identifica linhas completamente vazias (sem espaços, só \\n).
+    """
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    count = 0
+    for line in lines:
+        # Linha vazia = apenas \n (sem espaços, tabs, nada)
+        if line == '\n':
+            count += 1
+    
+    print(f"📊 Linhas vazias internas (só \\n): {count:,} ocorrências")
+    return count
+
+case2_internal = analyze_case2_internal_empty_lines()
+```
+
+```{python}
+def remove_case2_internal_empty_lines(input_file='raw-data_cln2.txt', 
+                                      output_file='raw-data_cln3.txt'):
+    """
+    Remove APENAS linhas completamente vazias (\\n), preservando indentação.
+    """
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned_lines = []
+    
+    for line in lines:
+        # Pula se for APENAS \n (sem espaços)
+        if line == '\n':
+            continue
+        cleaned_lines.append(line)
+    
+    # Salva arquivo limpo
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(cleaned_lines)
+    
+    lines_removed = len(lines) - len(cleaned_lines)
+    
+    print(f"✅ Arquivo salvo: {output_file}")
+    print(f"📉 Linhas vazias removidas: {lines_removed:,}")
+    print(f"📊 Total: {len(lines):,} → {len(cleaned_lines):,}")
+    print(f"💡 Indentação e formatação preservadas!")
+    
+    return lines_removed
+
+case2_removed = remove_case2_internal_empty_lines()
+```
+
+```{python}
+def compare_all_cleaning_stages():
+    """
+    Compara todos os estágios de limpeza do arquivo.
+    """
+    import file_metadata as fm
+    
+    # Obtém metadados dos 4 arquivos
+    meta_raw = fm.get_file_metadata('raw-data.txt')
+    meta_cln1 = fm.get_file_metadata('raw-data_cln1.txt')
+    meta_cln2 = fm.get_file_metadata('raw-data_cln2.txt')
+    meta_cln3 = fm.get_file_metadata('raw-data_cln3.txt')
+    
+    print("\n" + "="*90)
+    print("📊 COMPARAÇÃO COMPLETA DOS ESTÁGIOS DE LIMPEZA")
+    print("="*90 + "\n")
+    
+    # Cabeçalho da tabela
+    print(f"{'Estágio':<30} {'Linhas':>12} {'Tamanho':>12} {'Δ Linhas':>12} {'Δ Tamanho':>12}")
+    print("-"*90)
+    
+    # 1. Raw data (original)
+    print(f"{'raw-data.txt (original)':<30} {meta_raw['total_lines']:>12,} {meta_raw['size_formatted']:>12} {'-':>12} {'-':>12}")
+    
+    # 2. Após remover U+200E
+    lines_diff_1 = meta_raw['total_lines'] - meta_cln1['total_lines']
+    size_diff_1 = meta_raw['size_bytes'] - meta_cln1['size_bytes']
+    pct_1 = (size_diff_1 / meta_raw['size_bytes'] * 100) if meta_raw['size_bytes'] > 0 else 0
+    
+    print(f"{'└─ cln1 (sem U+200E)':<30} {meta_cln1['total_lines']:>12,} {meta_cln1['size_formatted']:>12} "
+          f"{lines_diff_1:>12,} {f'-{pct_1:.2f}%':>12}")
+    
+    # 3. Após remover timestamps vazios (múltiplas mídias)
+    lines_diff_2 = meta_cln1['total_lines'] - meta_cln2['total_lines']
+    size_diff_2 = meta_cln1['size_bytes'] - meta_cln2['size_bytes']
+    pct_2 = (size_diff_2 / meta_cln1['size_bytes'] * 100) if meta_cln1['size_bytes'] > 0 else 0
+    
+    print(f"{'└─ cln2 (sem timestamps vazios)':<30} {meta_cln2['total_lines']:>12,} {meta_cln2['size_formatted']:>12} "
+          f"{f'-{lines_diff_2}':>12} {f'-{pct_2:.2f}%':>12}")
+    
+    # 4. Após remover linhas vazias internas
+    lines_diff_3 = meta_cln2['total_lines'] - meta_cln3['total_lines']
+    size_diff_3 = meta_cln2['size_bytes'] - meta_cln3['size_bytes']
+    pct_3 = (size_diff_3 / meta_cln2['size_bytes'] * 100) if meta_cln2['size_bytes'] > 0 else 0
+    
+    print(f"{'└─ cln3 (sem linhas vazias)':<30} {meta_cln3['total_lines']:>12,} {meta_cln3['size_formatted']:>12} "
+          f"{f'-{lines_diff_3}':>12} {f'-{pct_3:.2f}%':>12}")
+    
+    print("-"*90)
+    
+    # Total acumulado
+    total_lines_removed = meta_raw['total_lines'] - meta_cln3['total_lines']
+    total_size_removed = meta_raw['size_bytes'] - meta_cln3['size_bytes']
+    total_pct = (total_size_removed / meta_raw['size_bytes'] * 100) if meta_raw['size_bytes'] > 0 else 0
+    
+    print(f"{'TOTAL REDUZIDO':<30} {f'-{total_lines_removed}':>12} "
+          f"{fm.get_file_size_formatted(total_size_removed):>12} {'-':>12} {f'-{total_pct:.2f}%':>12}")
+    
+    print("\n" + "="*90)
+    
+    # Resumo detalhado
+    print("\n💡 RESUMO POR ETAPA:")
+    print(f"   1️⃣ Remoção U+200E:           {size_diff_1:>8,} bytes ({pct_1:>5.2f}%) | {lines_diff_1:>6,} linhas")
+    print(f"   2️⃣ Timestamps vazios:        {size_diff_2:>8,} bytes ({pct_2:>5.2f}%) | {lines_diff_2:>6,} linhas")
+    print(f"   3️⃣ Linhas vazias internas:   {size_diff_3:>8,} bytes ({pct_3:>5.2f}%) | {lines_diff_3:>6,} linhas")
+    print(f"   {'─'*60}")
+    print(f"   📦 TOTAL ACUMULADO:          {total_size_removed:>8,} bytes ({total_pct:>5.2f}%) | {total_lines_removed:>6,} linhas")
+    
+    print("\n✅ Arquivo final pronto: raw-data_cln3.txt")
+    print("="*90 + "\n")
+    
+    return {
+        'stage1': {'lines': lines_diff_1, 'bytes': size_diff_1, 'percent': pct_1},
+        'stage2': {'lines': lines_diff_2, 'bytes': size_diff_2, 'percent': pct_2},
+        'stage3': {'lines': lines_diff_3, 'bytes': size_diff_3, 'percent': pct_3},
+        'total': {'lines': total_lines_removed, 'bytes': total_size_removed, 'percent': total_pct}
+    }
+
+# Executa comparação completa
+final_comparison = compare_all_cleaning_stages()
+```
+
+------------------------------------------------------------------------
+
+#### Caso 4: Normalização de espaços em branco
+
+Espaços excessivos, tabs e trailing whitespace podem ser normalizados sem afetar a legibilidade, reduzindo o tamanho do arquivo.
+
+**Padrões a normalizar:** - Múltiplos espaços consecutivos → espaço único - Tabs (`\t`) → espaço único - Espaços no final das linhas (trailing whitespace) - **Preserva:** Indentação no início das linhas
+
+**Exemplo:**
+
+```         
+Antes:  "        R$ 22 o grama.    \t  "
+Depois: "        R$ 22 o grama."
+```
+
+::: {.callout-note collapse="true"}
+## Análise e Execução - Caso 4
+
+```{python}
+def analyze_case4_whitespace(file_path='raw-data_cln3.txt'):
+    """
+    Analisa espaços em branco excessivos no arquivo.
+    """
+    import re
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    lines_with_trailing = 0
+    lines_with_tabs = 0
+    lines_with_multiple_spaces = 0
+    total_trailing_spaces = 0
+    
+    for line in lines:
+        # Trailing whitespace
+        if line.rstrip('\n') != line.rstrip():
+            lines_with_trailing += 1
+            total_trailing_spaces += len(line.rstrip('\n')) - len(line.rstrip())
+        
+        # Tabs
+        if '\t' in line:
+            lines_with_tabs += 1
+        
+        # Múltiplos espaços consecutivos (exceto indentação inicial)
+        stripped = line.lstrip()
+        if '  ' in stripped:  # 2+ espaços
+            lines_with_multiple_spaces += 1
+    
+    print("📊 Análise de Espaços em Branco:")
+    print(f"   • Linhas com trailing whitespace: {lines_with_trailing:,}")
+    print(f"   • Total de espaços trailing: {total_trailing_spaces:,}")
+    print(f"   • Linhas com tabs: {lines_with_tabs:,}")
+    print(f"   • Linhas com múltiplos espaços: {lines_with_multiple_spaces:,}")
+    
+    return {
+        'trailing': lines_with_trailing,
+        'trailing_spaces': total_trailing_spaces,
+        'tabs': lines_with_tabs,
+        'multiple_spaces': lines_with_multiple_spaces
+    }
+
+case4_analysis = analyze_case4_whitespace()
+```
+
+```{python}
+def remove_case4_normalize_whitespace(input_file='raw-data_cln3.txt', 
+                                      output_file='raw-data_cln4.txt'):
+    """
+    Normaliza espaços em branco, preservando indentação inicial.
+    """
+    import re
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned_lines = []
+    
+    for line in lines:
+        # 1. Remove trailing whitespace (exceto \n)
+        line = line.rstrip() + '\n'
+        
+        # 2. Separa indentação do conteúdo
+        indent = len(line) - len(line.lstrip())
+        indentation = line[:indent]
+        content = line[indent:]
+        
+        # 3. Substitui tabs por espaço
+        content = content.replace('\t', ' ')
+        
+        # 4. Múltiplos espaços → espaço único (no conteúdo)
+        content = re.sub(r' {2,}', ' ', content)
+        
+        # 5. Reconstrói linha
+        cleaned_line = indentation + content
+        cleaned_lines.append(cleaned_line)
+    
+    # Salva arquivo limpo
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(cleaned_lines)
+    
+    # Calcula redução
+    original_size = sum(len(line.encode('utf-8')) for line in lines)
+    cleaned_size = sum(len(line.encode('utf-8')) for line in cleaned_lines)
+    bytes_saved = original_size - cleaned_size
+    pct_saved = (bytes_saved / original_size * 100) if original_size > 0 else 0
+    
+    print(f"✅ Arquivo salvo: {output_file}")
+    print(f"📉 Bytes economizados: {bytes_saved:,} ({pct_saved:.2f}%)")
+    print(f"📊 Tamanho: {original_size:,} → {cleaned_size:,} bytes")
+    print(f"💡 Indentação preservada, espaços normalizados!")
+    
+    return bytes_saved
+
+case4_removed = remove_case4_normalize_whitespace()
+```
+:::
+
+------------------------------------------------------------------------
+
+```{python}
+def compare_all_cleaning_stages_final():
+    """
+    Compara TODOS os 5 estágios de limpeza do arquivo.
+    """
+    import file_metadata as fm
+    
+    # Obtém metadados dos 5 arquivos
+    meta_raw = fm.get_file_metadata('raw-data.txt')
+    meta_cln1 = fm.get_file_metadata('raw-data_cln1.txt')
+    meta_cln2 = fm.get_file_metadata('raw-data_cln2.txt')
+    meta_cln3 = fm.get_file_metadata('raw-data_cln3.txt')
+    meta_cln4 = fm.get_file_metadata('raw-data_cln4.txt')
+    
+    print("\n" + "="*95)
+    print("📊 COMPARAÇÃO FINAL - TODOS OS ESTÁGIOS DE LIMPEZA")
+    print("="*95 + "\n")
+    
+    # Cabeçalho
+    print(f"{'Estágio':<35} {'Linhas':>12} {'Tamanho':>12} {'Δ Linhas':>12} {'Δ Tamanho':>12}")
+    print("-"*95)
+    
+    # 1. Original
+    print(f"{'📄 raw-data.txt (original)':<35} {meta_raw['total_lines']:>12,} {meta_raw['size_formatted']:>12} {'-':>12} {'-':>12}")
+    
+    # 2. Sem U+200E
+    l1 = meta_raw['total_lines'] - meta_cln1['total_lines']
+    s1 = meta_raw['size_bytes'] - meta_cln1['size_bytes']
+    p1 = (s1 / meta_raw['size_bytes'] * 100)
+    print(f"{'└─ cln1 (sem U+200E)':<35} {meta_cln1['total_lines']:>12,} {meta_cln1['size_formatted']:>12} {l1:>12,} {f'-{p1:.2f}%':>12}")
+    
+    # 3. Sem timestamps vazios
+    l2 = meta_cln1['total_lines'] - meta_cln2['total_lines']
+    s2 = meta_cln1['size_bytes'] - meta_cln2['size_bytes']
+    p2 = (s2 / meta_cln1['size_bytes'] * 100)
+    print(f"{'└─ cln2 (sem timestamps vazios)':<35} {meta_cln2['total_lines']:>12,} {meta_cln2['size_formatted']:>12} {f'-{l2}':>12} {f'-{p2:.2f}%':>12}")
+    
+    # 4. Sem linhas vazias
+    l3 = meta_cln2['total_lines'] - meta_cln3['total_lines']
+    s3 = meta_cln2['size_bytes'] - meta_cln3['size_bytes']
+    p3 = (s3 / meta_cln2['size_bytes'] * 100)
+    print(f"{'└─ cln3 (sem linhas vazias)':<35} {meta_cln3['total_lines']:>12,} {meta_cln3['size_formatted']:>12} {f'-{l3}':>12} {f'-{p3:.2f}%':>12}")
+    
+    # 5. Espaços normalizados
+    l4 = meta_cln3['total_lines'] - meta_cln4['total_lines']
+    s4 = meta_cln3['size_bytes'] - meta_cln4['size_bytes']
+    p4 = (s4 / meta_cln3['size_bytes'] * 100)
+    print(f"{'└─ cln4 (espaços normalizados)':<35} {meta_cln4['total_lines']:>12,} {meta_cln4['size_formatted']:>12} {f'-{l4}':>12} {f'-{p4:.2f}%':>12}")
+    
+    print("-"*95)
+    
+    # Total
+    total_lines = meta_raw['total_lines'] - meta_cln4['total_lines']
+    total_bytes = meta_raw['size_bytes'] - meta_cln4['size_bytes']
+    total_pct = (total_bytes / meta_raw['size_bytes'] * 100)
+    
+    print(f"{'🎯 TOTAL REDUZIDO':<35} {f'-{total_lines}':>12} {fm.get_file_size_formatted(total_bytes):>12} {'-':>12} {f'-{total_pct:.2f}%':>12}")
+    
+    print("\n" + "="*95)
+    print("\n💡 RESUMO DETALHADO:")
+    print(f"   1️⃣ U+200E removido:         {s1:>9,} bytes ({p1:>5.2f}%)")
+    print(f"   2️⃣ Timestamps vazios:       {s2:>9,} bytes ({p2:>5.2f}%)")
+    print(f"   3️⃣ Linhas vazias:           {s3:>9,} bytes ({p3:>5.2f}%)")
+    print(f"   4️⃣ Espaços normalizados:    {s4:>9,} bytes ({p4:>5.2f}%)")
+    print(f"   {'─'*65}")
+    print(f"   📦 REDUÇÃO TOTAL:           {total_bytes:>9,} bytes ({total_pct:>5.2f}%)")
+    print(f"\n✅ Arquivo final otimizado: raw-data_cln4.txt")
+    print("="*95 + "\n")
+
+final_comparison = compare_all_cleaning_stages_final()
+```
+
+------------------------------------------------------------------------
+
+#### Caso 5: Anonimização de participantes
+
+Substituir nomes reais por identificadores genéricos reduz o tamanho do arquivo e preserva privacidade.
+
+**Mapeamento:** - `Marlon` → `P1` - `Lê 🖤` → `P2`
+
+::: {.callout-note collapse="true"}
+## Análise e Execução - Caso 5
+
+```{python}
+def analyze_case5_participants(file_path='raw-data_cln4.txt'):
+    """
+    Identifica e conta ocorrências dos participantes.
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\] (.+?):'
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    participants = {}
+    
+    for line in lines:
+        match = re.match(timestamp_pattern, line)
+        if match:
+            sender = match.group(1)
+            participants[sender] = participants.get(sender, 0) + 1
+    
+    print("📊 Participantes encontrados:\n")
+    for sender, count in sorted(participants.items(), key=lambda x: -x[1]):
+        print(f"   • '{sender}': {count:,} mensagens")
+    
+    print(f"\n💡 Total de participantes: {len(participants)}")
+    
+    return participants
+
+case5_participants = analyze_case5_participants()
+```
+
+```{python}
+def remove_case5_anonymize_participants(input_file='raw-data_cln4.txt', 
+                                        output_file='raw-data_cln5.txt',
+                                        mapping=None):
+    """
+    Substitui nomes de participantes por identificadores anônimos.
+    """
+    if mapping is None:
+        # Mapeamento padrão (ajuste conforme necessário)
+        mapping = {
+            'Marlon': 'P1',
+            'Lê 🖤': 'P2'
+        }
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    anonymized_lines = []
+    replacements_count = {name: 0 for name in mapping.keys()}
+    
+    for line in lines:
+        original_line = line
+        
+        # Substitui cada participante
+        for original_name, anonymous_name in mapping.items():
+            if original_name in line:
+                line = line.replace(f'] {original_name}:', f'] {anonymous_name}:')
+                if line != original_line:
+                    replacements_count[original_name] += 1
+                    original_line = line
+        
+        anonymized_lines.append(line)
+    
+    # Salva arquivo anonimizado
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(anonymized_lines)
+    
+    # Calcula redução
+    original_size = sum(len(l.encode('utf-8')) for l in open(input_file, 'r', encoding='utf-8').readlines())
+    anonymized_size = sum(len(l.encode('utf-8')) for l in anonymized_lines)
+    bytes_saved = original_size - anonymized_size
+    pct_saved = (bytes_saved / original_size * 100) if original_size > 0 else 0
+    
+    print(f"✅ Arquivo anonimizado salvo: {output_file}\n")
+    print(f"📊 Substituições realizadas:")
+    for name, count in replacements_count.items():
+        print(f"   • '{name}' → '{mapping[name]}': {count:,} ocorrências")
+    
+    print(f"\n📉 Bytes economizados: {bytes_saved:,} ({pct_saved:.2f}%)")
+    print(f"📊 Tamanho: {original_size:,} → {anonymized_size:,} bytes")
+    print(f"🔒 Privacidade preservada!")
+    
+    return bytes_saved
+
+# Executa anonimização
+case5_removed = remove_case5_anonymize_participants()
+```
+:::
+
+------------------------------------------------------------------------
+
+```{python}
+def compare_all_cleaning_stages_complete():
+    """
+    Compara TODOS os 6 estágios de limpeza do arquivo (incluindo anonimização).
+    """
+    import file_metadata as fm
+    
+    # Obtém metadados dos 6 arquivos
+    meta_raw = fm.get_file_metadata('raw-data.txt')
+    meta_cln1 = fm.get_file_metadata('raw-data_cln1.txt')
+    meta_cln2 = fm.get_file_metadata('raw-data_cln2.txt')
+    meta_cln3 = fm.get_file_metadata('raw-data_cln3.txt')
+    meta_cln4 = fm.get_file_metadata('raw-data_cln4.txt')
+    meta_cln5 = fm.get_file_metadata('raw-data_cln5.txt')
+    
+    print("\n" + "="*100)
+    print("📊 COMPARAÇÃO FINAL COMPLETA - TODOS OS ESTÁGIOS DE LIMPEZA")
+    print("="*100 + "\n")
+    
+    # Cabeçalho
+    print(f"{'Estágio':<40} {'Linhas':>12} {'Tamanho':>12} {'Δ Linhas':>12} {'Δ Tamanho':>12}")
+    print("-"*100)
+    
+    # 1. Original
+    print(f"{'📄 raw-data.txt (original)':<40} {meta_raw['total_lines']:>12,} {meta_raw['size_formatted']:>12} {'-':>12} {'-':>12}")
+    
+    # 2. Sem U+200E
+    l1 = meta_raw['total_lines'] - meta_cln1['total_lines']
+    s1 = meta_raw['size_bytes'] - meta_cln1['size_bytes']
+    p1 = (s1 / meta_raw['size_bytes'] * 100)
+    print(f"{'└─ cln1 (sem U+200E)':<40} {meta_cln1['total_lines']:>12,} {meta_cln1['size_formatted']:>12} {l1:>12,} {f'-{p1:.2f}%':>12}")
+    
+    # 3. Sem timestamps vazios
+    l2 = meta_cln1['total_lines'] - meta_cln2['total_lines']
+    s2 = meta_cln1['size_bytes'] - meta_cln2['size_bytes']
+    p2 = (s2 / meta_cln1['size_bytes'] * 100)
+    print(f"{'└─ cln2 (sem timestamps vazios)':<40} {meta_cln2['total_lines']:>12,} {meta_cln2['size_formatted']:>12} {f'-{l2}':>12} {f'-{p2:.2f}%':>12}")
+    
+    # 4. Sem linhas vazias
+    l3 = meta_cln2['total_lines'] - meta_cln3['total_lines']
+    s3 = meta_cln2['size_bytes'] - meta_cln3['size_bytes']
+    p3 = (s3 / meta_cln2['size_bytes'] * 100)
+    print(f"{'└─ cln3 (sem linhas vazias)':<40} {meta_cln3['total_lines']:>12,} {meta_cln3['size_formatted']:>12} {f'-{l3}':>12} {f'-{p3:.2f}%':>12}")
+    
+    # 5. Espaços normalizados
+    l4 = meta_cln3['total_lines'] - meta_cln4['total_lines']
+    s4 = meta_cln3['size_bytes'] - meta_cln4['size_bytes']
+    p4 = (s4 / meta_cln3['size_bytes'] * 100)
+    print(f"{'└─ cln4 (espaços normalizados)':<40} {meta_cln4['total_lines']:>12,} {meta_cln4['size_formatted']:>12} {f'-{l4}':>12} {f'-{p4:.2f}%':>12}")
+    
+    # 6. Anonimizado
+    l5 = meta_cln4['total_lines'] - meta_cln5['total_lines']
+    s5 = meta_cln4['size_bytes'] - meta_cln5['size_bytes']
+    p5 = (s5 / meta_cln4['size_bytes'] * 100)
+    print(f"{'└─ cln5 (participantes anonimizados)':<40} {meta_cln5['total_lines']:>12,} {meta_cln5['size_formatted']:>12} {f'-{l5}':>12} {f'-{p5:.2f}%':>12}")
+    
+    print("-"*100)
+    
+    # Total
+    total_lines = meta_raw['total_lines'] - meta_cln5['total_lines']
+    total_bytes = meta_raw['size_bytes'] - meta_cln5['size_bytes']
+    total_pct = (total_bytes / meta_raw['size_bytes'] * 100)
+    
+    print(f"{'🎯 TOTAL REDUZIDO':<40} {f'-{total_lines}':>12} {fm.get_file_size_formatted(total_bytes):>12} {'-':>12} {f'-{total_pct:.2f}%':>12}")
+    
+    print("\n" + "="*100)
+    print("\n💡 RESUMO DETALHADO POR ETAPA:")
+    print(f"   1️⃣ U+200E removido:              {s1:>9,} bytes ({p1:>5.2f}%)")
+    print(f"   2️⃣ Timestamps vazios:            {s2:>9,} bytes ({p2:>5.2f}%)")
+    print(f"   3️⃣ Linhas vazias:                {s3:>9,} bytes ({p3:>5.2f}%)")
+    print(f"   4️⃣ Espaços normalizados:         {s4:>9,} bytes ({p4:>5.2f}%)")
+    print(f"   5️⃣ Participantes anonimizados:   {s5:>9,} bytes ({p5:>5.2f}%)")
+    print(f"   {'─'*70}")
+    print(f"   📦 REDUÇÃO TOTAL ACUMULADA:      {total_bytes:>9,} bytes ({total_pct:>5.2f}%)")
+    
+    print(f"\n✅ Arquivo final otimizado e anonimizado: raw-data_cln5.txt")
+    print(f"🔒 Privacidade preservada | 📉 Tamanho otimizado | ✨ Pronto para análise")
+    print("="*100 + "\n")
+    
+    return {
+        'stages': [
+            {'name': 'U+200E', 'lines': l1, 'bytes': s1, 'percent': p1},
+            {'name': 'Timestamps vazios', 'lines': l2, 'bytes': s2, 'percent': p2},
+            {'name': 'Linhas vazias', 'lines': l3, 'bytes': s3, 'percent': p3},
+            {'name': 'Espaços normalizados', 'lines': l4, 'bytes': s4, 'percent': p4},
+            {'name': 'Anonimização', 'lines': l5, 'bytes': s5, 'percent': p5},
+        ],
+        'total': {'lines': total_lines, 'bytes': total_bytes, 'percent': total_pct}
+    }
+
+# Executa comparação final completa
+final_comparison_complete = compare_all_cleaning_stages_complete()
+```
+
+Perfeito! Vamos implementar o **Caso 6** com o parser documentado:
+
+------------------------------------------------------------------------
+
+#### Caso 6: Otimização do formato de timestamp
+
+Remover delimitadores redundantes do timestamp reduz o tamanho do arquivo mantendo total legibilidade e facilitando o parsing.
+
+**Transformação:**
+
+```         
+De:   [28/11/24, 19:30:05] Marlon:
+Para: 28/11/24 19:30:05 Marlon:
+```
+
+**Economia estimada:** \~192 KB (\~3.88% do arquivo atual)
+
+::: {.callout-note collapse="true"}
+## Análise e Execução - Caso 6
+
+```{python}
+def analyze_case6_timestamp_format(file_path='raw-data_cln5.txt'):
+    """
+    Analisa timestamps e estima economia da otimização.
+    """
+    import re
+    
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    timestamp_count = 0
+    
+    for line in lines:
+        if re.match(timestamp_pattern, line):
+            timestamp_count += 1
+    
+    # Cada timestamp: remove '[' + ']' + ', ' = 4 caracteres
+    chars_per_timestamp = 4
+    estimated_bytes = timestamp_count * chars_per_timestamp
+    
+    print(f"📊 Análise de Timestamps:")
+    print(f"   • Total de timestamps: {timestamp_count:,}")
+    print(f"   • Caracteres a remover por timestamp: {chars_per_timestamp}")
+    print(f"   • Economia estimada: {estimated_bytes:,} bytes (~{estimated_bytes/1024:.1f} KB)")
+    
+    return timestamp_count
+
+case6_count = analyze_case6_timestamp_format()
+```
+
+```{python}
+def remove_case6_optimize_timestamps(input_file='raw-data_cln5.txt', 
+                                     output_file='raw-data_cln6.txt'):
+    """
+    Otimiza formato de timestamps removendo delimitadores redundantes.
+    
+    Transformação: [DD/MM/YY, HH:MM:SS] → DD/MM/YY HH:MM:SS
+    """
+    import re
+    
+    timestamp_pattern = r'^\[(\d{2}/\d{2}/\d{2}), (\d{2}:\d{2}:\d{2})\]'
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    optimized_lines = []
+    timestamps_optimized = 0
+    
+    for line in lines:
+        # Substitui padrão do timestamp
+        match = re.match(timestamp_pattern, line)
+        if match:
+            date_part = match.group(1)
+            time_part = match.group(2)
+            # Reconstrói linha sem colchetes e com espaço simples
+            optimized_line = f"{date_part} {time_part}" + line[len(match.group(0)):]
+            optimized_lines.append(optimized_line)
+            timestamps_optimized += 1
+        else:
+            optimized_lines.append(line)
+    
+    # Salva arquivo otimizado
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.writelines(optimized_lines)
+    
+    # Calcula redução
+    original_size = sum(len(l.encode('utf-8')) for l in lines)
+    optimized_size = sum(len(l.encode('utf-8')) for l in optimized_lines)
+    bytes_saved = original_size - optimized_size
+    pct_saved = (bytes_saved / original_size * 100) if original_size > 0 else 0
+    
+    print(f"✅ Arquivo otimizado salvo: {output_file}\n")
+    print(f"📊 Timestamps otimizados: {timestamps_optimized:,}")
+    print(f"📉 Bytes economizados: {bytes_saved:,} ({pct_saved:.2f}%)")
+    print(f"📊 Tamanho: {original_size:,} → {optimized_size:,} bytes")
+    print(f"✨ Formato otimizado mantendo legibilidade!")
+    
+    return bytes_saved
+
+case6_removed = remove_case6_optimize_timestamps()
+```
+:::
+
+------------------------------------------------------------------------
+
+::: callout-tip
+## 📋 Parser para DataFrame (Documentação)
+
+Após a otimização, use o seguinte padrão regex para parsear mensagens:
+
+```{python}
+import re
+import pandas as pd
+
+def parse_to_dataframe(file_path='raw-data_cln6.txt'):
+    """
+    Converte arquivo otimizado em DataFrame estruturado.
+    
+    Formato esperado das linhas:
+    - Mensagens: DD/MM/YY HH:MM:SS Remetente: Conteúdo
+    - Continuações: Texto sem timestamp (parte da mensagem anterior)
+    """
+    
+    # Regex para identificar início de mensagem
+    message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    messages = []
+    current_message = None
+    
+    for line_num, line in enumerate(lines, start=1):
+        line = line.rstrip('\n')
+        
+        # Tenta fazer match com início de mensagem
+        match = re.match(message_pattern, line)
+        
+        if match:
+            # Salva mensagem anterior se existir
+            if current_message:
+                messages.append(current_message)
+            
+            # Inicia nova mensagem
+            current_message = {
+                'linha_original': line_num,
+                'data': match.group(1),
+                'hora': match.group(2),
+                'remetente': match.group(3),
+                'conteudo': match.group(4)
+            }
+        else:
+            # Linha de continuação - agrega ao conteúdo
+            if current_message:
+                current_message['conteudo'] += '\n' + line
+    
+    # Adiciona última mensagem
+    if current_message:
+        messages.append(current_message)
+    
+    # Cria DataFrame
+    df = pd.DataFrame(messages)
+    
+    # Cria timestamp completo
+    df['timestamp'] = pd.to_datetime(
+        df['data'] + ' ' + df['hora'], 
+        format='%d/%m/%y %H:%M:%S'
+    )
+    
+    print(f"✅ DataFrame criado com {len(df):,} mensagens")
+    print(f"📊 Colunas: {list(df.columns)}")
+    
+    return df
+
+# Exemplo de uso:
+# df = parse_to_dataframe('raw-data_cln6.txt')
+# df.head()
+```
+
+**Regex breakdown:** - `^(\d{2}/\d{2}/\d{2})` → Captura data (DD/MM/YY) - `(\d{2}:\d{2}:\d{2})` → Captura hora (HH:MM:SS) - `(.+?):` → Captura remetente (até o primeiro `:`) - `(.*)$` → Captura conteúdo da mensagem
+
+**Tratamento de multi-linha:** - Linhas sem timestamp são agregadas ao `conteudo` da mensagem anterior - Preserva quebras de linha originais com `\n`
+:::
+
+------------------------------------------------------------------------
+
+Agora adicione a **comparação final** com os 7 estágios:
+
+```{python}
+def compare_all_cleaning_stages_final():
+    """
+    Compara TODOS os 7 estágios de limpeza (incluindo timestamp otimizado).
+    """
+    import file_metadata as fm
+    
+    # Obtém metadados dos 7 arquivos
+    files = [
+        ('raw-data.txt', '📄 raw-data.txt (original)'),
+        ('raw-data_cln1.txt', '└─ cln1 (sem U+200E)'),
+        ('raw-data_cln2.txt', '└─ cln2 (sem timestamps vazios)'),
+        ('raw-data_cln3.txt', '└─ cln3 (sem linhas vazias)'),
+        ('raw-data_cln4.txt', '└─ cln4 (espaços normalizados)'),
+        ('raw-data_cln5.txt', '└─ cln5 (participantes anonimizados)'),
+        ('raw-data_cln6.txt', '└─ cln6 (timestamps otimizados)'),
+    ]
+    
+    metas = [fm.get_file_metadata(f[0]) for f in files]
+    
+    print("\n" + "="*105)
+    print("📊 COMPARAÇÃO FINAL COMPLETA - PIPELINE DE OTIMIZAÇÃO")
+    print("="*105 + "\n")
+    
+    # Cabeçalho
+    print(f"{'Estágio':<45} {'Linhas':>12} {'Tamanho':>12} {'Δ Linhas':>12} {'Δ Tamanho':>12}")
+    print("-"*105)
+    
+    # Primeira linha (original)
+    print(f"{files[0][1]:<45} {metas[0]['total_lines']:>12,} {metas[0]['size_formatted']:>12} {'-':>12} {'-':>12}")
+    
+    # Demais linhas com deltas
+    deltas = []
+    for i in range(1, len(files)):
+        prev = metas[i-1]
+        curr = metas[i]
+        
+        delta_lines = prev['total_lines'] - curr['total_lines']
+        delta_bytes = prev['size_bytes'] - curr['size_bytes']
+        delta_pct = (delta_bytes / prev['size_bytes'] * 100) if prev['size_bytes'] > 0 else 0
+        
+        deltas.append({'lines': delta_lines, 'bytes': delta_bytes, 'percent': delta_pct})
+        
+        print(f"{files[i][1]:<45} {curr['total_lines']:>12,} {curr['size_formatted']:>12} "
+              f"{f'-{delta_lines}' if delta_lines > 0 else '0':>12} {f'-{delta_pct:.2f}%':>12}")
+    
+    print("-"*105)
+    
+    # Total acumulado
+    total_lines = metas[0]['total_lines'] - metas[-1]['total_lines']
+    total_bytes = metas[0]['size_bytes'] - metas[-1]['size_bytes']
+    total_pct = (total_bytes / metas[0]['size_bytes'] * 100)
+    
+    print(f"{'🎯 TOTAL REDUZIDO':<45} {f'-{total_lines}':>12} "
+          f"{fm.get_file_size_formatted(total_bytes):>12} {'-':>12} {f'-{total_pct:.2f}%':>12}")
+    
+    print("\n" + "="*105)
+    print("\n💡 RESUMO DETALHADO POR ETAPA:")
+    
+    stage_names = [
+        'U+200E removido',
+        'Timestamps vazios',
+        'Linhas vazias',
+        'Espaços normalizados',
+        'Participantes anonimizados',
+        'Timestamps otimizados'
+    ]
+    
+    for i, (name, delta) in enumerate(zip(stage_names, deltas), 1):
+        print(f"   {i}️⃣ {name:<28} {delta['bytes']:>9,} bytes ({delta['percent']:>5.2f}%)")
+    
+    print(f"   {'─'*75}")
+    print(f"   📦 REDUÇÃO TOTAL ACUMULADA:      {total_bytes:>9,} bytes ({total_pct:>5.2f}%)")
+    
+    print(f"\n✅ Arquivo final: raw-data_cln6.txt")
+    print(f"🔒 Anonimizado | 📉 Otimizado | ✨ Pronto para DataFrame")
+    print("="*105 + "\n")
+
+final_comparison = compare_all_cleaning_stages_final()
+```
+
+# Parking Lot
+
+### Mensagens multi-linha e linhas vaziass
+
+## Mídias inconsistentes
+
+-   Às vezes omitidas, às vezes anexadas. Iremos entrar em mais detalhes na fase 2 da analise.
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# Criação do DataFrame Estruturado
+
+Com o arquivo TXT otimizado e limpo (`raw-data_cln6.txt`), agora vamos transformá-lo em um DataFrame estruturado do pandas, permitindo análises quantitativas e qualitativas sofisticadas.
+
+## Objetivos desta etapa
+
+-   ✅ Parsear mensagens agregando linhas de continuação
+-   ✅ Extrair metadados (timestamp, remetente, conteúdo)
+-   ✅ Classificar tipos de mensagem
+-   ✅ Preparar estrutura para enriquecimento com transcrições
+
+------------------------------------------------------------------------
+
+## Etapa 1: Parsing do TXT otimizado
+
+### Estratégia de Parsing
+
+O arquivo otimizado possui a seguinte estrutura:
+
+**Mensagens completas:**
+
+```         
+28/11/24 19:30:05 P1: Conteúdo da mensagem
+```
+
+**Mensagens multi-linha:**
+
+```         
+28/11/24 19:30:05 P2: Primeira linha
+Segunda linha (continuação)
+Terceira linha (continuação)
+```
+
+**Lógica do parser:** 1. Identifica início de mensagem pelo padrão `DD/MM/YY HH:MM:SS Remetente:` 2. Agrega linhas subsequentes sem timestamp ao conteúdo 3. Preserva índice da linha original do TXT 4. Cria timestamp datetime para análises temporais
+
+::: {.callout-note collapse="true"}
+## Implementação do Parser
+
+```{python}
+import pandas as pd
+import re
+from datetime import datetime
+
+def parse_to_dataframe(file_path='raw-data_cln6.txt'):
+    """
+    Converte arquivo otimizado em DataFrame estruturado.
+    
+    Retorna:
+        pd.DataFrame com colunas:
+        - linha_original: índice da primeira linha da mensagem no TXT
+        - data: data da mensagem (DD/MM/YY)
+        - hora: hora da mensagem (HH:MM:SS)
+        - timestamp: datetime completo
+        - remetente: quem enviou (P1 ou P2)
+        - conteudo: texto completo da mensagem (com quebras preservadas)
+    """
+    
+    # Regex para identificar início de mensagem
+    # Formato: DD/MM/YY HH:MM:SS Remetente: Conteúdo
+    message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
+    
+    lines = open(file_path, 'r', encoding='utf-8').readlines()
+    
+    messages = []
+    current_message = None
+    
+    print(f"🔄 Processando {len(lines):,} linhas...\n")
+    
+    for line_num, line in enumerate(lines, start=1):
+        line = line.rstrip('\n')
+        
+        # Tenta fazer match com início de mensagem
+        match = re.match(message_pattern, line)
+        
+        if match:
+            # Salva mensagem anterior se existir
+            if current_message:
+                messages.append(current_message)
+            
+            # Inicia nova mensagem
+            current_message = {
+                'linha_original': line_num,
+                'data': match.group(1),
+                'hora': match.group(2),
+                'remetente': match.group(3),
+                'conteudo': match.group(4)
+            }
+        else:
+            # Linha de continuação - agrega ao conteúdo
+            if current_message:
+                current_message['conteudo'] += '\n' + line
+            else:
+                # Linha sem timestamp no início do arquivo (ignorar)
+                pass
+    
+    # Adiciona última mensagem
+    if current_message:
+        messages.append(current_message)
+    
+    # Cria DataFrame
+    df = pd.DataFrame(messages)
+    
+    # Cria timestamp completo (datetime)
+    df['timestamp'] = pd.to_datetime(
+        df['data'] + ' ' + df['hora'], 
+        format='%d/%m/%y %H:%M:%S'
+    )
+    
+    # Estatísticas
+    total_lines = len(lines)
+    total_messages = len(df)
+    aggregation_ratio = total_lines / total_messages if total_messages > 0 else 0
+    
+    print(f"✅ DataFrame criado com sucesso!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de linhas no TXT: {total_lines:,}")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Razão de agregação: {aggregation_ratio:.2f} linhas/mensagem")
+    print(f"   • Mensagens multi-linha: {total_lines - total_messages:,} ({((total_lines - total_messages)/total_lines*100):.1f}%)")
+    print(f"\n📋 Colunas: {list(df.columns)}")
+    print(f"📅 Período: {df['timestamp'].min()} até {df['timestamp'].max()}")
+    
+    return df
+
+# Executa o parser
+df_messages = parse_to_dataframe('raw-data_cln6.txt')
+```
+:::
+
+### Visualização do DataFrame
+
+```{python}
+# Exibe primeiras mensagens
+print("\n🔍 Primeiras 5 mensagens:")
+print("="*100)
+df_messages.head()
+```
+
+```{python}
+# Exibe últimas mensagens
+print("\n🔍 Últimas 5 mensagens:")
+print("="*100)
+df_messages.tail()
+```
+
+```{python}
+# Informações do DataFrame
+print("\n📊 Informações do DataFrame:")
+print("="*100)
+df_messages.info()
+```
+
+---
+
+# AQUI FOI O ULTIMO ENVIO PARA O CLAUDE!!!!!!
+
+---
+
+::: callout-tip
+## ✅ Checkpoint: DataFrame Básico Criado
+
+O DataFrame foi criado com sucesso agregando mensagens multi-linha. Agora cada linha representa uma mensagem completa com seus metadados extraídos.
+
+**Próximos passos:** - Classificar tipos de mensagem - Identificar mídias anexadas/omitidas - Preparar para enriquecimento com transcrições
+:::
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Etapa 2: Classificação de Tipos de Mensagem
+
+Agora vamos classificar cada mensagem de acordo com seu tipo, identificando padrões de texto, mídias omitidas, mídias anexadas e mensagens de sistema.
+
+### Taxonomia de Mensagens
+
+Com base na análise exploratória anterior, identificamos os seguintes tipos:
+
+::: panel-tabset
+## Mensagens de Texto
+
+-   **texto_puro:** Mensagens contendo apenas texto
+-   **texto_com_emoji:** Texto com emojis
+-   **texto_com_link:** Texto contendo URLs
+
+## Mídias Omitidas
+
+-   **audio_omitted:** `audio omitted`
+-   **image_omitted:** `image omitted`
+-   **video_omitted:** `video omitted`
+-   **video_note_omitted:** `video note omitted`
+-   **sticker_omitted:** `sticker omitted`
+-   **gif_omitted:** `GIF omitted`
+-   **document_omitted:** `document omitted`
+
+## Mídias Anexadas
+
+-   **audio_attached:** `<attached: ...AUDIO...>`
+-   **image_attached:** `<attached: ...PHOTO...>`
+-   **video_attached:** `<attached: ...VIDEO...>`
+-   **sticker_attached:** `<attached: ...STICKER...>`
+-   **contact_attached:** `<attached: ....vcf>`
+
+## Mensagens Especiais
+
+-   **message_deleted:** `This message was deleted`
+-   **message_edited:** Contém `<This message was edited>`
+-   **voice_call:** Registros de chamadas de voz
+-   **system_message:** Mensagens do sistema
+:::
+
+::: {.callout-note collapse="true"}
+## Implementação da Classificação
+
+```{python}
+def classify_message_type(content):
+    """
+    Classifica o tipo de mensagem baseado no conteúdo.
+    
+    Args:
+        content (str): Conteúdo da mensagem
+        
+    Returns:
+        str: Tipo da mensagem
+    """
+    import re
+    
+    content_lower = content.lower().strip()
+    
+    # 1. Mensagens deletadas/editadas
+    if 'this message was deleted' in content_lower:
+        return 'message_deleted'
+    if '<this message was edited>' in content_lower:
+        return 'message_edited'
+    
+    # 2. Chamadas
+    if 'voice call' in content_lower or 'video call' in content_lower:
+        return 'voice_call'
+    if 'missed voice call' in content_lower or 'missed video call' in content_lower:
+        return 'missed_call'
+    
+    # 3. Mensagens de sistema
+    if "this message can't be displayed" in content_lower:
+        return 'system_message'
+    
+    # 4. Mídias omitidas
+    if content_lower == 'audio omitted':
+        return 'audio_omitted'
+    if content_lower == 'image omitted':
+        return 'image_omitted'
+    if content_lower == 'video omitted':
+        return 'video_omitted'
+    if content_lower == 'video note omitted':
+        return 'video_note_omitted'
+    if content_lower == 'sticker omitted':
+        return 'sticker_omitted'
+    if content_lower == 'gif omitted':
+        return 'gif_omitted'
+    if 'document omitted' in content_lower:
+        return 'document_omitted'
+    
+    # 5. Mídias anexadas
+    if '<attached:' in content_lower:
+        if 'audio' in content_lower or '.opus' in content_lower:
+            return 'audio_attached'
+        elif 'photo' in content_lower or '.jpg' in content_lower or '.png' in content_lower:
+            return 'image_attached'
+        elif 'video' in content_lower or '.mp4' in content_lower:
+            return 'video_attached'
+        elif 'sticker' in content_lower or '.webp' in content_lower:
+            return 'sticker_attached'
+        elif '.vcf' in content_lower:
+            return 'contact_attached'
+        else:
+            return 'file_attached'
+    
+    # 6. Mensagens de texto (padrão)
+    # Verifica se contém URL
+    url_pattern = r'https?://[^\s]+'
+    if re.search(url_pattern, content):
+        return 'text_with_link'
+    
+    # Verifica se contém emoji (caracteres Unicode > 127)
+    if any(ord(char) > 127 for char in content):
+        return 'text_with_emoji'
+    
+    # Texto puro
+    return 'text_pure'
+
+
+def add_message_classification(df):
+    """
+    Adiciona coluna 'tipo_mensagem' ao DataFrame.
+    
+    Args:
+        df (pd.DataFrame): DataFrame com mensagens
+        
+    Returns:
+        pd.DataFrame: DataFrame com coluna adicional
+    """
+    print("🔄 Classificando tipos de mensagem...\n")
+    
+    df['tipo_mensagem'] = df['conteudo'].apply(classify_message_type)
+    
+    # Estatísticas
+    print("📊 Distribuição de tipos de mensagem:\n")
+    type_counts = df['tipo_mensagem'].value_counts()
+    
+    for msg_type, count in type_counts.items():
+        percentage = (count / len(df)) * 100
+        print(f"   • {msg_type:<25} {count:>6,} ({percentage:>5.2f}%)")
+    
+    print(f"\n✅ Classificação concluída!")
+    print(f"📋 Total de tipos únicos: {df['tipo_mensagem'].nunique()}")
+    
+    return df
+
+# Aplica classificação
+df_messages = add_message_classification(df_messages)
+```
+:::
+
+### Visualização da Classificação
+
+```{python}
+# Agrupa por tipo e remetente
+print("\n📊 Distribuição por tipo e remetente:")
+print("="*100)
+pd.crosstab(df_messages['tipo_mensagem'], df_messages['remetente'], margins=True)
+```
+
+```{python}
+# Exemplos de cada tipo
+print("\n🔍 Exemplos de diferentes tipos de mensagem:")
+print("="*100)
+
+for tipo in df_messages['tipo_mensagem'].unique()[:10]:  # Primeiros 10 tipos
+    exemplo = df_messages[df_messages['tipo_mensagem'] == tipo].iloc[0]
+    print(f"\n📌 {tipo}:")
+    print(f"   Remetente: {exemplo['remetente']}")
+    print(f"   Conteúdo: {exemplo['conteudo'][:100]}...")  # Primeiros 100 chars
+    print("-"*100)
+```
+
+::: callout-tip
+## ✅ Checkpoint: Mensagens Classificadas
+
+Todas as mensagens foram classificadas por tipo. Isso permite: - Filtrar apenas mensagens de texto para análise textual - Identificar mídias para transcrição - Análises segmentadas por tipo de conteúdo
+
+**Próximo passo:** - Identificar e inventariar mídias anexadas fisicamente presentes
+:::
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Etapa 3: Inventário de Mídias Anexadas
+
+Agora vamos identificar quais arquivos de mídia foram exportados junto com o chat e estão fisicamente disponíveis para processamento (transcrição de áudios/vídeos, análise de imagens, etc.).
+
+### Estratégia de Inventário
+
+1.  Filtrar mensagens com mídias anexadas (`<attached: filename>`)
+2.  Extrair nomes dos arquivos
+3.  Verificar existência física no diretório
+4.  Classificar por tipo de mídia
+5.  Preparar lista para processamento
+
+::: {.callout-note collapse="true"}
+## Implementação do Inventário
+
+```{python}
+import os
+from pathlib import Path
+
+def extract_attached_media(df, media_dir='./_sources/WhatsAppFiles/'):
+    """
+    Extrai informações sobre mídias anexadas e verifica existência física.
+    
+    Args:
+        df (pd.DataFrame): DataFrame com mensagens
+        media_dir (str): Diretório onde os arquivos de mídia estão
+        
+    Returns:
+        pd.DataFrame: DataFrame apenas com mídias anexadas + metadados
+    """
+    import re
+    
+    print("🔄 Extraindo informações de mídias anexadas...\n")
+    
+    # Filtra apenas mensagens com mídias anexadas
+    df_media = df[df['tipo_mensagem'].str.contains('_attached')].copy()
+    
+    # Extrai nome do arquivo usando regex
+    # Padrão: <attached: FILENAME.ext>
+    pattern = r'<attached:\s*(.+?)>'
+    
+    def extract_filename(content):
+        match = re.search(pattern, content)
+        return match.group(1) if match else None
+    
+    df_media['arquivo'] = df_media['conteudo'].apply(extract_filename)
+    
+    # Verifica existência física do arquivo
+    def check_file_exists(filename):
+        if not filename:
+            return False
+        file_path = Path(media_dir) / filename
+        return file_path.exists()
+    
+    df_media['arquivo_existe'] = df_media['arquivo'].apply(check_file_exists)
+    
+    # Extrai extensão do arquivo
+    df_media['extensao'] = df_media['arquivo'].apply(
+        lambda x: Path(x).suffix.lower() if x else None
+    )
+    
+    # Extrai tipo de mídia do nome do arquivo
+    # Padrão: NUMERO-TIPO-DATA-HORA.ext
+    def extract_media_type_from_filename(filename):
+        if not filename:
+            return None
+        # Ex: 00000001-PHOTO-2025-08-21-22-06-35.jpg
+        parts = filename.split('-')
+        if len(parts) >= 2:
+            return parts[1].upper()  # PHOTO, AUDIO, VIDEO, etc.
+        return None
+    
+    df_media['tipo_arquivo'] = df_media['arquivo'].apply(extract_media_type_from_filename)
+    
+    # Estatísticas
+    total_attached = len(df_media)
+    total_exist = df_media['arquivo_existe'].sum()
+    total_missing = total_attached - total_exist
+    
+    print(f"📊 Estatísticas de Mídias Anexadas:\n")
+    print(f"   • Total de mídias anexadas: {total_attached:,}")
+    print(f"   • Arquivos existentes: {total_exist:,} ({(total_exist/total_attached*100):.1f}%)")
+    print(f"   • Arquivos ausentes: {total_missing:,} ({(total_missing/total_attached*100):.1f}%)")
+    
+    print(f"\n📂 Distribuição por tipo de arquivo:")
+    if not df_media.empty:
+        type_dist = df_media['tipo_arquivo'].value_counts()
+        for tipo, count in type_dist.items():
+            exists = df_media[df_media['tipo_arquivo'] == tipo]['arquivo_existe'].sum()
+            print(f"   • {tipo:<15} {count:>5,} total | {exists:>5,} existem ({(exists/count*100):.1f}%)")
+    
+    print(f"\n📊 Distribuição por extensão:")
+    if not df_media.empty:
+        ext_dist = df_media['extensao'].value_counts()
+        for ext, count in ext_dist.items():
+            print(f"   • {ext:<10} {count:>5,}")
+    
+    print(f"\n✅ Inventário concluído!")
+    
+    return df_media
+
+# Executa inventário (ajuste media_dir para o diretório correto)
+df_media_attached = extract_attached_media(df_messages, media_dir='./')
+```
+:::
+
+### Visualização do Inventário
+
+```{python}
+# Exibe primeiras mídias
+print("\n🔍 Primeiras 10 mídias anexadas:")
+print("="*100)
+df_media_attached[['timestamp', 'remetente', 'tipo_mensagem', 'arquivo', 'arquivo_existe']].head(10)
+```
+
+```{python}
+# Análise temporal de mídias
+print("\n📅 Distribuição temporal de mídias anexadas:")
+print("="*100)
+
+df_media_attached['mes'] = df_media_attached['timestamp'].dt.to_period('M')
+temporal_dist = df_media_attached.groupby('mes').size()
+
+print(temporal_dist)
+```
+
+```{python}
+# Identifica mídias para transcrição (áudios e vídeos existentes)
+df_transcribable = df_media_attached[
+    (df_media_attached['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])) & 
+    (df_media_attached['arquivo_existe'] == True)
+].copy()
+
+print(f"\n🎙️ Mídias disponíveis para transcrição:")
+print(f"   • Total: {len(df_transcribable):,}")
+print(f"   • Áudios: {len(df_transcribable[df_transcribable['tipo_arquivo'] == 'AUDIO']):,}")
+print(f"   • Vídeos: {len(df_transcribable[df_transcribable['tipo_arquivo'] == 'VIDEO']):,}")
+```
+
+::: callout-warning
+## ⚠️ Observação sobre Arquivos Ausentes
+
+Se houver arquivos marcados como `arquivo_existe = False`, isso pode ocorrer por:
+
+1.  **Exportação parcial:** WhatsApp limita exportação de mídias (10.000 mensagens com mídia)
+2.  **Diretório incorreto:** Ajuste o parâmetro `media_dir` para o local correto
+3.  **Arquivos movidos/deletados:** Mídias foram removidas após exportação
+
+Para este projeto, vamos focar apenas nas mídias **fisicamente presentes**.
+:::
+
+::: callout-tip
+## ✅ Checkpoint: Inventário de Mídias Completo
+
+Mídias anexadas identificadas e classificadas. O DataFrame `df_media_attached` contém: - Lista de arquivos - Verificação de existência - Tipos e extensões - Preparação para transcrição
+
+**Próximo passo:** - Documentar processo de transcrição com Groq API - Preparar estrutura de merge com transcrições existentes
+:::
+
+------------------------------------------------------------------------
+
+```{python}
+def extract_attached_media_with_transcriptions(df, transcription_csv_path=None):
+    """
+    Extrai informações sobre mídias anexadas e verifica se há transcrição disponível.
+    
+    Args:
+        df (pd.DataFrame): DataFrame com mensagens
+        transcription_csv_path (str): Caminho para CSV com transcrições
+        
+    Returns:
+        pd.DataFrame: DataFrame com mídias anexadas + status de transcrição
+    """
+    import re
+    
+    print("🔄 Extraindo informações de mídias anexadas...\n")
+    
+    # Filtra apenas mensagens com mídias anexadas
+    df_media = df[df['tipo_mensagem'].str.contains('_attached')].copy()
+    
+    # Extrai nome do arquivo usando regex
+    # Padrão: <attached: FILENAME.ext>
+    pattern = r'<attached:\s*(.+?)>'
+    
+    def extract_filename(content):
+        match = re.search(pattern, content)
+        return match.group(1) if match else None
+    
+    df_media['arquivo'] = df_media['conteudo'].apply(extract_filename)
+    
+    # Carrega base de transcrições se fornecida
+    if transcription_csv_path:
+        print(f"📂 Carregando base de transcrições: {transcription_csv_path}")
+        df_transcriptions = pd.read_csv(transcription_csv_path)
+        
+        # Cria set de arquivos transcritos (para lookup rápido)
+        transcribed_files = set(df_transcriptions['file_path'].values)
+        
+        print(f"   • Total de transcrições carregadas: {len(df_transcriptions):,}\n")
+        
+        # Verifica se arquivo tem transcrição
+        df_media['tem_transcricao'] = df_media['arquivo'].apply(
+            lambda x: x in transcribed_files if x else False
+        )
+        
+        # Para arquivos transcritos, adiciona a transcrição
+        df_media['transcricao'] = df_media['arquivo'].apply(
+            lambda x: df_transcriptions[df_transcriptions['file_path'] == x]['transcription'].values[0] 
+            if x in transcribed_files else None
+        )
+        
+        # Adiciona status de transcrição
+        df_media['transcription_status'] = df_media['arquivo'].apply(
+            lambda x: df_transcriptions[df_transcriptions['file_path'] == x]['transcription_status'].values[0] 
+            if x in transcribed_files else None
+        )
+        
+        # Marca se é arquivo órfão
+        df_media['is_synthetic'] = df_media['arquivo'].apply(
+            lambda x: df_transcriptions[df_transcriptions['file_path'] == x]['is_synthetic'].values[0] 
+            if x in transcribed_files else False
+        )
+        
+    else:
+        print("⚠️ Nenhuma base de transcrições fornecida\n")
+        df_media['tem_transcricao'] = False
+        df_media['transcricao'] = None
+        df_media['transcription_status'] = None
+        df_media['is_synthetic'] = False
+    
+    # Extrai extensão do arquivo
+    df_media['extensao'] = df_media['arquivo'].apply(
+        lambda x: Path(x).suffix.lower() if x else None
+    )
+    
+    # Extrai tipo de mídia do nome do arquivo
+    def extract_media_type_from_filename(filename):
+        if not filename:
+            return None
+        # Ex: 00000001-PHOTO-2025-08-21-22-06-35.jpg
+        parts = filename.split('-')
+        if len(parts) >= 2:
+            return parts[1].upper()  # PHOTO, AUDIO, VIDEO, etc.
+        return None
+    
+    df_media['tipo_arquivo'] = df_media['arquivo'].apply(extract_media_type_from_filename)
+    
+    # Estatísticas
+    total_attached = len(df_media)
+    total_with_transcription = df_media['tem_transcricao'].sum() if 'tem_transcricao' in df_media.columns else 0
+    total_without_transcription = total_attached - total_with_transcription
+    
+    print(f"📊 Estatísticas de Mídias Anexadas:\n")
+    print(f"   • Total de mídias anexadas: {total_attached:,}")
+    print(f"   • Com transcrição: {total_with_transcription:,} ({(total_with_transcription/total_attached*100):.1f}%)")
+    print(f"   • Sem transcrição: {total_without_transcription:,} ({(total_without_transcription/total_attached*100):.1f}%)")
+    
+    print(f"\n📂 Distribuição por tipo de arquivo:")
+    if not df_media.empty:
+        type_dist = df_media['tipo_arquivo'].value_counts()
+        for tipo, count in type_dist.items():
+            with_trans = df_media[df_media['tipo_arquivo'] == tipo]['tem_transcricao'].sum()
+            print(f"   • {tipo:<15} {count:>5,} total | {with_trans:>5,} transcritos ({(with_trans/count*100):.1f}%)")
+    
+    print(f"\n📊 Distribuição por extensão:")
+    if not df_media.empty:
+        ext_dist = df_media['extensao'].value_counts()
+        for ext, count in ext_dist.items():
+            print(f"   • {ext:<10} {count:>5,}")
+    
+    # Mídias transcritíveis (áudio/vídeo)
+    transcribable = df_media[df_media['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])]
+    
+    print(f"\n🎙️ Mídias de áudio/vídeo:")
+    print(f"   • Total: {len(transcribable):,}")
+    print(f"   • Áudios: {len(transcribable[transcribable['tipo_arquivo'] == 'AUDIO']):,}")
+    print(f"   • Vídeos: {len(transcribable[transcribable['tipo_arquivo'] == 'VIDEO']):,}")
+    print(f"   • Com transcrição: {transcribable['tem_transcricao'].sum():,}")
+    print(f"   • Sem transcrição: {(~transcribable['tem_transcricao']).sum():,}")
+    
+    print(f"\n✅ Inventário concluído!")
+    
+    return df_media
+
+# Executa inventário com base de transcrições
+df_media_attached = extract_attached_media_with_transcriptions(
+    df_messages, 
+    transcription_csv_path='./output/for_transcription_complete.csv'
+)
+```
+
+```{python}
+# Visualiza primeiras mídias com transcrição
+print("\n🔍 Primeiras 10 mídias anexadas (com transcrição):")
+print("="*100)
+
+# Seleciona colunas relevantes
+colunas_display = ['timestamp', 'remetente', 'tipo_arquivo', 'arquivo', 'tem_transcricao', 'transcricao']
+
+# Filtra apenas mídias COM transcrição
+df_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+
+# Exibe primeiras 10
+df_com_transcricao[colunas_display].head(10)
+```
+
+```{python}
+# Visualiza mídias SEM transcrição
+print("\n⚠️ Mídias SEM transcrição disponível:")
+print("="*100)
+
+df_sem_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == False]
+
+print(f"Total: {len(df_sem_transcricao)}\n")
+
+# Mostra quais são
+df_sem_transcricao[['timestamp', 'remetente', 'tipo_arquivo', 'arquivo']].head(20)
+```
+
+```{python}
+# Exemplo de transcrição completa
+print("\n📝 Exemplo de mensagem com transcrição completa:")
+print("="*100)
+
+exemplo = df_com_transcricao.iloc[0]
+
+print(f"Timestamp: {exemplo['timestamp']}")
+print(f"Remetente: {exemplo['remetente']}")
+print(f"Arquivo: {exemplo['arquivo']}")
+print(f"Tipo: {exemplo['tipo_arquivo']}")
+print(f"\nTranscrição:\n{exemplo['transcricao']}")
+```
+
+```{python}
+# Estatísticas detalhadas
+print("\n📊 Resumo Completo:")
+print("="*100)
+
+print(f"\n🎯 Mídias de Áudio/Vídeo:")
+print(f"   • Total anexadas: {len(df_media_attached[df_media_attached['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])]):,}")
+print(f"   • Transcritas: {df_media_attached[df_media_attached['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])]['tem_transcricao'].sum():,}")
+print(f"   • Taxa de cobertura: {(df_media_attached[df_media_attached['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])]['tem_transcricao'].sum() / len(df_media_attached[df_media_attached['tipo_arquivo'].isin(['AUDIO', 'VIDEO'])]) * 100):.1f}%")
+
+print(f"\n📸 Outras Mídias:")
+print(f"   • Fotos: {len(df_media_attached[df_media_attached['tipo_arquivo'] == 'PHOTO']):,}")
+print(f"   • Stickers: {len(df_media_attached[df_media_attached['tipo_arquivo'] == 'STICKER']):,}")
+print(f"   • Contatos: {len(df_media_attached[df_media_attached['extensao'] == '.vcf']):,}")
+print(f"   • Documentos: {len(df_media_attached[df_media_attached['extensao'] == '.pdf']):,}")
+```
+
+------------------------------------------------------------------------
+
+## Etapa 4: Enriquecimento com Transcrições
+
+Agora vamos integrar as transcrições de áudio/vídeo ao DataFrame principal, criando uma base de dados completa e enriquecida.
+
+### Estratégia de Integração
+
+**Para mensagens de mídia anexada (áudio/vídeo):** - Se **tem transcrição** → substitui conteúdo por `[ÁUDIO TRANSCRITO] {transcrição}` - Se **não tem transcrição** → mantém `<attached: filename>`
+
+**Para outras mensagens:** - Mantém conteúdo original (texto, imagens, stickers, etc.)
+
+**Resultado final:** - DataFrame unificado ordenado por timestamp - TXT exportado com todo conteúdo enriquecido
+
+::: {.callout-note collapse="true"}
+## Implementação do Enriquecimento
+
+```{python}
+def enrich_with_transcriptions(df_messages, df_media_attached):
+    """
+    Enriquece DataFrame principal com transcrições de áudio/vídeo.
+    
+    Args:
+        df_messages: DataFrame principal com todas as mensagens
+        df_media_attached: DataFrame com mídias e transcrições
+        
+    Returns:
+        pd.DataFrame: DataFrame enriquecido
+    """
+    print("🔄 Enriquecendo DataFrame com transcrições...\n")
+    
+    # Cria cópia para não modificar original
+    df_enriched = df_messages.copy()
+    
+    # Cria coluna para conteúdo enriquecido
+    df_enriched['conteudo_enriquecido'] = df_enriched['conteudo']
+    df_enriched['tem_transcricao'] = False
+    df_enriched['is_synthetic'] = False
+    
+    # Para cada mídia com transcrição, atualiza o DataFrame principal
+    midias_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+    
+    total_enriched = 0
+    
+    for idx, media_row in midias_com_transcricao.iterrows():
+        # Encontra a mensagem correspondente no DataFrame principal
+        # Busca por timestamp e arquivo
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        matching_rows = df_enriched[mask]
+        
+        if len(matching_rows) > 0:
+            # Atualiza conteúdo com transcrição
+            tipo = media_row['tipo_arquivo']
+            transcricao = media_row['transcricao']
+            arquivo = media_row['arquivo']
+            is_synthetic = media_row['is_synthetic']
+            
+            # Formato do conteúdo enriquecido
+            if is_synthetic:
+                novo_conteudo = f"[{tipo} TRANSCRITO - ÓRFÃO] {transcricao}\n[Arquivo: {arquivo}]"
+            else:
+                novo_conteudo = f"[{tipo} TRANSCRITO] {transcricao}\n[Arquivo: {arquivo}]"
+            
+            # Atualiza no DataFrame
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = novo_conteudo
+            df_enriched.loc[mask, 'tem_transcricao'] = True
+            df_enriched.loc[mask, 'is_synthetic'] = is_synthetic
+            
+            total_enriched += 1
+    
+    # Estatísticas
+    total_messages = len(df_enriched)
+    total_with_transcription = df_enriched['tem_transcricao'].sum()
+    pct_enriched = (total_with_transcription / total_messages * 100)
+    
+    print(f"✅ Enriquecimento concluído!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Mensagens enriquecidas: {total_with_transcription:,} ({pct_enriched:.2f}%)")
+    print(f"   • Mensagens órfãs incluídas: {df_enriched['is_synthetic'].sum():,}")
+    
+    # Distribução por tipo
+    print(f"\n📂 Mensagens enriquecidas por tipo:")
+    enriched_by_type = df_enriched[df_enriched['tem_transcricao'] == True]['tipo_mensagem'].value_counts()
+    for tipo, count in enriched_by_type.items():
+        print(f"   • {tipo}: {count:,}")
+    
+    return df_enriched
+
+# Executa enriquecimento
+df_final = enrich_with_transcriptions(df_messages, df_media_attached)
+```
+:::
+
+### Visualização do DataFrame Enriquecido
+
+```{python}
+# Compara conteúdo original vs enriquecido
+print("\n🔍 Exemplos de mensagens enriquecidas:")
+print("="*100)
+
+# Filtra mensagens enriquecidas
+df_enriquecidas = df_final[df_final['tem_transcricao'] == True]
+
+# Mostra 5 exemplos
+for idx in df_enriquecidas.head(5).index:
+    row = df_final.loc[idx]
+    print(f"\n📅 {row['timestamp']} | {row['remetente']} | {row['tipo_mensagem']}")
+    print(f"Original: {row['conteudo'][:80]}...")
+    print(f"Enriquecido: {row['conteudo_enriquecido'][:200]}...")
+    print("-"*100)
+```
+
+```{python}
+# Estatísticas finais
+print("\n📊 Composição Final do Dataset:")
+print("="*100)
+
+print(f"\n📝 Mensagens de Texto:")
+text_types = ['text_pure', 'text_with_emoji', 'text_with_link']
+total_text = df_final[df_final['tipo_mensagem'].isin(text_types)].shape[0]
+print(f"   • Total: {total_text:,}")
+
+print(f"\n🎙️ Mídias de Áudio/Vídeo:")
+media_av = df_final[df_final['tipo_mensagem'].str.contains('audio|video')].shape[0]
+media_av_transcribed = df_final[
+    (df_final['tipo_mensagem'].str.contains('audio|video')) & 
+    (df_final['tem_transcricao'] == True)
+].shape[0]
+print(f"   • Total: {media_av:,}")
+print(f"   • Transcritas: {media_av_transcribed:,} ({(media_av_transcribed/media_av*100):.1f}%)")
+
+print(f"\n📸 Outras Mídias:")
+other_media = df_final[df_final['tipo_mensagem'].str.contains('image|sticker|document|contact|gif')].shape[0]
+print(f"   • Total: {other_media:,}")
+
+print(f"\n⚙️ Mensagens Especiais:")
+special = df_final[df_final['tipo_mensagem'].str.contains('deleted|edited|call|system')].shape[0]
+print(f"   • Total: {special:,}")
+```
+
+::: callout-tip
+## ✅ Checkpoint: DataFrame Enriquecido
+
+O DataFrame final está pronto com: - ✅ Todas as mensagens originais preservadas - ✅ Áudios/vídeos enriquecidos com transcrições - ✅ Arquivos órfãos identificados - ✅ Ordem cronológica mantida
+
+**Próximos passos:** - Exportar para CSV - Exportar para TXT enriquecido
+:::
+
+------------------------------------------------------------------------
+
+```{python}
+def enrich_with_transcriptions(df_messages, df_media_attached):
+    """
+    Enriquece DataFrame principal com transcrições de áudio/vídeo.
+    """
+    print("🔄 Enriquecendo DataFrame com transcrições...\n")
+    
+    df_enriched = df_messages.copy()
+    
+    # Novas colunas
+    df_enriched['conteudo_enriquecido'] = df_enriched['conteudo']
+    df_enriched['arquivo_midia'] = None  # ← NOVA COLUNA
+    df_enriched['tem_transcricao'] = False
+    df_enriched['is_synthetic'] = False
+    
+    midias_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+    
+    total_enriched = 0
+    
+    for idx, media_row in midias_com_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        matching_rows = df_enriched[mask]
+        
+        if len(matching_rows) > 0:
+            transcricao = media_row['transcricao']
+            arquivo = media_row['arquivo']
+            is_synthetic = media_row['is_synthetic']
+            
+            # ATUALIZA APENAS A TRANSCRIÇÃO (sem tags)
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = transcricao
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo  # ← SALVA O ARQUIVO
+            df_enriched.loc[mask, 'tem_transcricao'] = True
+            df_enriched.loc[mask, 'is_synthetic'] = is_synthetic
+            
+            total_enriched += 1
+    
+    # Estatísticas (igual antes)
+    total_messages = len(df_enriched)
+    total_with_transcription = df_enriched['tem_transcricao'].sum()
+    pct_enriched = (total_with_transcription / total_messages * 100)
+    
+    print(f"✅ Enriquecimento concluído!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Mensagens enriquecidas: {total_with_transcription:,} ({pct_enriched:.2f}%)")
+    print(f"   • Mensagens órfãs incluídas: {df_enriched['is_synthetic'].sum():,}")
+    
+    print(f"\n📂 Mensagens enriquecidas por tipo:")
+    enriched_by_type = df_enriched[df_enriched['tem_transcricao'] == True]['tipo_mensagem'].value_counts()
+    for tipo, count in enriched_by_type.items():
+        print(f"   • {tipo}: {count:,}")
+    
+    return df_enriched
+
+# Re-executa com correção
+df_final = enrich_with_transcriptions(df_messages, df_media_attached)
+```
+
+```{python}
+
+def enrich_with_transcriptions(df_messages, df_media_attached):
+    """
+    Enriquece DataFrame principal com transcrições e identifica todas as mídias.
+    """
+    print("🔄 Enriquecendo DataFrame com transcrições...\n")
+    
+    df_enriched = df_messages.copy()
+    
+    # Novas colunas
+    df_enriched['conteudo_enriquecido'] = df_enriched['conteudo']
+    df_enriched['arquivo_midia'] = None
+    df_enriched['tem_transcricao'] = False
+    df_enriched['is_synthetic'] = False
+    
+    # 1. ENRIQUECE MÍDIAS COM TRANSCRIÇÃO
+    midias_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+    
+    total_enriched = 0
+    
+    for idx, media_row in midias_com_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            transcricao = media_row['transcricao']
+            arquivo = media_row['arquivo']
+            is_synthetic = media_row['is_synthetic']
+            
+            # Atualiza com transcrição
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = transcricao
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            df_enriched.loc[mask, 'tem_transcricao'] = True
+            df_enriched.loc[mask, 'is_synthetic'] = is_synthetic
+            
+            total_enriched += 1
+    
+    # 2. PROCESSA MÍDIAS SEM TRANSCRIÇÃO (fotos, stickers, contatos, etc.)
+    midias_sem_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == False]
+    
+    total_tagged = 0
+    
+    for idx, media_row in midias_sem_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            arquivo = media_row['arquivo']
+            extensao = media_row['extensao']
+            
+            # Determina tag baseada na extensão
+            if extensao in ['.jpg', '.jpeg', '.png', '.webp']:
+                tag = '--IMG'
+            elif extensao == '.vcf':
+                tag = '--CONTACT'
+            elif extensao == '.pdf':
+                tag = '--DOC'
+            elif extensao == '.opus':
+                tag = '--AUDIO'
+            elif extensao == '.mp4':
+                tag = '--VID'
+            else:
+                tag = '---FILE'
+            
+            # Atualiza com tag
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = tag
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            
+            total_tagged += 1
+    
+    # Estatísticas
+    total_messages = len(df_enriched)
+    total_with_transcription = df_enriched['tem_transcricao'].sum()
+    total_with_media = df_enriched['arquivo_midia'].notna().sum()
+    pct_enriched = (total_with_transcription / total_messages * 100)
+    pct_with_media = (total_with_media / total_messages * 100)
+    
+    print(f"✅ Enriquecimento concluído!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Com arquivo de mídia: {total_with_media:,} ({pct_with_media:.2f}%)")
+    print(f"   • Com transcrição: {total_with_transcription:,} ({pct_enriched:.2f}%)")
+    print(f"   • Com tag (sem transcrição): {total_tagged:,}")
+    print(f"   • Mensagens órfãs incluídas: {df_enriched['is_synthetic'].sum():,}")
+    
+    print(f"\n📂 Mensagens enriquecidas por tipo:")
+    enriched_by_type = df_enriched[df_enriched['tem_transcricao'] == True]['tipo_mensagem'].value_counts()
+    for tipo, count in enriched_by_type.items():
+        print(f"   • {tipo}: {count:,}")
+    
+    return df_enriched
+
+# Re-executa
+df_final = enrich_with_transcriptions(df_messages, df_media_attached)
+```
+
+```{python}
+def enrich_with_transcriptions(df_messages, df_media_attached):
+    """
+    Enriquece DataFrame principal com transcrições e identifica todas as mídias.
+    """
+    print("🔄 Enriquecendo DataFrame com transcrições...\n")
+    
+    df_enriched = df_messages.copy()
+    
+    # Novas colunas
+    df_enriched['conteudo_enriquecido'] = df_enriched['conteudo']
+    df_enriched['arquivo_midia'] = None
+    df_enriched['tem_transcricao'] = False
+    df_enriched['is_synthetic'] = False
+    
+    # 1. ENRIQUECE MÍDIAS COM TRANSCRIÇÃO (áudios/vídeos anexados)
+    midias_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+    
+    total_enriched = 0
+    
+    for idx, media_row in midias_com_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            transcricao = media_row['transcricao']
+            arquivo = media_row['arquivo']
+            is_synthetic = media_row['is_synthetic']
+            
+            # Atualiza com transcrição
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = transcricao
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            df_enriched.loc[mask, 'tem_transcricao'] = True
+            df_enriched.loc[mask, 'is_synthetic'] = is_synthetic
+            
+            total_enriched += 1
+    
+    # 2. PROCESSA MÍDIAS ANEXADAS SEM TRANSCRIÇÃO (fotos, stickers, contatos, etc.)
+    midias_sem_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == False]
+    
+    total_tagged_attached = 0
+    
+    for idx, media_row in midias_sem_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            arquivo = media_row['arquivo']
+            extensao = media_row['extensao']
+            
+            # Determina tag baseada na extensão
+            if extensao in ['.jpg', '.jpeg', '.png']:
+                tag = '[#PHOTO#]'
+            elif extensao == '.webp':
+                tag = '[#STICKER#]'
+            elif extensao == '.vcf':
+                tag = '--CONTACT'
+            elif extensao == '.pdf':
+                tag = '--DOC'
+            elif extensao == '.opus':
+                tag = '--AUDIO'
+            elif extensao == '.mp4':
+                tag = '--VID'
+            else:
+                tag = '---FILE'
+            
+            # Atualiza com tag
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = tag
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            
+            total_tagged_attached += 1
+    
+    # 3. PROCESSA MÍDIAS OMITIDAS (audio omitted, image omitted, etc.)
+    omitted_types = {
+        'audio_omitted': '--AUDIO',
+        'image_omitted': '--IMG',
+        'video_omitted': '--VID',
+        'video_note_omitted': '--VID_NOTE',
+        'sticker_omitted': '--STCKR',
+        'gif_omitted': '--GIF',
+        'document_omitted': '--DOC'
+    }
+    
+    total_tagged_omitted = 0
+    
+    for tipo_msg, tag in omitted_types.items():
+        mask = df_enriched['tipo_mensagem'] == tipo_msg
+        
+        if mask.sum() > 0:
+            # Pega o conteúdo original (ex: "audio omitted")
+            df_enriched.loc[mask, 'arquivo_midia'] = df_enriched.loc[mask, 'conteudo']
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = tag
+            
+            total_tagged_omitted += mask.sum()
+    
+    # Estatísticas
+    total_messages = len(df_enriched)
+    total_with_transcription = df_enriched['tem_transcricao'].sum()
+    total_with_media = df_enriched['arquivo_midia'].notna().sum()
+    pct_enriched = (total_with_transcription / total_messages * 100)
+    pct_with_media = (total_with_media / total_messages * 100)
+    
+    print(f"✅ Enriquecimento concluído!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Com arquivo de mídia: {total_with_media:,} ({pct_with_media:.2f}%)")
+    print(f"   • Com transcrição: {total_with_transcription:,} ({pct_enriched:.2f}%)")
+    print(f"   • Mídias anexadas (sem transcrição): {total_tagged_attached:,}")
+    print(f"   • Mídias omitidas: {total_tagged_omitted:,}")
+    print(f"   • Mensagens órfãs incluídas: {df_enriched['is_synthetic'].sum():,}")
+    
+    print(f"\n📂 Distribuição de tags no conteúdo enriquecido:")
+    tags = df_enriched[df_enriched['conteudo_enriquecido'].str.contains(r'\[#.*#\]', regex=True, na=False)]['conteudo_enriquecido'].value_counts()
+    for tag, count in tags.items():
+        print(f"   • {tag}: {count:,}")
+    
+    return df_enriched
+
+# Re-executa
+df_final = enrich_with_transcriptions(df_messages, df_media_attached)
+```
+
+```{python}
+def enrich_with_transcriptions(df_messages, df_media_attached):
+    """
+    Enriquece DataFrame principal com transcrições e identifica todas as mídias.
+    Usa padrão unificado de tags: --TIPO
+    """
+    print("🔄 Enriquecendo DataFrame com transcrições...\n")
+    
+    df_enriched = df_messages.copy()
+    
+    # Novas colunas
+    df_enriched['conteudo_enriquecido'] = df_enriched['conteudo']
+    df_enriched['arquivo_midia'] = None
+    df_enriched['tem_transcricao'] = False
+    df_enriched['is_synthetic'] = False
+    
+    # 1. ENRIQUECE MÍDIAS COM TRANSCRIÇÃO (áudios/vídeos anexados)
+    midias_com_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == True]
+    
+    total_enriched = 0
+    
+    for idx, media_row in midias_com_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            transcricao = media_row['transcricao']
+            arquivo = media_row['arquivo']
+            is_synthetic = media_row['is_synthetic']
+            
+            # Atualiza com transcrição
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = transcricao
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            df_enriched.loc[mask, 'tem_transcricao'] = True
+            df_enriched.loc[mask, 'is_synthetic'] = is_synthetic
+            
+            total_enriched += 1
+    
+    # 2. PROCESSA MÍDIAS ANEXADAS SEM TRANSCRIÇÃO
+    midias_sem_transcricao = df_media_attached[df_media_attached['tem_transcricao'] == False]
+    
+    total_tagged_attached = 0
+    
+    for idx, media_row in midias_sem_transcricao.iterrows():
+        mask = (
+            (df_enriched['timestamp'] == media_row['timestamp']) & 
+            (df_enriched['conteudo'].str.contains(media_row['arquivo'], regex=False, na=False))
+        )
+        
+        if len(df_enriched[mask]) > 0:
+            arquivo = media_row['arquivo']
+            extensao = media_row['extensao']
+            
+            # Determina tag baseada na extensão (PADRÃO UNIFICADO)
+            if extensao in ['.jpg', '.jpeg', '.png', '.webp']:
+                tag = '--IMG'
+            elif extensao == '.vcf':
+                tag = '--CONTACT'
+            elif extensao == '.pdf':
+                tag = '--DOC'
+            elif extensao == '.opus':
+                tag = '--AUDIO'
+            elif extensao == '.mp4':
+                tag = '--VID'
+            else:
+                tag = '--FILE'
+            
+            # Atualiza com tag
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = tag
+            df_enriched.loc[mask, 'arquivo_midia'] = arquivo
+            
+            total_tagged_attached += 1
+    
+    # 3. PROCESSA MÍDIAS OMITIDAS (PADRÃO UNIFICADO)
+    omitted_types = {
+        'audio_omitted': '--AUDIO',
+        'image_omitted': '--IMG',
+        'video_omitted': '--VID',
+        'video_note_omitted': '--VID_NOTE',
+        'sticker_omitted': '--STCKR',
+        'gif_omitted': '--GIF',
+        'document_omitted': '--DOC'
+    }
+    
+    total_tagged_omitted = 0
+    
+    for tipo_msg, tag in omitted_types.items():
+        mask = df_enriched['tipo_mensagem'] == tipo_msg
+        
+        if mask.sum() > 0:
+            # Pega o conteúdo original (ex: "audio omitted")
+            df_enriched.loc[mask, 'arquivo_midia'] = df_enriched.loc[mask, 'conteudo']
+            df_enriched.loc[mask, 'conteudo_enriquecido'] = tag
+            
+            total_tagged_omitted += mask.sum()
+    
+    # Estatísticas
+    total_messages = len(df_enriched)
+    total_with_transcription = df_enriched['tem_transcricao'].sum()
+    total_with_media = df_enriched['arquivo_midia'].notna().sum()
+    pct_enriched = (total_with_transcription / total_messages * 100)
+    pct_with_media = (total_with_media / total_messages * 100)
+    
+    print(f"✅ Enriquecimento concluído!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de mensagens: {total_messages:,}")
+    print(f"   • Com arquivo de mídia: {total_with_media:,} ({pct_with_media:.2f}%)")
+    print(f"   • Com transcrição: {total_with_transcription:,} ({pct_enriched:.2f}%)")
+    print(f"   • Mídias anexadas (sem transcrição): {total_tagged_attached:,}")
+    print(f"   • Mídias omitidas: {total_tagged_omitted:,}")
+    print(f"   • Mensagens órfãs incluídas: {df_enriched['is_synthetic'].sum():,}")
+    
+    print(f"\n📂 Distribuição de tags no conteúdo enriquecido:")
+    # Procura por padrão --TIPO
+    tags = df_enriched[df_enriched['conteudo_enriquecido'].str.startswith('--', na=False)]['conteudo_enriquecido'].value_counts()
+    for tag, count in tags.items():
+        print(f"   • {tag}: {count:,}")
+    
+    return df_enriched
+
+# Re-executa com padrão unificado
+df_final = enrich_with_transcriptions(df_messages, df_media_attached)
+```
+
+------------------------------------------------------------------------
+
+Isso mesmo! Só copiar e rodar! 🚀
+
+Aqui estão as duas funções de exportação:
+
+## 📁 Exportação TXT e CSV
+
+```{python}
+def export_to_txt(df, output_path='final_data.txt'):
+    """
+    Exporta DataFrame enriquecido para formato TXT otimizado.
+    
+    Args:
+        df: DataFrame enriquecido
+        output_path: Caminho do arquivo de saída
+    """
+    print(f"🔄 Exportando para TXT: {output_path}\n")
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for idx, row in df.iterrows():
+            # Formata timestamp
+            data = row['timestamp'].strftime('%d/%m/%y')
+            hora = row['timestamp'].strftime('%H:%M:%S')
+            
+            # Monta linha no formato: DD/MM/YY HH:MM:SS Remetente: Conteúdo
+            linha = f"{data} {hora} {row['remetente']}: {row['conteudo_enriquecido']}\n"
+            
+            f.write(linha)
+    
+    # Calcula tamanho do arquivo
+    import os
+    file_size = os.path.getsize(output_path)
+    file_size_mb = file_size / (1024 * 1024)
+    
+    print(f"✅ Arquivo TXT exportado com sucesso!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de linhas: {len(df):,}")
+    print(f"   • Tamanho do arquivo: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+    print(f"   • Localização: {output_path}")
+    
+    return output_path
+
+# Exporta para TXT
+txt_path = export_to_txt(df_final, output_path='final_data.txt')
+```
+
+```{python}
+def export_to_csv(df, output_path='final_dataframe.csv'):
+    """
+    Exporta DataFrame enriquecido para CSV.
+    
+    Args:
+        df: DataFrame enriquecido
+        output_path: Caminho do arquivo de saída
+    """
+    print(f"🔄 Exportando para CSV: {output_path}\n")
+    
+    # Seleciona colunas para exportação
+    colunas_export = [
+        'linha_original',
+        'timestamp',
+        'data',
+        'hora',
+        'remetente',
+        'tipo_mensagem',
+        'conteudo',
+        'conteudo_enriquecido',
+        'arquivo_midia',
+        'tem_transcricao',
+        'is_synthetic'
+    ]
+    
+    # Exporta
+    df[colunas_export].to_csv(output_path, index=False, encoding='utf-8')
+    
+    # Calcula tamanho
+    import os
+    file_size = os.path.getsize(output_path)
+    file_size_mb = file_size / (1024 * 1024)
+    
+    print(f"✅ Arquivo CSV exportado com sucesso!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Total de linhas: {len(df):,}")
+    print(f"   • Total de colunas: {len(colunas_export)}")
+    print(f"   • Tamanho do arquivo: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+    print(f"   • Localização: {output_path}")
+    
+    return output_path
+
+# Exporta para CSV
+csv_path = export_to_csv(df_final, output_path='final_dataframe.csv')
+```
+
+Só rodar esses dois blocos e pronto! Vai gerar os dois arquivos finais! 🎉
+
+```{python}
+# 1. Informações gerais do DataFrame
+print("📊 Informações do DataFrame Final:")
+print("="*100)
+df_final.info()
+```
+
+```{python}
+def create_final_dataframe(df):
+    """
+    Cria DataFrame final otimizado com colunas selecionadas e reordenadas.
+    """
+    print("🔄 Criando DataFrame final otimizado...\n")
+    
+    # Seleciona e reordena colunas
+    df_final_clean = df[[
+        'timestamp',
+        'remetente',
+        'tipo_mensagem',
+        'conteudo_enriquecido',  # Renomear para 'conteudo'
+        'tem_transcricao',        # Renomear para 'transcribed'
+        'arquivo_midia',
+        'linha_original',
+        'data',
+        'hora'
+    ]].copy()
+    
+    # Renomeia colunas
+    df_final_clean.rename(columns={
+        'conteudo_enriquecido': 'conteudo',
+        'tem_transcricao': 'transcribed'
+    }, inplace=True)
+    
+    # Estatísticas
+    print(f"✅ DataFrame final criado!\n")
+    print(f"📊 Estrutura:")
+    print(f"   • Total de linhas: {len(df_final_clean):,}")
+    print(f"   • Total de colunas: {len(df_final_clean.columns)}")
+    print(f"\n📋 Colunas (em ordem):")
+    for i, col in enumerate(df_final_clean.columns, 1):
+        non_null = df_final_clean[col].notna().sum()
+        print(f"   {i}. {col:<20} ({non_null:,} non-null)")
+    
+    return df_final_clean
+
+# Cria DataFrame final otimizado
+df_export = create_final_dataframe(df_final)
+```
+
+```{python}
+# Info completo
+print("\n📊 Informações completas:")
+print("="*100)
+df_export.info()
+```
+
+```{python}
+# 1. EXPORTA CSV FINAL (otimizado)
+df_export.to_csv('final_dataframe.csv', index=False, encoding='utf-8')
+
+import os
+file_size = os.path.getsize('final_dataframe.csv')
+file_size_mb = file_size / (1024 * 1024)
+
+print(f"✅ CSV exportado com sucesso!\n")
+print(f"📊 final_dataframe.csv:")
+print(f"   • Linhas: {len(df_export):,}")
+print(f"   • Colunas: {len(df_export.columns)}")
+print(f"   • Tamanho: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+```
+
+```{python}
+# 2. EXPORTA TXT FINAL (enriquecido)
+# Usa o conteúdo do df_export
+
+with open('final_data.txt', 'w', encoding='utf-8') as f:
+    for idx, row in df_export.iterrows():
+        # Formato: DD/MM/YY HH:MM:SS Remetente: Conteúdo
+        data = row['timestamp'].strftime('%d/%m/%y')
+        hora = row['timestamp'].strftime('%H:%M:%S')
+        
+        linha = f"{data} {hora} {row['remetente']}: {row['conteudo']}\n"
+        f.write(linha)
+
+# Calcula tamanho
+file_size_txt = os.path.getsize('final_data.txt')
+file_size_txt_mb = file_size_txt / (1024 * 1024)
+
+print(f"\n✅ TXT exportado com sucesso!\n")
+print(f"📄 final_data.txt:")
+print(f"   • Linhas: {len(df_export):,}")
+print(f"   • Tamanho: {file_size_txt_mb:.2f} MB ({file_size_txt:,} bytes)")
+```
+
+------------------------------------------------------------------------
+
+# muito bom!!!! conseguimos chegar no resultado que queriamos: o arquivo completo em termos de dados mas limpo o suficiente! FODA!
+
+Agora vamos começar a trabalhar a partir disso, e depois documentamos aqui.
+
+A ideia agora seria avaliar a base df_export e começar a enriquecer com variaveis. Por outro lado, o arquivo de texto, a partir dessa ultima exportação, podemos pensar ele em 3 cenários. o atual possibilita fazer analises temporais, digamos assim. (ou isso não faz sentido, uma vez que temos os dados tabulados na base de dados???). De qualquer forma, tem essa versão com o timestamp, mas para outras analises, sei lá, como de nuvem de palavras, se for usar o arquivo txt precisaria estar mais limpo.. tipo, qual a vantagem em tirar o timestamp do doc de texto, ter uma versão disso, para que tipo de analise? no caso só manter o remetente e a mensagem.
+
+Penso nisso para já criarmos as bases minimas de dados até o limite, tipo não precisar criar um novo outro arquivo daqui a pouco novamente, sabe? Ter os dados já disponiveis digamos assim.
+
+```{python}
+def create_all_corpus_files(df):
+    """
+    Cria 4 versões de corpus para diferentes tipos de análise.
+    
+    Arquivos gerados:
+    1. final_data.txt - Completo com tags (já existe)
+    2. final_data_text_only.txt - Timestamp + Remetente, SEM tags de mídia
+    3. corpus_full.txt - Apenas texto puro (sem timestamp, remetente, tags)
+    4. corpus_P1.txt / corpus_P2.txt - Texto separado por remetente
+    """
+    import os
+    
+    print("🔄 Criando arquivos de corpus...\n")
+    
+    # Filtra apenas mensagens de TEXTO (remove tags de mídia)
+    # Tags começam com '--'
+    df_text_only = df[~df['conteudo'].str.startswith('--', na=False)].copy()
+    
+    total_original = len(df)
+    total_text_only = len(df_text_only)
+    removed = total_original - total_text_only
+    
+    print(f"📊 Filtragem de tags de mídia:")
+    print(f"   • Total de mensagens: {total_original:,}")
+    print(f"   • Mensagens de texto: {total_text_only:,}")
+    print(f"   • Tags removidas: {removed:,} ({(removed/total_original*100):.1f}%)\n")
+    
+    # ========================================
+    # 2. final_data_text_only.txt
+    # ========================================
+    print("📝 Criando: final_data_text_only.txt")
+    
+    with open('final_data_text_only.txt', 'w', encoding='utf-8') as f:
+        for idx, row in df_text_only.iterrows():
+            data = row['timestamp'].strftime('%d/%m/%y')
+            hora = row['timestamp'].strftime('%H:%M:%S')
+            linha = f"{data} {hora} {row['remetente']}: {row['conteudo']}\n"
+            f.write(linha)
+    
+    size_text_only = os.path.getsize('final_data_text_only.txt')
+    print(f"   ✅ {total_text_only:,} linhas | {size_text_only/1024/1024:.2f} MB\n")
+    
+    # ========================================
+    # 3. corpus_full.txt (texto puro)
+    # ========================================
+    print("📝 Criando: corpus_full.txt")
+    
+    with open('corpus_full.txt', 'w', encoding='utf-8') as f:
+        for conteudo in df_text_only['conteudo']:
+            f.write(f"{conteudo}\n")
+    
+    size_corpus_full = os.path.getsize('corpus_full.txt')
+    print(f"   ✅ {total_text_only:,} linhas | {size_corpus_full/1024/1024:.2f} MB\n")
+    
+    # ========================================
+    # 4. corpus_P1.txt / corpus_P2.txt
+    # ========================================
+    remetentes = df_text_only['remetente'].unique()
+    
+    for remetente in remetentes:
+        filename = f'corpus_{remetente}.txt'
+        print(f"📝 Criando: {filename}")
+        
+        df_remetente = df_text_only[df_text_only['remetente'] == remetente]
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            for conteudo in df_remetente['conteudo']:
+                f.write(f"{conteudo}\n")
+        
+        size_remetente = os.path.getsize(filename)
+        print(f"   ✅ {len(df_remetente):,} linhas | {size_remetente/1024/1024:.2f} MB\n")
+    
+    # ========================================
+    # Resumo Final
+    # ========================================
+    print("="*80)
+    print("✅ TODOS OS ARQUIVOS DE CORPUS CRIADOS COM SUCESSO!")
+    print("="*80)
+    print("\n📁 Arquivos disponíveis:\n")
+    
+    arquivos = [
+        ('final_data.txt', 'Completo com tags (timestamp + remetente + conteúdo)'),
+        ('final_data_text_only.txt', 'Texto com timestamp (SEM tags de mídia)'),
+        ('corpus_full.txt', 'Texto puro (sem timestamp, sem remetente, sem tags)'),
+    ]
+    
+    for remetente in remetentes:
+        arquivos.append((f'corpus_{remetente}.txt', f'Texto apenas de {remetente}'))
+    
+    for arquivo, descricao in arquivos:
+        if os.path.exists(arquivo):
+            size = os.path.getsize(arquivo)
+            print(f"   • {arquivo:<30} {size/1024/1024:>6.2f} MB  - {descricao}")
+    
+    print("\n" + "="*80)
+    
+    return df_text_only
+
+# Executa criação de todos os corpus
+df_text_only = create_all_corpus_files(df_export)
+```
+
+```{python}
+def restructure_dataframe(df):
+    """
+    Reestrutura DataFrame com colunas mais lógicas:
+    - tipo_midia: categoria principal (text, audio, video, image, etc.)
+    - status_midia: estado da mídia (omitted, attached, transcribed, -)
+    - arquivo_midia: referência ao arquivo (mantém)
+    """
+    print("🔄 Reestruturando DataFrame...\n")
+    
+    df_restructured = df.copy()
+    
+    # Cria novas colunas
+    df_restructured['tipo_midia'] = None
+    df_restructured['status_midia'] = None
+    
+    # Mapeia tipo_mensagem → tipo_midia + status_midia
+    def classify_media(row):
+        tipo_msg = row['tipo_mensagem']
+        transcribed = row['transcribed']
+        
+        # TEXTO
+        if tipo_msg in ['text_pure', 'text_with_emoji', 'text_with_link']:
+            return 'text', '-'
+        
+        # ÁUDIO
+        elif 'audio' in tipo_msg:
+            if transcribed:
+                return 'audio', 'transcribed'
+            elif 'omitted' in tipo_msg:
+                return 'audio', 'omitted'
+            elif 'attached' in tipo_msg:
+                return 'audio', 'attached'
+        
+        # VÍDEO
+        elif 'video' in tipo_msg:
+            if transcribed:
+                return 'video', 'transcribed'
+            elif 'omitted' in tipo_msg:
+                return 'video', 'omitted'
+            elif 'attached' in tipo_msg:
+                return 'video', 'attached'
+        
+        # VIDEO NOTE (caso especial)
+        elif 'video_note' in tipo_msg:
+            return 'video_note', 'omitted'
+        
+        # IMAGEM
+        elif 'image' in tipo_msg:
+            if 'omitted' in tipo_msg:
+                return 'image', 'omitted'
+            elif 'attached' in tipo_msg:
+                return 'image', 'attached'
+        
+        # STICKER
+        elif 'sticker' in tipo_msg:
+            if 'omitted' in tipo_msg:
+                return 'sticker', 'omitted'
+            elif 'attached' in tipo_msg:
+                return 'sticker', 'attached'
+        
+        # GIF
+        elif 'gif' in tipo_msg:
+            return 'gif', 'omitted'
+        
+        # DOCUMENTO
+        elif 'document' in tipo_msg:
+            return 'document', 'omitted'
+        
+        # CONTATO
+        elif 'contact' in tipo_msg:
+            return 'contact', 'attached'
+        
+        # ARQUIVO GENÉRICO
+        elif 'file' in tipo_msg:
+            return 'file', 'attached'
+        
+        # MENSAGENS ESPECIAIS
+        elif tipo_msg == 'message_deleted':
+            return 'system', 'deleted'
+        elif tipo_msg == 'message_edited':
+            return 'text', 'edited'
+        elif tipo_msg in ['voice_call', 'missed_call']:
+            return 'call', 'system'
+        elif tipo_msg == 'system_message':
+            return 'system', 'message'
+        
+        # Fallback
+        return 'unknown', 'unknown'
+    
+    # Aplica classificação
+    df_restructured[['tipo_midia', 'status_midia']] = df_restructured.apply(
+        classify_media, axis=1, result_type='expand'
+    )
+    
+    # Reordena colunas para melhor visualização
+    colunas_finais = [
+        'timestamp',
+        'remetente',
+        'tipo_midia',
+        'status_midia',
+        'conteudo',
+        'transcribed',
+        'arquivo_midia',
+        'linha_original',
+        'data',
+        'hora'
+    ]
+    
+    df_restructured = df_restructured[colunas_finais]
+    
+    # Estatísticas
+    print(f"✅ Reestruturação concluída!\n")
+    print(f"📊 Distribuição por tipo de mídia:")
+    tipo_counts = df_restructured['tipo_midia'].value_counts()
+    for tipo, count in tipo_counts.items():
+        pct = (count / len(df_restructured) * 100)
+        print(f"   • {tipo:<15} {count:>6,} ({pct:>5.1f}%)")
+    
+    print(f"\n📊 Distribuição por status de mídia:")
+    status_counts = df_restructured['status_midia'].value_counts()
+    for status, count in status_counts.items():
+        pct = (count / len(df_restructured) * 100)
+        print(f"   • {status:<15} {count:>6,} ({pct:>5.1f}%)")
+    
+    print(f"\n📋 Colunas finais:")
+    for i, col in enumerate(df_restructured.columns, 1):
+        print(f"   {i}. {col}")
+    
+    return df_restructured
+
+# Executa reestruturação
+df_final_clean = restructure_dataframe(df_export)
+```
+
+```{python}
+# Visualiza primeiras linhas da nova estrutura
+print("\n🔍 Primeiras 20 linhas do DataFrame reestruturado:")
+print("="*100)
+df_final_clean[['timestamp', 'remetente', 'tipo_midia', 'status_midia', 'conteudo', 'arquivo_midia']].head(20)
+```
+
+```{python}
+# Exemplos de cada tipo
+print("\n📊 Exemplos por tipo de mídia:\n")
+
+for tipo in df_final_clean['tipo_midia'].unique():
+    print(f"{'='*80}")
+    print(f"Tipo: {tipo.upper()}")
+    print(f"{'='*80}")
+    
+    exemplo = df_final_clean[df_final_clean['tipo_midia'] == tipo][
+        ['timestamp', 'remetente', 'status_midia', 'conteudo', 'arquivo_midia']
+    ].head(3)
+    
+    print(exemplo)
+    print()
+```
+
+```{python}
+def clean_arquivo_midia(df):
+    """
+    Limpa coluna arquivo_midia removendo textos de omitted.
+    Mantém apenas nomes de arquivos reais (attached/transcribed).
+    """
+    print("🔄 Limpando coluna arquivo_midia...\n")
+    
+    df_cleaned = df.copy()
+    
+    # Backup para estatísticas
+    before_nulls = df_cleaned['arquivo_midia'].isna().sum()
+    before_non_nulls = df_cleaned['arquivo_midia'].notna().sum()
+    
+    # Identifica valores que são "omitted" (contém palavra "omitted")
+    mask_omitted = df_cleaned['arquivo_midia'].str.contains('omitted', case=False, na=False)
+    
+    # Limpa esses valores (transforma em None)
+    df_cleaned.loc[mask_omitted, 'arquivo_midia'] = None
+    
+    # Estatísticas após limpeza
+    after_nulls = df_cleaned['arquivo_midia'].isna().sum()
+    after_non_nulls = df_cleaned['arquivo_midia'].notna().sum()
+    cleaned_count = mask_omitted.sum()
+    
+    print(f"✅ Limpeza concluída!\n")
+    print(f"📊 Estatísticas:")
+    print(f"   • Antes da limpeza:")
+    print(f"      - Com arquivo: {before_non_nulls:,}")
+    print(f"      - Sem arquivo: {before_nulls:,}")
+    print(f"\n   • Após limpeza:")
+    print(f"      - Com arquivo: {after_non_nulls:,}")
+    print(f"      - Sem arquivo: {after_nulls:,}")
+    print(f"      - Valores 'omitted' removidos: {cleaned_count:,}")
+    
+    # Mostra distribuição por status
+    print(f"\n📂 Distribuição de arquivo_midia por status:")
+    for status in df_cleaned['status_midia'].unique():
+        df_status = df_cleaned[df_cleaned['status_midia'] == status]
+        with_file = df_status['arquivo_midia'].notna().sum()
+        without_file = df_status['arquivo_midia'].isna().sum()
+        total = len(df_status)
+        
+        print(f"\n   • Status: {status}")
+        print(f"      - Com arquivo: {with_file:,} ({with_file/total*100:.1f}%)")
+        print(f"      - Sem arquivo: {without_file:,} ({without_file/total*100:.1f}%)")
+    
+    return df_cleaned
+
+# Executa limpeza
+df_final_clean = clean_arquivo_midia(df_final_clean)
+```
+
+```{python}
+# Verifica resultados da limpeza
+print("\n🔍 Exemplos após limpeza:\n")
+
+print("="*80)
+print("OMITTED (deve ter arquivo_midia = None):")
+print("="*80)
+df_final_clean[df_final_clean['status_midia'] == 'omitted'][
+    ['timestamp', 'tipo_midia', 'status_midia', 'arquivo_midia']
+].head(10)
+```
+
+```{python}
+print("\n" + "="*80)
+print("ATTACHED/TRANSCRIBED (deve ter nome do arquivo):")
+print("="*80)
+df_final_clean[df_final_clean['status_midia'].isin(['attached', 'transcribed'])][
+    ['timestamp', 'tipo_midia', 'status_midia', 'arquivo_midia']
+].head(10)
+```
+
+```{python}
+def final_cleanup_and_remove_redundant(df):
+    """
+    Limpeza final do DataFrame:
+    1. Remove tags de mídia (--TIPO) da coluna conteudo
+    2. Remove coluna 'transcribed' (redundante com status_midia)
+    """
+    print("🔄 Limpeza final do DataFrame...\n")
+    
+    df_cleaned = df.copy()
+    
+    # ========================================
+    # 1. REMOVE TAGS DE MÍDIA DA COLUNA CONTEUDO
+    # ========================================
+    print("📝 Removendo tags de mídia da coluna conteudo...")
+    
+    # Identifica linhas onde conteudo é apenas uma tag (começa com --)
+    mask_media_tag = df_cleaned['conteudo'].str.match(r'^--[A-Z_]+$', na=False)
+    
+    tags_found = mask_media_tag.sum()
+    
+    # Limpa essas linhas (transforma em None)
+    df_cleaned.loc[mask_media_tag, 'conteudo'] = None
+    
+    print(f"   ✅ {tags_found:,} tags removidas\n")
+    
+    # ========================================
+    # 2. REMOVE COLUNA TRANSCRIBED
+    # ========================================
+    print("🗑️  Removendo coluna 'transcribed' (redundante)...")
+    
+    if 'transcribed' in df_cleaned.columns:
+        df_cleaned = df_cleaned.drop(columns=['transcribed'])
+        print(f"   ✅ Coluna removida\n")
+    
+    # ========================================
+    # ESTATÍSTICAS FINAIS
+    # ========================================
+    print("="*80)
+    print("✅ LIMPEZA FINAL CONCLUÍDA!")
+    print("="*80)
+    
+    print(f"\n📊 Resumo do DataFrame:")
+    print(f"   • Total de mensagens: {len(df_cleaned):,}")
+    print(f"   • Total de colunas: {len(df_cleaned.columns)}")
+    print(f"   • Mensagens com conteúdo textual: {df_cleaned['conteudo'].notna().sum():,}")
+    print(f"   • Mensagens sem conteúdo (mídias): {df_cleaned['conteudo'].isna().sum():,}")
+    
+    print(f"\n📂 Distribuição por tipo de mídia:")
+    tipo_counts = df_cleaned['tipo_midia'].value_counts()
+    for tipo, count in tipo_counts.items():
+        pct = (count / len(df_cleaned) * 100)
+        print(f"   • {tipo:<15} {count:>6,} ({pct:>5.1f}%)")
+    
+    print(f"\n📊 Distribuição por status:")
+    status_counts = df_cleaned['status_midia'].value_counts()
+    for status, count in status_counts.items():
+        pct = (count / len(df_cleaned) * 100)
+        print(f"   • {status:<15} {count:>6,} ({pct:>5.1f}%)")
+    
+    print(f"\n📋 Colunas finais ({len(df_cleaned.columns)}):")
+    for i, col in enumerate(df_cleaned.columns, 1):
+        non_null = df_cleaned[col].notna().sum()
+        print(f"   {i}. {col:<20} ({non_null:,} non-null)")
+    
+    print("\n" + "="*80)
+    
+    return df_cleaned
+
+# Executa limpeza final completa
+df_final_clean = final_cleanup_and_remove_redundant(df_final_clean)
+```
+
+```{python}
+# Exemplos de diferentes tipos
+print("\n📊 Exemplos de cada categoria:\n")
+
+print("="*100)
+print("TEXTO:")
+print("="*100)
+print(df_final_clean[df_final_clean['tipo_midia'] == 'text'][
+    ['timestamp', 'remetente', 'status_midia', 'conteudo']
+].head(3))
+
+print("\n" + "="*100)
+print("ÁUDIO TRANSCRITO:")
+print("="*100)
+print(df_final_clean[df_final_clean['status_midia'] == 'transcribed'][
+    ['timestamp', 'tipo_midia', 'conteudo', 'arquivo_midia']
+].head(3))
+
+print("\n" + "="*100)
+print("MÍDIA OMITIDA:")
+print("="*100)
+print(df_final_clean[df_final_clean['status_midia'] == 'omitted'][
+    ['timestamp', 'tipo_midia', 'status_midia', 'conteudo', 'arquivo_midia']
+].head(3))
+```
+
+```{python}
+def export_final_clean_version(df):
+    """
+    Exporta versão final limpa e estruturada do DataFrame.
+    """
+    import os
+    
+    print("🔄 Exportando versão final limpa...\n")
+    
+    # ========================================
+    # 1. EXPORTA CSV
+    # ========================================
+    csv_filename = 'final_dataframe_clean.csv'
+    df.to_csv(csv_filename, index=False, encoding='utf-8')
+    
+    csv_size = os.path.getsize(csv_filename)
+    csv_size_mb = csv_size / (1024 * 1024)
+    
+    print(f"✅ CSV exportado:")
+    print(f"   📄 {csv_filename}")
+    print(f"   📊 {len(df):,} linhas × {len(df.columns)} colunas")
+    print(f"   💾 {csv_size_mb:.2f} MB ({csv_size:,} bytes)\n")
+    
+    # ========================================
+    # 2. EXPORTA TXT (apenas texto com conteúdo)
+    # ========================================
+    txt_filename = 'final_data_clean.txt'
+    
+    # Filtra apenas mensagens com conteúdo (remove mídias sem texto)
+    df_with_content = df[df['conteudo'].notna()]
+    
+    with open(txt_filename, 'w', encoding='utf-8') as f:
+        for idx, row in df_with_content.iterrows():
+            data = row['timestamp'].strftime('%d/%m/%y')
+            hora = row['timestamp'].strftime('%H:%M:%S')
+            linha = f"{data} {hora} {row['remetente']}: {row['conteudo']}\n"
+            f.write(linha)
+    
+    txt_size = os.path.getsize(txt_filename)
+    txt_size_mb = txt_size / (1024 * 1024)
+    
+    print(f"✅ TXT exportado:")
+    print(f"   📄 {txt_filename}")
+    print(f"   📊 {len(df_with_content):,} linhas (apenas com conteúdo)")
+    print(f"   💾 {txt_size_mb:.2f} MB ({txt_size:,} bytes)\n")
+    
+    # ========================================
+    # 3. RESUMO
+    # ========================================
+    print("="*80)
+    print("🎉 VERSÃO FINAL LIMPA EXPORTADA COM SUCESSO!")
+    print("="*80)
+    print("\n📁 Arquivos criados:")
+    print(f"   • {csv_filename} - DataFrame completo estruturado")
+    print(f"   • {txt_filename} - Texto limpo (sem tags de mídia)")
+    
+    print("\n✨ Estrutura do DataFrame:")
+    print(f"   • {len(df):,} mensagens totais")
+    print(f"   • {df['conteudo'].notna().sum():,} com conteúdo textual")
+    print(f"   • {df['conteudo'].isna().sum():,} mídias sem texto")
+    print(f"   • {(df['status_midia'] == 'transcribed').sum():,} áudios/vídeos transcritos")
+    
+    print("\n🚀 Pronto para enriquecimento!")
+    print("="*80 + "\n")
+    
+    return csv_filename, txt_filename
+
+# Exporta versão final limpa
+csv_file, txt_file = export_final_clean_version(df_final_clean)
+```
+
+# Enriquecimento da base
+
+```{python}
+def enrich_with_content_analysis(df):
+    """
+    Enriquece DataFrame com análises baseadas no conteúdo:
+    - has_link: boolean (contém URL?)
+    - has_emoji: boolean (contém emoji?)
+    - word_count: integer (contagem de palavras)
+    """
+    import re
+    
+    print("🔄 Enriquecendo DataFrame com análises de conteúdo...\n")
+    
+    df_enriched = df.copy()
+    
+    # ========================================
+    # 1. HAS_LINK - Detecta URLs
+    # ========================================
+    print("🔗 Analisando links...")
+    
+    url_pattern = r'https?://[^\s]+'
+    
+    df_enriched['has_link'] = df_enriched['conteudo'].str.contains(
+        url_pattern, 
+        regex=True, 
+        na=False
+    )
+    
+    total_with_links = df_enriched['has_link'].sum()
+    pct_links = (total_with_links / len(df_enriched) * 100)
+    
+    print(f"   ✅ Links detectados: {total_with_links:,} ({pct_links:.2f}%)\n")
+    
+    # ========================================
+    # 2. HAS_EMOJI - Detecta emojis
+    # ========================================
+    print("😀 Analisando emojis...")
+    
+    def contains_emoji(text):
+        if pd.isna(text):
+            return False
+        # Emojis geralmente têm código Unicode > 127
+        return any(ord(char) > 127 for char in text)
+    
+    df_enriched['has_emoji'] = df_enriched['conteudo'].apply(contains_emoji)
+    
+    total_with_emoji = df_enriched['has_emoji'].sum()
+    pct_emoji = (total_with_emoji / len(df_enriched) * 100)
+    
+    print(f"   ✅ Mensagens com emoji: {total_with_emoji:,} ({pct_emoji:.2f}%)\n")
+    
+    # ========================================
+    # 3. WORD_COUNT - Contagem de palavras
+    # ========================================
+    print("📊 Contando palavras...")
+    
+    def count_words(text):
+        if pd.isna(text):
+            return 0
+        # Remove espaços extras e conta palavras
+        words = text.split()
+        return len(words)
+    
+    df_enriched['word_count'] = df_enriched['conteudo'].apply(count_words)
+    
+    total_words = df_enriched['word_count'].sum()
+    avg_words = df_enriched[df_enriched['word_count'] > 0]['word_count'].mean()
+    median_words = df_enriched[df_enriched['word_count'] > 0]['word_count'].median()
+    max_words = df_enriched['word_count'].max()
+    
+    print(f"   ✅ Estatísticas de palavras:")
+    print(f"      • Total de palavras: {total_words:,}")
+    print(f"      • Média por mensagem: {avg_words:.1f}")
+    print(f"      • Mediana: {median_words:.0f}")
+    print(f"      • Máximo: {max_words:,}\n")
+    
+    # ========================================
+    # ESTATÍSTICAS GERAIS
+    # ========================================
+    print("="*80)
+    print("✅ ENRIQUECIMENTO DE CONTEÚDO CONCLUÍDO!")
+    print("="*80)
+    
+    print(f"\n📊 Resumo das novas colunas:\n")
+    
+    # Por remetente
+    print("📍 Análise por remetente:\n")
+    for remetente in df_enriched['remetente'].unique():
+        df_rem = df_enriched[df_enriched['remetente'] == remetente]
+        
+        links = df_rem['has_link'].sum()
+        emojis = df_rem['has_emoji'].sum()
+        avg_words_rem = df_rem[df_rem['word_count'] > 0]['word_count'].mean()
+        
+        print(f"   {remetente}:")
+        print(f"      • Mensagens com link: {links:,}")
+        print(f"      • Mensagens com emoji: {emojis:,}")
+        print(f"      • Média de palavras: {avg_words_rem:.1f}\n")
+    
+    # Por tipo de mídia
+    print("📂 Análise por tipo de mídia:\n")
+    for tipo in ['text', 'audio', 'video']:
+        df_tipo = df_enriched[df_enriched['tipo_midia'] == tipo]
+        if len(df_tipo) > 0:
+            avg_words_tipo = df_tipo[df_tipo['word_count'] > 0]['word_count'].mean()
+            print(f"   {tipo}:")
+            print(f"      • Mensagens: {len(df_tipo):,}")
+            print(f"      • Média de palavras: {avg_words_tipo:.1f}\n")
+    
+    print("="*80 + "\n")
+    
+    return df_enriched
+
+# Executa enriquecimento
+df_enriched = enrich_with_content_analysis(df_final_clean)
+```
+
+```{python}
+# Estatísticas detalhadas
+print("\n📊 Distribuição de word_count:")
+print("="*100)
+df_enriched['word_count'].describe()
+```
+
+```{python}
+def export_enriched_v1(df):
+    """
+    Exporta primeira versão enriquecida (com has_link, has_emoji, word_count).
+    """
+    import os
+    
+    print("🔄 Exportando DataFrame enriquecido v1...\n")
+    
+    # Exporta CSV
+    filename = 'final_dataframe_enriched_v1.csv'
+    df.to_csv(filename, index=False, encoding='utf-8')
+    
+    file_size = os.path.getsize(filename)
+    file_size_mb = file_size / (1024 * 1024)
+    
+    print(f"✅ DataFrame enriquecido v1 exportado!")
+    print(f"   📄 {filename}")
+    print(f"   📊 {len(df):,} linhas × {len(df.columns)} colunas")
+    print(f"   💾 {file_size_mb:.2f} MB\n")
+    
+    print("📋 Colunas incluídas:")
+    for i, col in enumerate(df.columns, 1):
+        print(f"   {i:2}. {col}")
+    
+    print("\n✨ Pronto para continuar no próximo arquivo!")
+    print("="*80 + "\n")
+    
+    return filename
+
+# Exporta versão atual
+v1_file = export_enriched_v1(df_enriched)
+```
