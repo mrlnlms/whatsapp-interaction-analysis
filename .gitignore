@@ -1,0 +1,49 @@
+# Dados pessoais
+data/
+!data/README.md
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!data/integrated/.gitkeep
+
+# Analysis placeholders
+analysis/
+!analysis/eda/.gitkeep
+!analysis/figures/.gitkeep
+!analysis/reports/.gitkeep
+
+# Quarto gerados
+_site/
+_freeze/
+_output/
+*_files/
+*.html
+.quarto/
+*.rmarkdown
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.env
+
+# Sistema
+.DS_Store
+
+# Notas pessoais (nao commitar)
+Clustering Analysis/
+notebooks/*.txt
+notebooks/EDA V1.md
+notebooks/Jornada da EDA*.md
+notebooks/Analise Critica*.md
+notebooks/Comparacao por Tipo*.md
+notebooks/*copy*
+notebooks/*.png
+
+# Docs de processo
+PROJECT-CONTEXT.md
+PLAN.md
+CLAUDE.md
+setup-project*.txt
+parking-lot.md

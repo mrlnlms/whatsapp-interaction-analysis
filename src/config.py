@@ -1,9 +1,38 @@
 """
-Configurações centralizadas do projeto WhatsApp Analysis.
+Configurações centralizadas do projeto WhatsApp DS Analytics.
+
+Lê configurações do arquivo .env na raiz do projeto
 
 Este módulo contém todas as constantes, paths e thresholds usados
 ao longo do pipeline, facilitando ajustes e manutenção.
 """
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis do .env
+load_dotenv()
+
+# =============================================================================
+# 🔧 PATHS (lidos do .env)
+# =============================================================================
+
+PROJECT_ROOT = Path(os.getenv('PROJECT_ROOT'))
+DATA_FOLDER = os.getenv('DATA_FOLDER')
+
+# =============================================================================
+# PATHS DERIVADOS (não precisa mexer)
+# =============================================================================
+
+PATHS = {
+    'src': PROJECT_ROOT / 'src',
+    'raw': PROJECT_ROOT / 'data' / 'raw' / DATA_FOLDER / 'raw-data.txt',
+    'media': PROJECT_ROOT / 'data' / 'raw' / DATA_FOLDER / 'media',
+    'interim': PROJECT_ROOT / 'data' / 'interim' / DATA_FOLDER,
+    'processed': PROJECT_ROOT / 'data' / 'processed' / DATA_FOLDER,
+    'integrated': PROJECT_ROOT / 'data' / 'integrated',
+    'analysis': PROJECT_ROOT / 'analysis',
+}
 
 # =============================================================================
 # PARTICIPANTES
@@ -29,27 +58,6 @@ NOME_PARA_ANONIMO = {
     'Lê 🖤': 'P2',
     # Adicione variações se houver
 }
-
-
-# =============================================================================
-# PATHS
-# =============================================================================
-
-PATHS = {
-    # Dados brutos
-    'raw': 'data/raw/raw-data.txt',
-    'media': 'data/raw/media/',
-    
-    # Dados intermediários (etapas de cleaning)
-    'interim': 'data/interim/',
-    
-    # Dados processados (outputs finais)
-    'processed': 'data/processed/',
-    
-    # Outputs (gráficos, relatórios)
-    'outputs': 'outputs/'
-}
-
 
 # =============================================================================
 # THRESHOLDS PARA FEATURES
