@@ -42,14 +42,14 @@ Com o arquivo limpo gerado no [Data Cleaning](01-data-cleaning.qmd), esta etapa 
 
 Transformar o arquivo TXT limpo em dados estruturados e enriquecidos:
 
-- ✅ Parsing: TXT → DataFrame
-- ✅ Classificação: Identificar tipos de mensagem
-- ✅ Mídia: Vincular arquivos físicos
-- ✅ Transcrição: Integrar transcrições existentes
-- ✅ Enriquecimento: Substituir mídias por transcrições
-- ✅ Exportação: CSV + TXTs de corpus
+-   ✅ Parsing: TXT → DataFrame
+-   ✅ Classificação: Identificar tipos de mensagem
+-   ✅ Mídia: Vincular arquivos físicos
+-   ✅ Transcrição: Integrar transcrições existentes
+-   ✅ Enriquecimento: Substituir mídias por transcrições
+-   ✅ Exportação: CSV + TXTs de corpus
 
----
+------------------------------------------------------------------------
 
 ## Configuração do Pipeline
 
@@ -101,7 +101,7 @@ print(f"🎬 Mídia: {MEDIA_DIR}")
 print(f"🎙️ Transcrições: {TRANSCRIPTION_FILE}")
 ```
 
----
+------------------------------------------------------------------------
 
 ## Execução do Pipeline
 
@@ -124,7 +124,7 @@ outputs = result['outputs']
 stats = result['stats']
 ```
 
----
+------------------------------------------------------------------------
 
 ## Pipeline de Transformação
 
@@ -150,7 +150,7 @@ for i, step_id in enumerate(PIPELINE_ORDER):
 ''')
 ```
 
----
+------------------------------------------------------------------------
 
 ## Estatísticas do Processamento
 
@@ -182,7 +182,7 @@ if 'mensagens_enriquecidas' in stats:
     print(f"\n✨ Mensagens enriquecidas: {stats['mensagens_enriquecidas']:,}")
 ```
 
----
+------------------------------------------------------------------------
 
 ## Distribuição de Tipos de Mensagem
 
@@ -209,12 +209,11 @@ if 'tipo_mensagem' in df.columns and 'remetente' in df.columns:
     pd.crosstab(df['tipo_mensagem'], df['remetente'], margins=True)
 ```
 
----
+------------------------------------------------------------------------
 
 ## Arquivos Gerados
 
 ::: panel-tabset
-
 ## Datasets
 
 ```{python}
@@ -258,10 +257,9 @@ for key in corpus_keys:
         size_mb = size / (1024 * 1024)
         print(f"   • {path.name:<25} {size_mb:>6.2f} MB")
 ```
-
 :::
 
----
+------------------------------------------------------------------------
 
 ::: {.callout-tip icon="false" collapse="false"}
 ## 🎯 Resultado Final
@@ -282,7 +280,7 @@ print(f"\n✅ Arquivo principal: {outputs.get('csv', 'N/A')}")
 ```
 :::
 
----
+------------------------------------------------------------------------
 
 ## Preview dos Dados
 
@@ -313,27 +311,26 @@ if 'tem_transcricao' in df.columns:
         df_trans[preview_cols].head(5)
 ```
 
----
+------------------------------------------------------------------------
 
 ## 📁 Glossário de Arquivos Gerados
 
 Esta seção documenta todos os arquivos gerados pelo pipeline, organizados por função e utilidade.
 
 ::: panel-tabset
-
 ## 🎯 Arquivos Principais
 
 Estes são os arquivos que você vai usar nas próximas etapas (Feature Engineering, Análises):
 
 | Arquivo | Formato | Colunas | Uso |
-|---------|---------|---------|-----|
+|-------------------|-------------------|-------------------|-----------------|
 | `messages.parquet` | Parquet | 8 | **Dataset principal para análise.** Tipos otimizados, leitura rápida, menor tamanho. Use este! |
 | `messages.csv` | CSV | 8 | Alternativa ao Parquet. Útil para abrir no Excel ou compartilhar. |
 | `chat_complete.txt` | TXT | — | Chat completo com transcrições. Formato: `DD/MM/YY HH:MM:SS Remetente: Conteúdo` |
 
 **Colunas do dataset principal (8):**
 
-```
+```         
 timestamp, remetente, tipo_mensagem, conteudo_enriquecido,
 arquivo, tem_transcricao, transcricao, is_synthetic
 ```
@@ -343,7 +340,7 @@ arquivo, tem_transcricao, transcricao, is_synthetic
 Arquivos de texto puro para análises de linguagem natural:
 
 | Arquivo | Descrição | Uso |
-|---------|-----------|-----|
+|-------------------------|------------------------------|-----------------|
 | `corpus_full.txt` | Todo o conteúdo, sem metadados | Treinar modelos, word clouds, análise de vocabulário |
 | `corpus_p1.txt` | Apenas mensagens de P1 | Análise individual, comparação de estilos |
 | `corpus_p2.txt` | Apenas mensagens de P2 | Análise individual, comparação de estilos |
@@ -355,13 +352,13 @@ Arquivos de texto puro para análises de linguagem natural:
 Arquivos com informações completas para verificação e debug:
 
 | Arquivo | Colunas | Descrição |
-|---------|---------|-----------|
+|-----------------------|-----------------------|---------------------------|
 | `messages_full.csv` | 17 | Todas as colunas, incluindo intermediárias (`linha_original`, `arquivo_path`, etc.) |
 | `messages_enriched.csv` | 17 | Legado — mesmo conteúdo que `messages_full.csv` |
 
 **Colunas extras (debug):**
 
-```
+```         
 linha_original    → Referência ao TXT original
 data, hora        → Redundante (já tem timestamp)
 arquivo_existe    → Bool de verificação
@@ -375,20 +372,19 @@ transcription_status → Status da API
 
 Arquivos que alimentaram o pipeline (não são outputs, mas ficam na pasta):
 
-| Arquivo | Descrição |
-|---------|-----------|
+| Arquivo              | Descrição                                     |
+|----------------------|-----------------------------------------------|
 | `transcriptions.csv` | Transcrições de áudio/vídeo (input da Fase 4) |
-
 :::
 
----
+------------------------------------------------------------------------
 
 ::: {.callout-tip icon="false"}
 ## 💡 Recomendação de Uso
 
 **Para as próximas etapas do projeto, use:**
 
-```python
+``` python
 # Carrega dataset principal (rápido, tipos corretos)
 df = pd.read_parquet('data/processed/messages.parquet')
 
@@ -398,7 +394,7 @@ df = pd.read_csv('data/processed/messages.csv')
 
 **Para análises de NLP:**
 
-```python
+``` python
 # Texto completo
 with open('data/processed/corpus_full.txt', 'r') as f:
     texto = f.read()
@@ -410,18 +406,18 @@ with open('data/processed/corpus_p1.txt', 'r') as f:
 
 **Arquivos que podem ser deletados após verificação:**
 
-- `messages_enriched.csv` (duplicado de `messages_full.csv`)
-- `messages_full.csv` (só precisa se for debugar)
+-   `messages_enriched.csv` (duplicado de `messages_full.csv`)
+-   `messages_full.csv` (só precisa se for debugar)
 :::
 
----
+------------------------------------------------------------------------
 
 ## Exportação Manual (Opcional)
 
 ::: {.callout-note appearance="simple" collapse="true"}
 ### 📋 Como re-exportar com configurações diferentes
 
-```python
+``` python
 from wrangling import export_corpus_files, export_to_csv
 
 # Re-exportar só texto (sem tags de mídia)
@@ -434,11 +430,11 @@ export_to_csv(df, OUTPUT_DIR / 'messages_minimal.csv', columns=cols)
 ```
 :::
 
----
+------------------------------------------------------------------------
 
 # Próximos Passos
 
 Com os dados estruturados e enriquecidos, seguimos para:
 
-1. [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
-2. [**Análises Descritivas**](04-descriptive-analysis.qmd) — Estatísticas e visualizações
+1.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
+2.  [**Análises Descritivas**](04-descriptive-analysis.qmd) — Estatísticas e visualizações
