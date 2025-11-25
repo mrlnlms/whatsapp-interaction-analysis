@@ -38,8 +38,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PROGRESS_FILE = OUTPUT_DIR / 'transcriptions_progress.csv'
 COMPLETE_FILE = OUTPUT_DIR / 'transcriptions.csv'
 
-# API Key
-GROQ_API_KEY = os.getenv('GROQ_API_KEY', 'REDACTED_GROQ_KEY')
+# API Key (obrigatória no .env)
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
 # Formatos suportados
 SUPPORTED_FORMATS = ['.opus', '.mp3', '.wav', '.mp4', '.m4a', '.webm', '.mpeg', '.mpga']
@@ -47,6 +47,15 @@ SUPPORTED_FORMATS = ['.opus', '.mp3', '.wav', '.mp4', '.m4a', '.webm', '.mpeg', 
 
 def setup_groq():
     """Configura cliente Groq."""
+    if not GROQ_API_KEY:
+        print("❌ GROQ_API_KEY não configurada!")
+        print()
+        print("   Adicione no arquivo .env:")
+        print("   GROQ_API_KEY=sua_chave_aqui")
+        print()
+        print("   Obtenha sua chave em: https://console.groq.com/keys")
+        sys.exit(1)
+    
     try:
         from groq import Groq
     except ImportError:
@@ -140,7 +149,7 @@ def transcribe_audio(client, file_path: Path) -> dict:
         }
 
 
-def load_or_create_dataframe(media_files: list) -> 'pd.DataFrame':
+def load_or_create_dataframe(media_files: list):
     """Carrega progresso existente ou cria novo DataFrame."""
     import pandas as pd
     
@@ -204,7 +213,7 @@ def main():
     pending = (df['transcription_status'] == 'pending').sum()
     
     print()
-    print(f"📊 Status atual:")
+    print("📊 Status atual:")
     print(f"   ✅ Completos: {completed:,}")
     print(f"   ❌ Erros: {errors:,}")
     print(f"   ⏳ Pendentes: {pending:,}")
@@ -277,7 +286,7 @@ def main():
     print("✅ PROCESSAMENTO CONCLUÍDO!")
     print("=" * 70)
     print()
-    print(f"📊 Resultado:")
+    print("📊 Resultado:")
     print(f"   ✅ Transcritos: {completed_final:,}")
     print(f"   ❌ Erros: {errors_final:,}")
     print(f"   ⏱️  Tempo: {elapsed // 60}min {elapsed % 60}s")

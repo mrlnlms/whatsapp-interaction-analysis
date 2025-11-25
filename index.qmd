@@ -28,12 +28,12 @@ Transformar um export bruto do WhatsApp (`_chat.txt`) em um dataset estruturado 
 ::: callout-note
 ### Estudo de caso
 
-Como estudo de caso vou utilizar o histórico de ~14 meses de mensagens entre minha namorada e eu (~92K mensagens, ~5MB). Para além do aprendizado em ciência de dados e *analytics*, essa escolha se deu por conta de uma ideia que tive de fazer análises textuais sobre nosso primeiro ano de namoro, extraindo visualizações e insights para criar um "*presente digital analítico*" do nosso 1º ano de namoro 😍 🥰. Após preparar os dados iremos vincular as datas de quando estivemos juntos durante este um ano (~10 viagens em 2025) às mensagens daquele período.
+Como estudo de caso vou utilizar o histórico de \~14 meses de mensagens entre minha namorada e eu (\~92K mensagens, \~5MB). Para além do aprendizado em ciência de dados e *analytics*, essa escolha se deu por conta de uma ideia que tive de fazer análises textuais sobre nosso primeiro ano de namoro, extraindo visualizações e insights para criar um "*presente digital analítico*" do nosso 1º ano de namoro 😍 🥰. Após preparar os dados iremos vincular as datas de quando estivemos juntos durante este um ano (\~10 viagens em 2025) às mensagens daquele período.
 
 Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riqueza, como a transcrição automatizada de áudios e vídeos, padronizando toda mídia possível em formato texto.
 :::
 
----
+------------------------------------------------------------------------
 
 # Navegação
 
@@ -51,22 +51,22 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 ## Scripts Utilitários
 
 | Script | Descrição |
-|--------|-----------|
+|-------------------------------|-----------------------------------------|
 | [transcribe_media.py](scripts/README.md) | Transcrição de áudios/vídeos via Groq/Whisper API |
 
 ## Documentos úteis
 
-- [Dicionário de Dados](docs/data-dictionary.md)
-- [Como organizar seus dados](data/README.md)
-- [Guia de Setup](docs/SETUP-GUIDE.md)
+-   [Dicionário de Dados](docs/data-dictionary.md)
+-   [Como organizar seus dados](data/README.md)
+-   [Guia de Setup](docs/SETUP-GUIDE.md)
 
----
+------------------------------------------------------------------------
 
 # Arquitetura
 
 O projeto segue uma arquitetura modular que separa **lógica** de **apresentação**:
 
-```
+```         
 src/                          # Lógica (módulos Python)
 ├── cleaning.py               # Pipeline de limpeza (7 etapas)
 ├── wrangling.py              # Pipeline de wrangling (6 etapas)
@@ -84,16 +84,16 @@ scripts/                      # Executáveis standalone
 
 ## Vantagens
 
-- **Testável**: Funções isoladas e importáveis
-- **Reutilizável**: Módulos funcionam independente dos notebooks
-- **Configurável**: Ordem das etapas via lista simples
-- **Auditável**: Métricas de cada transformação
+-   **Testável**: Funções isoladas e importáveis
+-   **Reutilizável**: Módulos funcionam independente dos notebooks
+-   **Configurável**: Ordem das etapas via lista simples
+-   **Auditável**: Métricas de cada transformação
 
----
+------------------------------------------------------------------------
 
 # Estrutura do Projeto
 
-```
+```         
 whatsapp-ds-analytics/
 ├── index.qmd                 # Este documento
 ├── .env                      # Configuração local (não versionado)
@@ -129,25 +129,25 @@ whatsapp-ds-analytics/
     └── data-dictionary.md
 ```
 
----
+------------------------------------------------------------------------
 
 # Outputs
 
 O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 
 | Arquivo | Descrição | Uso |
-|---------|-----------|-----|
+|-------------------------|------------------------------|-----------------|
 | `messages.csv` | Dataset principal (8 colunas) | **Use este para análises** |
-| `messages.parquet` | Mesmo conteúdo, ~3x menor | Performance |
+| `messages.parquet` | Mesmo conteúdo, \~3x menor | Performance |
 | `messages_full.csv` | Versão completa (17 colunas) | Debug/auditoria |
 | `chat_complete.txt` | Chat formatado com transcrições | Leitura |
 | `corpus_*.txt` | Textos puros | NLP, word clouds |
 
----
+------------------------------------------------------------------------
 
 # Quick Start
 
-```bash
+``` bash
 # 1. Configure o ambiente
 cp .env.example .env
 # Edite .env com seus paths

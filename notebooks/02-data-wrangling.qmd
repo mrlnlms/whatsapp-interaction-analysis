@@ -323,7 +323,7 @@ Esta seção documenta todos os arquivos gerados pelo pipeline, organizados por 
 Estes são os arquivos que você vai usar nas próximas etapas (Feature Engineering, Análises):
 
 | Arquivo | Formato | Colunas | Uso |
-|-------------------|-------------------|-------------------|-----------------|
+|------------------|------------------|------------------|------------------|
 | `messages.parquet` | Parquet | 8 | **Dataset principal para análise.** Tipos otimizados, leitura rápida, menor tamanho. Use este! |
 | `messages.csv` | CSV | 8 | Alternativa ao Parquet. Útil para abrir no Excel ou compartilhar. |
 | `chat_complete.txt` | TXT | — | Chat completo com transcrições. Formato: `DD/MM/YY HH:MM:SS Remetente: Conteúdo` |
@@ -340,7 +340,7 @@ arquivo, tem_transcricao, transcricao, is_synthetic
 Arquivos de texto puro para análises de linguagem natural:
 
 | Arquivo | Descrição | Uso |
-|-------------------------|------------------------------|-----------------|
+|-------------------------|-----------------------------|------------------|
 | `corpus_full.txt` | Todo o conteúdo, sem metadados | Treinar modelos, word clouds, análise de vocabulário |
 | `corpus_p1.txt` | Apenas mensagens de P1 | Análise individual, comparação de estilos |
 | `corpus_p2.txt` | Apenas mensagens de P2 | Análise individual, comparação de estilos |

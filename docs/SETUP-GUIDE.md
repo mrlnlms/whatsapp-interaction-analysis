@@ -9,6 +9,7 @@
 ---
 
 ## 🚀 Instalação
+
 ```bash
 # 1. Clone o repositório
 git clone https://github.com/mrlnlms/whatsapp-ds-analytics.git
@@ -40,29 +41,85 @@ quarto check jupyter
 ## ⚙️ Configuração do `.env`
 
 Copie `.env.example` para `.env` e ajuste:
+
 ```bash
 PROJECT_ROOT=/Users/SEU_USUARIO/caminho/para/whatsapp-ds-analytics
 DATA_FOLDER=export_2024-10_2025-10
+GROQ_API_KEY=sua_chave_aqui
 ```
 
 | Variável | Descrição |
 |----------|-----------|
 | `PROJECT_ROOT` | Caminho absoluto da pasta do projeto |
 | `DATA_FOLDER` | Nome da pasta em `data/raw/` com seus dados |
+| `GROQ_API_KEY` | Chave da API Groq para transcrição (opcional) |
+
+### Obter GROQ_API_KEY
+
+1. Acesse [console.groq.com](https://console.groq.com)
+2. Crie uma conta gratuita
+3. Vá em **API Keys** e gere uma nova chave
+4. Cole no `.env`
+
+> A chave só é necessária se quiser transcrever áudios/vídeos.
+
+---
+
+## 🎙️ Transcrição de Áudios (Opcional)
+
+Para transcrever áudios e vídeos do WhatsApp:
+
+```bash
+# 1. Certifique-se que GROQ_API_KEY está no .env
+
+# 2. Execute o script de transcrição
+python scripts/transcribe_media.py
+
+# 3. Aguarde (~40 min para ~700 arquivos)
+# O script salva progresso a cada 10 arquivos
+
+# 4. Rode o notebook de wrangling
+quarto render notebooks/02-data-wrangling.qmd
+```
+
+O script detecta automaticamente arquivos já transcritos e continua de onde parou.
 
 ---
 
 ## 🔧 Uso Diário
 
 Se usar Positron/VS Code com interpretador configurado pro venv:
+
 ```bash
 quarto preview
 ```
 
 Se usar terminal avulso:
+
 ```bash
 source venv/bin/activate
 quarto preview
+```
+
+---
+
+## 📁 Estrutura de Dados
+
+```
+data/
+├── raw/
+│   └── export_2024-10_2025-10/    ← Sua pasta (DATA_FOLDER)
+│       ├── _chat.txt               ← Export do WhatsApp
+│       └── media/                  ← Arquivos de mídia
+├── interim/
+│   └── export_2024-10_2025-10/
+│       └── raw-data_cln7.txt       ← Saída do cleaning
+└── processed/
+    └── export_2024-10_2025-10/
+        ├── messages.csv            ← Dataset principal
+        ├── messages.parquet        ← Versão otimizada
+        ├── transcriptions.csv      ← Cache de transcrições
+        └── corpus_*.txt            ← Textos para NLP
 ```
 
 ---
@@ -78,6 +135,7 @@ Verifique:
 ### Erro: `Starting python3 kernel...` (deveria ser `whatsapp-ds`)
 
 Adicione no header do notebook:
+
 ```yaml
 ---
 jupyter: whatsapp-ds
@@ -87,14 +145,32 @@ jupyter: whatsapp-ds
 ### Erro: `No module named 'nbformat'`
 
 O venv não está ativado:
+
 ```bash
 source venv/bin/activate
 quarto preview
 ```
 
+### Erro: `GROQ_API_KEY não configurada`
+
+Adicione a chave no `.env`:
+
+```bash
+echo "GROQ_API_KEY=sua_chave_aqui" >> .env
+```
+
+### Erro: `Missing optional dependency 'pyarrow'`
+
+Instale o pyarrow:
+
+```bash
+pip install pyarrow
+```
+
 ---
 
 ## 🔄 Resetar Ambiente
+
 ```bash
 rm -rf venv _site _freeze .quarto *_files
 jupyter kernelspec uninstall whatsapp-ds -y

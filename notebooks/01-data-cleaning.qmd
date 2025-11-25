@@ -48,7 +48,7 @@ Com base nas descobertas documentadas no [Data Profiling](00-data-profiling.qmd)
 
 Transformar o arquivo bruto exportado do WhatsApp em um arquivo limpo e otimizado, removendo caracteres invisíveis, linhas vazias, normalizando espaços e anonimizando participantes.
 
----
+------------------------------------------------------------------------
 
 ## Configuração e Execução do Pipeline
 
@@ -75,12 +75,12 @@ Transformar o arquivo bruto exportado do WhatsApp em um arquivo limpo e otimizad
 
 PIPELINE_ORDER = [
     'u200e',
-    'empty_timestamps',
-    'empty_lines',
-    'whitespace',
     'anonymize',
     'timestamps',
     'indentation',
+    'empty_lines',
+    'whitespace',
+    'empty_timestamps',
 ]
 ```
 
@@ -104,7 +104,7 @@ totals = result['totals']
 FINAL_OUTPUT = result['final_output']
 ```
 
----
+------------------------------------------------------------------------
 
 ## Pipeline de Transformação
 
@@ -156,7 +156,7 @@ for i, step_id in enumerate(PIPELINE_ORDER):
 ''')
 ```
 
----
+------------------------------------------------------------------------
 
 ## Auditoria Final do Pipeline
 
@@ -169,7 +169,6 @@ audit_list = [audits[step_id] for step_id in PIPELINE_ORDER]
 ```
 
 ::: panel-tabset
-
 ## Comparação de Estágios
 
 ```{python}
@@ -187,10 +186,9 @@ format_audit_table(df_audit, include_chars=True).style.hide(axis='index')
 
 format_summary_table(audit_list).style.hide(axis='index')
 ```
-
 :::
 
----
+------------------------------------------------------------------------
 
 ::: {.callout-tip icon="false" collapse="false"}
 ## 🎯 Resultado Final
@@ -209,7 +207,7 @@ print(f"✅ Arquivo de saída: {FINAL_OUTPUT.name}")
 O arquivo limpo está pronto para a próxima etapa: **parsing e estruturação em DataFrame**.
 :::
 
----
+------------------------------------------------------------------------
 
 ::: {.callout-note icon="false" collapse="false"}
 ## 📊 Reflexão: Impacto no Dataset Enriquecido
@@ -239,22 +237,22 @@ print(f"   • Incluir em embeddings e modelos")
 A limpeza realizada nesta etapa não apenas organiza os dados, mas **reduz significativamente o custo computacional** de todas as operações subsequentes.
 :::
 
----
+------------------------------------------------------------------------
 
 ## Arquivo de Saída
 
 O arquivo final agora possui:
 
-- ✅ Formato otimizado: `DD/MM/YY HH:MM:SS Remetente: Conteúdo`
-- ✅ Participantes anonimizados (P1, P2)
-- ✅ Sem caracteres invisíveis
-- ✅ Sem linhas/timestamps vazios
-- ✅ Espaços e indentação normalizados
+-   ✅ Formato otimizado: `DD/MM/YY HH:MM:SS Remetente: Conteúdo`
+-   ✅ Participantes anonimizados (P1, P2)
+-   ✅ Sem caracteres invisíveis
+-   ✅ Sem linhas/timestamps vazios
+-   ✅ Espaços e indentação normalizados
 
 ::: {.callout-note appearance="simple" collapse="true"}
 ### 📋 Regex para parsing do arquivo limpo
 
-```python
+``` python
 # Padrão para identificar início de mensagem
 message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
 
@@ -266,11 +264,11 @@ message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
 ```
 :::
 
----
+------------------------------------------------------------------------
 
 # Próximos Passos
 
 Com o arquivo limpo, seguimos para:
 
-1. [**Data Wrangling**](02-data-wrangling.qmd) — Parsing, agregação de multilinha, vinculação de mídia
-2. [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
+1.  [**Data Wrangling**](02-data-wrangling.qmd) — Parsing, agregação de multilinha, vinculação de mídia
+2.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas

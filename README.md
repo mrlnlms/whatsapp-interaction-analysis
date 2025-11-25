@@ -4,7 +4,7 @@
 
 ## 📋 Sobre
 
-Este projeto demonstra um pipeline completo de **Data Science**, desde a investigação inicial de dados brutos até análises avançadas com clustering e visualizações. O caso de estudo é um export do WhatsApp com ~92.000 mensagens ao longo de 1 ano.
+Este projeto demonstra um pipeline completo de **Data Science**, desde a investigação inicial de dados brutos até análises avançadas com clustering e visualizações. O caso de estudo é um export do WhatsApp com \~92.000 mensagens ao longo de 1 ano.
 
 O projeto foi desenvolvido para ser **reprodutível** — permite rodar o pipeline com novos exports e integrar os resultados à base existente.
 
@@ -26,7 +26,7 @@ O projeto foi desenvolvido para ser **reprodutível** — permite rodar o pipeli
 
 ## 📁 Estrutura
 
-```
+```         
 whatsapp-ds-analytics/
 │
 ├── .env.example                 # Template de configuração
@@ -72,7 +72,7 @@ whatsapp-ds-analytics/
 
 ## 🚀 Quick Start
 
-```bash
+``` bash
 # Clone e configure
 git clone https://github.com/mrlnlms/whatsapp-ds-analytics.git
 cd whatsapp-ds-analytics
@@ -97,7 +97,7 @@ Veja o [Guia de Setup](docs/SETUP-GUIDE.md) completo para mais detalhes.
 
 Para transcrever áudios e vídeos do WhatsApp:
 
-```bash
+``` bash
 # Adicione sua API key no .env
 echo "GROQ_API_KEY=sua_chave_aqui" >> .env
 
@@ -112,52 +112,52 @@ O script detecta automaticamente arquivos já transcritos e continua de onde par
 
 ## 🛠️ Tecnologias
 
-- **Python 3.11+**
-- **Quarto** — Documentação reprodutível
+-   **Python 3.11+**
+-   **Quarto** — Documentação reprodutível
 
 ### Data Manipulation
 
-- **Pandas / NumPy** — Manipulação e análise de dados
-- **PyArrow** — Export otimizado em Parquet
+-   **Pandas / NumPy** — Manipulação e análise de dados
+-   **PyArrow** — Export otimizado em Parquet
 
 ### Visualization
 
-- **Matplotlib / Seaborn / Plotly** — Gráficos e visualizações
-- **WordCloud** — Nuvens de palavras
+-   **Matplotlib / Seaborn / Plotly** — Gráficos e visualizações
+-   **WordCloud** — Nuvens de palavras
 
 ### Machine Learning & Statistics
 
-- **Scikit-learn** — Clustering, PCA, métricas
-- **Prince** — Análise de Correspondência Múltipla (MCA)
-- **SciPy** — Estatística
+-   **Scikit-learn** — Clustering, PCA, métricas
+-   **Prince** — Análise de Correspondência Múltipla (MCA)
+-   **SciPy** — Estatística
 
 ### NLP & Sentiment Analysis
 
-- **Transformers / PyTorch** — Análise de sentimento (BERT)
-- **Groq API (Whisper)** — Transcrição de áudios/vídeos
+-   **Transformers / PyTorch** — Análise de sentimento (BERT)
+-   **Groq API (Whisper)** — Transcrição de áudios/vídeos
 
 ## 📦 Outputs do Pipeline
 
 O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 
-| Arquivo | Colunas | Descrição |
-|---------|---------|-----------|
-| `messages.csv` | 8 | **Dataset principal para análise** |
-| `messages.parquet` | 8 | Mesmo conteúdo, ~3x menor |
-| `messages_full.csv` | 17 | Versão completa para debug |
-| `chat_complete.txt` | — | Chat com transcrições |
-| `corpus_*.txt` | — | Textos para NLP |
+| Arquivo             | Colunas | Descrição                          |
+|---------------------|---------|------------------------------------|
+| `messages.csv`      | 8       | **Dataset principal para análise** |
+| `messages.parquet`  | 8       | Mesmo conteúdo, \~3x menor         |
+| `messages_full.csv` | 17      | Versão completa para debug         |
+| `chat_complete.txt` | —       | Chat com transcrições              |
+| `corpus_*.txt`      | —       | Textos para NLP                    |
 
 ## 📝 Documentação
 
-- [Guia de Setup](docs/SETUP-GUIDE.md) — Instalação e configuração
-- [Dicionário de Dados](docs/data-dictionary.md) — Descrição das variáveis
-- [Scripts](scripts/README.md) — Documentação dos scripts utilitários
+-   [Guia de Setup](docs/SETUP-GUIDE.md) — Instalação e configuração
+-   [Dicionário de Dados](docs/data-dictionary.md) — Descrição das variáveis
+-   [Scripts](scripts/README.md) — Documentação dos scripts utilitários
 
 ### Notebooks
 
-| # | Notebook | Descrição |
-|---|----------|-----------|
+| \# | Notebook | Descrição |
+|------------------|--------------------------|-----------------------------|
 | 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação do arquivo bruto |
 | 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, mídia, transcrição |
@@ -167,17 +167,17 @@ O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 
 ## 📌 Highlights
 
-- **Pipeline reprodutível** — rode com novos exports e integre à base
-- **Arquitetura modular** — lógica em `src/`, apresentação em `notebooks/`
-- **Configuração via `.env`** — um só lugar pra ajustar paths
-- **Transcrição automática** de áudios/vídeos via Groq API
-- **Export otimizado** — CSV para compatibilidade, Parquet para performance
-- **Sistema de auditoria** — métricas de cada transformação
+-   **Pipeline reprodutível** — rode com novos exports e integre à base
+-   **Arquitetura modular** — lógica em `src/`, apresentação em `notebooks/`
+-   **Configuração via `.env`** — um só lugar pra ajustar paths
+-   **Transcrição automática** de áudios/vídeos via Groq API
+-   **Export otimizado** — CSV para compatibilidade, Parquet para performance
+-   **Sistema de auditoria** — métricas de cada transformação
 
 ## 🔒 Privacidade
 
 Os dados (`data/` e `analysis/`) **não são versionados** por conterem informações pessoais.
 
----
+------------------------------------------------------------------------
 
-*Desenvolvido por [@mrlnlms](https://github.com/mrlnlms)*
+*Desenvolvido por [\@mrlnlms](https://github.com/mrlnlms)*
