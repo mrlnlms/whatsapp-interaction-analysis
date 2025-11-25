@@ -1,0 +1,262 @@
+---
+title: "Feature Engineering"
+subtitle: "Criação de variáveis derivadas"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Código"
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+jupyter: python3
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+from pathlib import Path
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, str(Path.cwd().parent / 'src'))
+
+from config import PATHS
+
+print("✅ Setup concluído")
+print(f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook cria **variáveis derivadas** a partir do dataset base gerado pelo wrangling.
+
+O objetivo é enriquecer os dados com features que permitam análises mais profundas sobre padrões de comunicação.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+
+# Carrega dataset principal
+INPUT_FILE = PATHS['processed'] / 'messages.parquet'
+
+# Alternativa CSV:
+# INPUT_FILE = PATHS['processed'] / 'messages.csv'
+
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Dataset carregado: {len(df):,} mensagens")
+print(f"📅 Período: {df['timestamp'].min()} → {df['timestamp'].max()}")
+print(f"📁 Colunas: {list(df.columns)}")
+```
+
+```{python}
+#| label: preview-data
+
+df.head()
+```
+
+------------------------------------------------------------------------
+
+# Features Temporais
+
+Variáveis derivadas do timestamp.
+
+```{python}
+#| label: temporal-features
+
+# TODO: Implementar
+
+# Exemplos de features temporais:
+# - ano, mes, dia, hora, minuto
+# - dia_semana (0=segunda, 6=domingo)
+# - fim_de_semana (bool)
+# - periodo_dia (madrugada, manhã, tarde, noite)
+# - trimestre
+# - semana_do_ano
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Features de Texto
+
+Variáveis derivadas do conteúdo da mensagem.
+
+```{python}
+#| label: text-features
+
+# TODO: Implementar
+
+# Exemplos de features de texto:
+# - tamanho_caracteres
+# - tamanho_palavras
+# - tem_emoji (bool)
+# - qtd_emojis
+# - tem_link (bool)
+# - tem_midia (bool)
+# - eh_resposta_rapida (< 1 min da anterior)
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Features de Conversação
+
+Variáveis sobre o fluxo da conversa.
+
+```{python}
+#| label: conversation-features
+
+# TODO: Implementar
+
+# Exemplos de features de conversação:
+# - tempo_desde_ultima_msg (segundos)
+# - eh_inicio_conversa (gap > X horas)
+# - sequencia_mesmo_remetente (quantas msgs seguidas)
+# - turno_conversa (identificador de "bloco" de conversa)
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Features de Sentimento
+
+Variáveis de análise de sentimento (se aplicável).
+
+```{python}
+#| label: sentiment-features
+
+# TODO: Implementar (opcional)
+
+# Exemplos de features de sentimento:
+# - sentimento_score (-1 a 1)
+# - sentimento_label (positivo, neutro, negativo)
+# - confianca_sentimento
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Features de Mídia
+
+Variáveis específicas para mensagens de mídia.
+
+```{python}
+#| label: media-features
+
+# TODO: Implementar
+
+# Exemplos de features de mídia:
+# - tipo_midia_simplificado (texto, audio, imagem, video, outro)
+# - duracao_audio (se disponível)
+# - tamanho_transcricao
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Features Agregadas por Período
+
+Variáveis agregadas (podem ser úteis para análises).
+
+```{python}
+#| label: aggregated-features
+
+# TODO: Implementar (opcional)
+
+# Exemplos de features agregadas:
+# - msgs_no_dia (total de msgs naquele dia)
+# - msgs_na_hora (total de msgs naquela hora)
+# - proporcao_remetente_dia (% de msgs daquele remetente no dia)
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Consolidação
+
+```{python}
+#| label: consolidate
+
+# TODO: Juntar todas as features no DataFrame
+
+# df_enriched = df.copy()
+# df_enriched = add_temporal_features(df_enriched)
+# df_enriched = add_text_features(df_enriched)
+# ...
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Exportação
+
+```{python}
+#| label: export
+
+# TODO: Exportar dataset enriquecido
+
+# OUTPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+# df_enriched.to_parquet(OUTPUT_FILE, index=False)
+
+# print(f"✅ Exportado: {OUTPUT_FILE}")
+# print(f"📊 Shape final: {df_enriched.shape}")
+
+pass
+```
+
+------------------------------------------------------------------------
+
+# Resumo das Features
+
+```{python}
+#| label: summary
+
+# TODO: Mostrar resumo das features criadas
+
+# Exemplo de tabela:
+# | Categoria | Features | Descrição |
+# |-----------|----------|-----------|
+# | Temporal  | 8        | ano, mes, dia, hora, ... |
+# | Texto     | 6        | tamanho, emojis, ... |
+# | ...       | ...      | ... |
+
+pass
+```
+
+------------------------------------------------------------------------
+
+::: callout-note
+## Próximos passos
+
+Após criar as features, os próximos notebooks são:
+
+-   **04-eda.qmd**: Análise exploratória das variáveis
+-   **05-advanced-analysis.qmd**: Clustering, MCA, PCA
+:::
