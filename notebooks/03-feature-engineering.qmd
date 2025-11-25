@@ -40,15 +40,15 @@ print("✅ Setup concluído")
 print(f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 ```
 
-------------------------------------------------------------------------
+---
 
 # Introdução
 
-Este notebook cria **variáveis derivadas** a partir do dataset base gerado pelo wrangling.
+Este notebook cria **variáveis derivadas** a partir do dataset base gerado pelo wrangling. 
 
 O objetivo é enriquecer os dados com features que permitam análises mais profundas sobre padrões de comunicação.
 
-------------------------------------------------------------------------
+---
 
 ## Carregamento dos Dados
 
@@ -74,7 +74,7 @@ print(f"📁 Colunas: {list(df.columns)}")
 df.head()
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features Temporais
 
@@ -96,7 +96,7 @@ Variáveis derivadas do timestamp.
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features de Texto
 
@@ -119,7 +119,7 @@ Variáveis derivadas do conteúdo da mensagem.
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features de Conversação
 
@@ -139,7 +139,7 @@ Variáveis sobre o fluxo da conversa.
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features de Sentimento
 
@@ -158,7 +158,7 @@ Variáveis de análise de sentimento (se aplicável).
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features de Mídia
 
@@ -177,7 +177,7 @@ Variáveis específicas para mensagens de mídia.
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Features Agregadas por Período
 
@@ -196,7 +196,7 @@ Variáveis agregadas (podem ser úteis para análises).
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Consolidação
 
@@ -213,7 +213,7 @@ pass
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Exportação
 
@@ -231,7 +231,7 @@ pass
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
 # Resumo das Features
 
@@ -250,13 +250,13 @@ pass
 pass
 ```
 
-------------------------------------------------------------------------
+---
 
-::: callout-note
+::: {.callout-note}
 ## Próximos passos
 
 Após criar as features, os próximos notebooks são:
 
--   **04-eda.qmd**: Análise exploratória das variáveis
--   **05-advanced-analysis.qmd**: Clustering, MCA, PCA
+- **04-eda.qmd**: Análise exploratória das variáveis
+- **05-advanced-analysis.qmd**: Clustering, MCA, PCA
 :::
