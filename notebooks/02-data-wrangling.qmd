@@ -1,0 +1,439 @@
+---
+title: "Data Wrangling"
+subtitle: "Parsing, classificação, mídia e enriquecimento"
+author: "Marlon L."
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import sys
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+import pandas as pd
+
+# Carrega .env e adiciona src ao path
+load_dotenv()
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+from wrangling import run_wrangling_pipeline, WRANGLING_STEPS, get_export_summary
+
+print(f"📁 Projeto: {PROJECT_ROOT}")
+```
+
+# Data Wrangling
+
+Com o arquivo limpo gerado no [Data Cleaning](01-data-cleaning.qmd), esta etapa transforma o TXT em um DataFrame estruturado, vincula arquivos de mídia, integra transcrições e exporta os dados enriquecidos.
+
+## Objetivo
+
+Transformar o arquivo TXT limpo em dados estruturados e enriquecidos:
+
+-   ✅ Parsing: TXT → DataFrame
+-   ✅ Classificação: Identificar tipos de mensagem
+-   ✅ Mídia: Vincular arquivos físicos
+-   ✅ Transcrição: Integrar transcrições existentes
+-   ✅ Enriquecimento: Substituir mídias por transcrições
+-   ✅ Exportação: CSV + TXTs de corpus
+
+------------------------------------------------------------------------
+
+## Configuração do Pipeline
+
+```{python}
+#| label: pipeline-config
+#| code-fold: false
+
+# =============================================================================
+# 🔧 CONFIGURAÇÃO DO PIPELINE
+#
+# Etapas disponíveis:
+#   - 'parse'          : TXT → DataFrame (agregar multilinha)
+#   - 'classify'       : Classificar tipo de mensagem
+#   - 'media'          : Vincular arquivos físicos de mídia
+#   - 'transcriptions' : Integrar transcrições existentes
+#   - 'enrich'         : Substituir mídias por transcrições
+#   - 'export'         : Gerar CSV + TXTs de corpus
+# =============================================================================
+
+PIPELINE_ORDER = [
+    'parse',
+    'classify',
+    'media',
+    'transcriptions',
+    'enrich',
+    'export',
+]
+
+# =============================================================================
+# 📁 CONFIGURAÇÃO DE PATHS
+# =============================================================================
+
+# Arquivo de entrada (saída do cleaning)
+INPUT_FILE = PATHS['interim'] / 'raw-data_cln7.txt'
+
+# Diretório de saída
+OUTPUT_DIR = PATHS['processed']
+
+# Diretório com arquivos de mídia
+MEDIA_DIR = PATHS['raw'].parent / 'media'
+
+# Arquivo com transcrições existentes (None para pular)
+TRANSCRIPTION_FILE = None  # ou Path('caminho/para/transcriptions.csv')
+
+print(f"📄 Entrada: {INPUT_FILE}")
+print(f"📂 Saída: {OUTPUT_DIR}")
+print(f"🎬 Mídia: {MEDIA_DIR}")
+print(f"🎙️ Transcrições: {TRANSCRIPTION_FILE or 'Não configurado'}")
+```
+
+------------------------------------------------------------------------
+
+## Execução do Pipeline
+
+```{python}
+#| label: execute-pipeline
+
+# Executa o pipeline
+result = run_wrangling_pipeline(
+    order=PIPELINE_ORDER,
+    input_file=INPUT_FILE,
+    output_dir=OUTPUT_DIR,
+    media_dir=MEDIA_DIR,
+    transcription_file=TRANSCRIPTION_FILE,
+    show_progress=True
+)
+
+# Extrai resultados
+df = result['df']
+outputs = result['outputs']
+stats = result['stats']
+```
+
+------------------------------------------------------------------------
+
+## Pipeline de Transformação
+
+```{python}
+#| label: render-pipeline
+#| output: asis
+#| echo: false
+
+for i, step_id in enumerate(PIPELINE_ORDER):
+    step = WRANGLING_STEPS[step_id]
+    step_num = i + 1
+    
+    print(f'''<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+▸ Etapa {step_num}: {step['name']}
+</summary>
+
+**Sobre esta transformação:**
+
+{step['description']}
+
+</details>
+''')
+```
+
+------------------------------------------------------------------------
+
+## Estatísticas do Processamento
+
+```{python}
+#| label: show-stats
+#| echo: false
+
+print("📊 Estatísticas do Pipeline:\n")
+
+if 'total_linhas_txt' in stats:
+    print(f"   • Linhas no TXT: {stats['total_linhas_txt']:,}")
+if 'total_mensagens' in stats:
+    print(f"   • Mensagens parseadas: {stats['total_mensagens']:,}")
+    ratio = stats['total_linhas_txt'] / stats['total_mensagens']
+    print(f"   • Razão linhas/mensagem: {ratio:.2f}")
+
+if 'tipos_mensagem' in stats:
+    print(f"\n📋 Tipos de mensagem: {len(stats['tipos_mensagem'])}")
+
+if 'midias_anexadas' in stats:
+    print(f"\n🎬 Mídias:")
+    print(f"   • Anexadas: {stats['midias_anexadas']:,}")
+    print(f"   • Encontradas: {stats.get('midias_existentes', 0):,}")
+
+if 'com_transcricao' in stats:
+    print(f"\n🎙️ Transcrições: {stats['com_transcricao']:,}")
+
+if 'mensagens_enriquecidas' in stats:
+    print(f"\n✨ Mensagens enriquecidas: {stats['mensagens_enriquecidas']:,}")
+```
+
+------------------------------------------------------------------------
+
+## Distribuição de Tipos de Mensagem
+
+```{python}
+#| label: show-message-types
+#| echo: false
+
+if 'tipo_mensagem' in df.columns:
+    print("📊 Distribuição por tipo de mensagem:\n")
+    
+    type_counts = df['tipo_mensagem'].value_counts()
+    
+    for msg_type, count in type_counts.items():
+        pct = (count / len(df)) * 100
+        print(f"   • {msg_type:<25} {count:>6,} ({pct:>5.2f}%)")
+```
+
+```{python}
+#| label: crosstab-type-sender
+#| echo: false
+
+if 'tipo_mensagem' in df.columns and 'remetente' in df.columns:
+    print("\n📊 Distribuição por tipo e remetente:")
+    pd.crosstab(df['tipo_mensagem'], df['remetente'], margins=True)
+```
+
+------------------------------------------------------------------------
+
+## Arquivos Gerados
+
+::: panel-tabset
+## Datasets
+
+```{python}
+#| label: show-datasets
+#| echo: false
+
+from wrangling import get_export_summary
+
+if 'export_summary' in stats:
+    print("📦 Datasets exportados:\n")
+    df_summary = get_export_summary(stats['export_summary'])
+    display(df_summary.style.hide(axis='index'))
+    
+    # Comparação
+    if 'csv_full' in stats['export_summary'] and 'parquet' in stats['export_summary']:
+        csv_size = stats['export_summary']['csv_full']['size_mb']
+        parquet_size = stats['export_summary']['parquet']['size_mb']
+        ratio = csv_size / parquet_size
+        savings = (1 - parquet_size / csv_size) * 100
+        
+        print(f"\n💡 Comparação:")
+        print(f"   • CSV Full: {csv_size:.2f} MB (17 colunas)")
+        print(f"   • Parquet:  {parquet_size:.2f} MB (8 colunas)")
+        print(f"   • Economia: {savings:.1f}% ({ratio:.1f}x menor)")
+```
+
+## Corpus (TXT)
+
+```{python}
+#| label: show-corpus
+#| echo: false
+
+print("📄 Arquivos de corpus:\n")
+
+corpus_keys = ['chat_complete', 'chat_p1', 'chat_p2', 'corpus_full', 'corpus_p1', 'corpus_p2']
+
+for key in corpus_keys:
+    if key in outputs:
+        path = outputs[key]
+        size = os.path.getsize(path) if os.path.exists(path) else 0
+        size_mb = size / (1024 * 1024)
+        print(f"   • {path.name:<25} {size_mb:>6.2f} MB")
+```
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-tip icon="false" collapse="false"}
+## 🎯 Resultado Final
+
+```{python}
+#| echo: false
+
+print(f"📊 DataFrame final: {len(df):,} mensagens × {len(df.columns)} colunas")
+print(f"📋 Colunas: {', '.join(df.columns[:10])}...")
+print(f"\n📅 Período: {df['timestamp'].min()} até {df['timestamp'].max()}")
+
+if 'remetente' in df.columns:
+    print(f"\n👥 Participantes:")
+    for rem, count in df['remetente'].value_counts().items():
+        print(f"   • {rem}: {count:,} mensagens ({count/len(df)*100:.1f}%)")
+
+print(f"\n✅ Arquivo principal: {outputs.get('csv', 'N/A')}")
+```
+:::
+
+------------------------------------------------------------------------
+
+## Preview dos Dados
+
+```{python}
+#| label: preview-data
+#| echo: false
+
+# Seleciona colunas para preview
+preview_cols = ['timestamp', 'remetente', 'tipo_mensagem', 'conteudo']
+if 'conteudo_enriquecido' in df.columns:
+    preview_cols.append('conteudo_enriquecido')
+
+print("🔍 Primeiras mensagens:\n")
+df[preview_cols].head(10)
+```
+
+```{python}
+#| label: preview-transcribed
+#| echo: false
+
+if 'tem_transcricao' in df.columns:
+    df_trans = df[df['tem_transcricao'] == True]
+    
+    if len(df_trans) > 0:
+        print(f"\n🎙️ Exemplos de mensagens transcritas ({len(df_trans)} total):\n")
+        
+        preview_cols = ['timestamp', 'remetente', 'tipo_arquivo', 'conteudo_enriquecido']
+        df_trans[preview_cols].head(5)
+```
+
+------------------------------------------------------------------------
+
+## 📁 Glossário de Arquivos Gerados
+
+Esta seção documenta todos os arquivos gerados pelo pipeline, organizados por função e utilidade.
+
+::: panel-tabset
+## 🎯 Arquivos Principais
+
+Estes são os arquivos que você vai usar nas próximas etapas (Feature Engineering, Análises):
+
+| Arquivo | Formato | Colunas | Uso |
+|-------------------|-------------------|-------------------|-----------------|
+| `messages.parquet` | Parquet | 8 | **Dataset principal para análise.** Tipos otimizados, leitura rápida, menor tamanho. Use este! |
+| `messages.csv` | CSV | 8 | Alternativa ao Parquet. Útil para abrir no Excel ou compartilhar. |
+| `chat_complete.txt` | TXT | — | Chat completo com transcrições. Formato: `DD/MM/YY HH:MM:SS Remetente: Conteúdo` |
+
+**Colunas do dataset principal (8):**
+
+```         
+timestamp, remetente, tipo_mensagem, conteudo_enriquecido,
+arquivo, tem_transcricao, transcricao, is_synthetic
+```
+
+## 📊 Corpus para NLP
+
+Arquivos de texto puro para análises de linguagem natural:
+
+| Arquivo | Descrição | Uso |
+|-------------------------|------------------------------|-----------------|
+| `corpus_full.txt` | Todo o conteúdo, sem metadados | Treinar modelos, word clouds, análise de vocabulário |
+| `corpus_p1.txt` | Apenas mensagens de P1 | Análise individual, comparação de estilos |
+| `corpus_p2.txt` | Apenas mensagens de P2 | Análise individual, comparação de estilos |
+| `chat_p1.txt` | Mensagens de P1 com timestamp | Análise temporal por pessoa |
+| `chat_p2.txt` | Mensagens de P2 com timestamp | Análise temporal por pessoa |
+
+## 🔍 Debug/Auditoria
+
+Arquivos com informações completas para verificação e debug:
+
+| Arquivo | Colunas | Descrição |
+|-----------------------|-----------------------|---------------------------|
+| `messages_full.csv` | 17 | Todas as colunas, incluindo intermediárias (`linha_original`, `arquivo_path`, etc.) |
+| `messages_enriched.csv` | 17 | Legado — mesmo conteúdo que `messages_full.csv` |
+
+**Colunas extras (debug):**
+
+```         
+linha_original    → Referência ao TXT original
+data, hora        → Redundante (já tem timestamp)
+arquivo_existe    → Bool de verificação
+arquivo_path      → Path completo do arquivo
+extensao          → Derivável de 'arquivo'
+tipo_arquivo      → Derivável de 'arquivo'
+transcription_status → Status da API
+```
+
+## 📥 Dados de Entrada
+
+Arquivos que alimentaram o pipeline (não são outputs, mas ficam na pasta):
+
+| Arquivo              | Descrição                                     |
+|----------------------|-----------------------------------------------|
+| `transcriptions.csv` | Transcrições de áudio/vídeo (input da Fase 4) |
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-tip icon="false"}
+## 💡 Recomendação de Uso
+
+**Para as próximas etapas do projeto, use:**
+
+``` python
+# Carrega dataset principal (rápido, tipos corretos)
+df = pd.read_parquet('data/processed/messages.parquet')
+
+# Ou se preferir CSV
+df = pd.read_csv('data/processed/messages.csv')
+```
+
+**Para análises de NLP:**
+
+``` python
+# Texto completo
+with open('data/processed/corpus_full.txt', 'r') as f:
+    texto = f.read()
+
+# Por participante
+with open('data/processed/corpus_p1.txt', 'r') as f:
+    texto_p1 = f.read()
+```
+
+**Arquivos que podem ser deletados após verificação:**
+
+-   `messages_enriched.csv` (duplicado de `messages_full.csv`)
+-   `messages_full.csv` (só precisa se for debugar)
+:::
+
+------------------------------------------------------------------------
+
+## Exportação Manual (Opcional)
+
+::: {.callout-note appearance="simple" collapse="true"}
+### 📋 Como re-exportar com configurações diferentes
+
+``` python
+from wrangling import export_corpus_files, export_to_csv
+
+# Re-exportar só texto (sem tags de mídia)
+df_text = df[~df['tipo_mensagem'].str.contains('omitted|attached')]
+export_corpus_files(df_text, OUTPUT_DIR / 'text_only', use_enriched=False)
+
+# Exportar CSV com colunas específicas
+cols = ['timestamp', 'remetente', 'conteudo', 'tipo_mensagem']
+export_to_csv(df, OUTPUT_DIR / 'messages_minimal.csv', columns=cols)
+```
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com os dados estruturados e enriquecidos, seguimos para:
+
+1.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
+2.  [**Análises Descritivas**](04-descriptive-analysis.qmd) — Estatísticas e visualizações

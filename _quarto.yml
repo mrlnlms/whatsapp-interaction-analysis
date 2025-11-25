@@ -69,5 +69,6 @@ execute:
   warning: false
   message: false
   echo: true
-  freeze: auto
+  freeze: false
   jupyter: whatsapp-ds
+  daemon: false
