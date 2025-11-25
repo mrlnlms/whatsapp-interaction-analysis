@@ -1,0 +1,514 @@
+---
+title: "Data Cleaning"
+subtitle: "Limpeza e normalização do arquivo bruto"
+author: "Marlon L."
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import sys
+import re
+import os
+from dotenv import load_dotenv
+import pandas as pd
+from pathlib import Path
+
+# Carrega .env e adiciona src ao path
+load_dotenv()
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+from utils import (
+    audit_transformation, 
+    audit_pipeline, 
+    format_audit_table, 
+    format_summary_table,
+    generate_impact_analysis
+)
+
+# Define arquivos
+RAW_FILE = PATHS['raw']
+INTERIM_DIR = PATHS['interim']
+
+# Garante que diretório interim existe
+INTERIM_DIR.mkdir(parents=True, exist_ok=True)
+
+print(f"📁 Projeto: {PROJECT_ROOT}")
+print(f"📄 Arquivo de entrada: {RAW_FILE.name}")
+print(f"📂 Diretório de saída: {INTERIM_DIR}")
+```
+
+# Data Cleaning
+
+Com base nas descobertas documentadas no [Data Profiling](00-data-profiling.qmd), esta etapa implementa as transformações de limpeza necessárias para preparar o arquivo bruto para parsing e análise.
+
+## Objetivo
+
+Transformar o arquivo bruto exportado do WhatsApp em um arquivo limpo e otimizado, removendo:
+
+-   ✅ Caracteres invisíveis (U+200E)
+-   ✅ Timestamps vazios (múltiplas mídias)
+-   ✅ Linhas vazias
+-   ✅ Espaços em branco excessivos
+-   ✅ Nomes de participantes (anonimização)
+-   ✅ Delimitadores redundantes de timestamp
+-   ✅ Indentação desnecessária em linhas de continuação
+
+------------------------------------------------------------------------
+
+## Definição das Funções de Transformação
+
+```{python}
+#| label: define-functions
+#| code-fold: true
+#| code-summary: "Ver funções de transformação"
+
+# =============================================================================
+# FUNÇÕES DE TRANSFORMAÇÃO
+# Cada função recebe (input_file, output_file) e retorna métricas
+# =============================================================================
+
+def remove_u200e(input_file, output_file):
+    """Remove todas as ocorrências do caractere invisível U+200E."""
+    invisible_char = '\u200e'
+    total = 0
+    
+    with open(input_file, 'r', encoding='utf-8') as f_in:
+        with open(output_file, 'w', encoding='utf-8') as f_out:
+            for line in f_in:
+                total += line.count(invisible_char)
+                f_out.write(line.replace(invisible_char, ''))
+    
+    return {'caracteres_removidos': total}
+
+
+def remove_empty_timestamps(input_file, output_file):
+    """Remove timestamps vazios seguidos de múltiplas mídias consecutivas."""
+    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    media_patterns = ['<attached:', 'audio omitted', 'image omitted', 'video omitted', 
+                      'sticker omitted', 'GIF omitted', 'document omitted']
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    skip = set()
+    
+    for i in range(len(lines) - 2):
+        curr, next1, next2 = lines[i].strip(), lines[i+1].strip(), lines[i+2].strip()
+        
+        if (re.match(timestamp_pattern, curr) and curr.endswith(':') and 
+            re.match(timestamp_pattern, next1)):
+            if (any(p in next1 for p in media_patterns) and 
+                re.match(timestamp_pattern, next2) and 
+                any(p in next2 for p in media_patterns)):
+                skip.add(i)
+    
+    cleaned = [l for i, l in enumerate(lines) if i not in skip]
+    open(output_file, 'w', encoding='utf-8').writelines(cleaned)
+    
+    return {'linhas_removidas': len(skip)}
+
+
+def remove_empty_lines(input_file, output_file):
+    """Remove linhas completamente vazias."""
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned = [l for l in lines if l != '\n']
+    open(output_file, 'w', encoding='utf-8').writelines(cleaned)
+    
+    return {'linhas_removidas': len(lines) - len(cleaned)}
+
+
+def normalize_whitespace(input_file, output_file):
+    """Normaliza espaços em branco internos, preservando indentação."""
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    cleaned = []
+    
+    for line in lines:
+        line = line.rstrip() + '\n'
+        indent = len(line) - len(line.lstrip())
+        content = line[indent:].replace('\t', ' ')
+        content = re.sub(r' {2,}', ' ', content)
+        cleaned.append(line[:indent] + content)
+    
+    open(output_file, 'w', encoding='utf-8').writelines(cleaned)
+    
+    orig = sum(len(l.encode('utf-8')) for l in lines)
+    clean = sum(len(l.encode('utf-8')) for l in cleaned)
+    return {'bytes_economizados': orig - clean}
+
+
+def anonymize_participants(input_file, output_file):
+    """Substitui nomes por identificadores anônimos."""
+    mapping = {'Marlon': 'P1', 'Lê 🖤': 'P2'}
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    result = []
+    counts = {k: 0 for k in mapping}
+    
+    for line in lines:
+        for name, anon in mapping.items():
+            if f'] {name}:' in line:
+                line = line.replace(f'] {name}:', f'] {anon}:')
+                counts[name] += 1
+        result.append(line)
+    
+    open(output_file, 'w', encoding='utf-8').writelines(result)
+    return {'substituicoes': counts}
+
+
+def optimize_timestamps(input_file, output_file):
+    """Remove delimitadores redundantes do timestamp."""
+    pattern = r'^\[(\d{2}/\d{2}/\d{2}), (\d{2}:\d{2}:\d{2})\]'
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    result = []
+    count = 0
+    
+    for line in lines:
+        match = re.match(pattern, line)
+        if match:
+            result.append(f"{match.group(1)} {match.group(2)}" + line[len(match.group(0)):])
+            count += 1
+        else:
+            result.append(line)
+    
+    open(output_file, 'w', encoding='utf-8').writelines(result)
+    return {'timestamps_otimizados': count}
+
+
+def normalize_indentation(input_file, output_file):
+    """Remove indentação de linhas de continuação."""
+    timestamp_pattern = r'^\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
+    
+    lines = open(input_file, 'r', encoding='utf-8').readlines()
+    result = []
+    spaces = 0
+    
+    for line in lines:
+        if not re.match(timestamp_pattern, line):
+            orig_len = len(line)
+            line = line.lstrip(' \t')
+            spaces += orig_len - len(line)
+        result.append(line)
+    
+    open(output_file, 'w', encoding='utf-8').writelines(result)
+    return {'espacos_removidos': spaces}
+```
+
+------------------------------------------------------------------------
+
+## Configuração do Pipeline
+
+```{python}
+#| label: pipeline-config
+#| code-fold: false
+
+# =============================================================================
+# 🔧 CONFIGURAÇÃO DO PIPELINE
+# Para mudar a ordem: reordene os itens da lista
+# Para adicionar etapa: adicione um novo dict com 'id', 'name', 'function', 'description'
+# =============================================================================
+
+PIPELINE = [
+    {
+        'id': 'u200e',
+        'name': 'Remoção U+200E',
+        'function': remove_u200e,
+        'description': '''O caractere `U+200E` (Left-to-Right Mark) é um caractere de formatação invisível 
+usado para controle de direção de texto. O WhatsApp o insere sistematicamente 
+durante a exportação, mas não carrega informação semântica útil.
+
+**Impacto identificado:** ~48.700 ocorrências, ~243 KB, presente em ~50% das linhas.'''
+    },
+    {
+        'id': 'anonymize',
+        'name': 'Anonimização',
+        'function': anonymize_participants,
+        'description': '''Substitui nomes dos participantes por identificadores genéricos:
+- Marlon → P1
+- Lê 🖤 → P2'''
+    },
+    {
+        'id': 'empty_timestamps',
+        'name': 'Remoção timestamps vazios',
+        'function': remove_empty_timestamps,
+        'description': '''Quando múltiplas mídias são enviadas simultaneamente, o WhatsApp registra uma 
+linha com timestamp vazio seguida das mídias. A primeira linha é redundante.'''
+    },
+    {
+        'id': 'empty_lines',
+        'name': 'Remoção linhas vazias',
+        'function': remove_empty_lines,
+        'description': '''Linhas completamente vazias (apenas `\\n`) aparecem entre mensagens e não 
+carregam informação. Serão removidas preservando a formatação interna.'''
+    },
+    {
+        'id': 'whitespace',
+        'name': 'Normalização espaços',
+        'function': normalize_whitespace,
+        'description': '''Normaliza espaços em branco internos:
+- Múltiplos espaços → espaço único
+- Tabs → espaço único  
+- Trailing whitespace → removido
+- **Preserva:** Indentação inicial'''
+    },
+    {
+        'id': 'timestamps',
+        'name': 'Otimização timestamps',
+        'function': optimize_timestamps,
+        'description': '''Remove delimitadores redundantes para facilitar o parsing:
+- De: `[28/11/24, 19:30:05] P1: Mensagem`
+- Para: `28/11/24 19:30:05 P1: Mensagem`'''
+    },
+    {
+        'id': 'indentation',
+        'name': 'Normalização indentação',
+        'function': normalize_indentation,
+        'description': '''Remove espaços/tabs iniciais de linhas de continuação (mensagens multilinha).
+Esses espaços são visuais e não carregam informação semântica.'''
+    },
+]
+
+print(f"📋 Pipeline configurado com {len(PIPELINE)} etapas:")
+for i, step in enumerate(PIPELINE, 1):
+    print(f"   {i}. {step['name']}")
+```
+
+------------------------------------------------------------------------
+
+## Execução do Pipeline
+
+```{python}
+#| label: execute-pipeline
+#| output: false
+
+# =============================================================================
+# EXECUÇÃO AUTOMÁTICA DO PIPELINE
+# =============================================================================
+
+outputs = {}  # Guarda paths dos arquivos gerados
+audits = {}   # Guarda resultados das auditorias
+metrics = {}  # Guarda métricas retornadas pelas funções
+
+# Arquivo inicial
+previous_output = RAW_FILE
+
+for i, step in enumerate(PIPELINE):
+    step_num = i + 1
+    step_id = step['id']
+    
+    # Define output desta etapa
+    output_file = INTERIM_DIR / f'raw-data_cln{step_num}.txt'
+    
+    # Executa transformação
+    step_metrics = step['function'](previous_output, output_file)
+    
+    # Auditoria
+    audit_result = audit_transformation(
+        previous_output, 
+        output_file, 
+        step['name'],
+        show_output=False
+    )
+    
+    # Guarda resultados
+    outputs[step_id] = output_file
+    audits[step_id] = audit_result
+    metrics[step_id] = step_metrics
+    
+    # Próxima etapa usa este output
+    previous_output = output_file
+
+# Arquivo final
+FINAL_OUTPUT = previous_output
+```
+
+------------------------------------------------------------------------
+
+## Pipeline de Transformação
+
+```{python}
+#| label: render-pipeline
+#| output: asis
+#| echo: false
+
+# Renderiza cada etapa como um accordion
+for i, step in enumerate(PIPELINE):
+    step_id = step['id']
+    step_num = i + 1
+    audit = audits[step_id]
+    step_metrics = metrics[step_id]
+    
+    print(f'''<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+▸ Etapa {step_num}: {step['name']}
+</summary>
+
+**Sobre esta transformação:**
+
+{step['description']}
+
+---
+
+**Resultado:**
+''')
+    
+    # Mostra métricas específicas
+    for key, value in step_metrics.items():
+        if isinstance(value, dict):
+            for k, v in value.items():
+                print(f"- {k}: {v:,}")
+        else:
+            print(f"- {key.replace('_', ' ').title()}: {value:,}")
+    
+    # Mostra auditoria resumida
+    print(f'''
+**Auditoria:**
+
+| Métrica | Valor |
+|---------|-------|
+| Entrada | {audit['input']['size_formatted']} ({audit['input']['total_lines']:,} linhas) |
+| Saída | {audit['output']['size_formatted']} ({audit['output']['total_lines']:,} linhas) |
+| Redução | {audit['delta_bytes']:,} bytes ({audit['delta_percent']:.2f}%) |
+
+</details>
+''')
+```
+
+------------------------------------------------------------------------
+
+## Auditoria Final do Pipeline
+
+```{python}
+#| label: final-audit
+#| output: false
+
+# Monta lista de stages para auditoria completa
+stages = [{'file': str(RAW_FILE), 'name': '📄 Original (raw-data.txt)'}]
+
+for i, step in enumerate(PIPELINE):
+    stages.append({
+        'file': str(outputs[step['id']]),
+        'name': f"└─ {step['name']}"
+    })
+
+df_audit, totals = audit_pipeline(stages, show_output=False)
+
+# Lista de audits na ordem do pipeline
+audit_list = [audits[step['id']] for step in PIPELINE]
+```
+
+::: panel-tabset
+## Comparação de Estágios
+
+```{python}
+#| label: show-audit-table
+#| echo: false
+
+format_audit_table(df_audit, include_chars=True).style.hide(axis='index')
+```
+
+## Resumo por Etapa
+
+```{python}
+#| label: show-summary
+#| echo: false
+
+format_summary_table(audit_list).style.hide(axis='index')
+```
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-tip icon="false" collapse="false"}
+## 🎯 Resultado Final
+
+```{python}
+#| echo: false
+
+print(f"📁 Arquivo original: {totals['original_formatted']}")
+print(f"📁 Arquivo final: {totals['final_formatted']}")
+print(f"📦 Redução total: {totals['total_bytes']:,} bytes ({totals['total_percent']:.2f}%)")
+print(f"📉 Linhas removidas: {totals['total_lines']:,}")
+print(f"🔤 Caracteres removidos: {totals['total_chars']:,}")
+print(f"✅ Arquivo de saída: {FINAL_OUTPUT.name}")
+```
+
+O arquivo limpo está pronto para a próxima etapa: **parsing e estruturação em DataFrame**.
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-note icon="false" collapse="false"}
+## 📊 Reflexão: Impacto no Dataset Enriquecido
+
+```{python}
+#| echo: false
+
+impact = generate_impact_analysis(totals, enrichment_factor=8.0)
+
+print(f"📁 Arquivo bruto:")
+print(f"   • Original: {impact['original_mb']:.2f} MB")
+print(f"   • Após limpeza: {impact['final_mb']:.2f} MB")
+print(f"   • Redução: {impact['reduction_pct']:.2f}%\n")
+
+print(f"📈 Projeção para dataset enriquecido (fator ~{impact['enrichment_factor']:.0f}x):")
+print(f"   • Sem otimização: ~{impact['projected_original_mb']:.1f} MB")
+print(f"   • Com otimização: ~{impact['projected_optimized_mb']:.1f} MB")
+print(f"   • Economia projetada: ~{impact['projected_savings_mb']:.1f} MB\n")
+
+print(f"💡 Cada caractere removido agora significa menos dados para:")
+print(f"   • Armazenar em disco e memória")
+print(f"   • Processar em operações de NLP")
+print(f"   • Transferir entre sistemas")
+print(f"   • Incluir em embeddings e modelos")
+```
+
+A limpeza realizada nesta etapa não apenas organiza os dados, mas **reduz significativamente o custo computacional** de todas as operações subsequentes.
+:::
+
+------------------------------------------------------------------------
+
+## Arquivo de Saída
+
+O arquivo final agora possui:
+
+-   ✅ Formato otimizado: `DD/MM/YY HH:MM:SS Remetente: Conteúdo`
+-   ✅ Participantes anonimizados (P1, P2)
+-   ✅ Sem caracteres invisíveis
+-   ✅ Sem linhas/timestamps vazios
+-   ✅ Espaços e indentação normalizados
+
+::: {.callout-note appearance="simple" collapse="true"}
+### 📋 Regex para parsing do arquivo limpo
+
+``` python
+# Padrão para identificar início de mensagem
+message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
+
+# Grupos de captura:
+# 1: Data (DD/MM/YY)
+# 2: Hora (HH:MM:SS)
+# 3: Remetente (P1 ou P2)
+# 4: Conteúdo da mensagem
+```
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com o arquivo limpo, seguimos para:
+
+1.  [**Data Wrangling**](02-data-wrangling.qmd) — Parsing, agregação de multilinha, vinculação de mídia
+2.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
