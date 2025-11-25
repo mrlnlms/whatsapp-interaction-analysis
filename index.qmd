@@ -9,70 +9,51 @@ format:
     theme: cosmo
 ---
 
-## Sobre este projeto
+# Introdução
 
-Este projeto transforma um export bruto do WhatsApp (~92K mensagens, ~5MB) em um dataset estruturado para análise de padrões de comunicação ao longo de 1 ano de relacionamento.
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas.
 
-O pipeline completo demonstra práticas de **Data Engineering** e **Data Science**, desde a investigação inicial do arquivo bruto até análises avançadas com clustering e visualizações.
+## Contexto
 
----
+Como estudante de ciência de dados e interessado em análises qualitativas e aprendizado de novas ferramentas, fazer um projeto de data-wrangling com Python nestes dados, incluindo transcrição de mídias e enriquecimento da base, ou seja, dos dados brutos, documentando todo processo usando Quarto (.qmd) parece uma abordagem desafiadora e profissional.
 
-## Pipeline de Dados
+Do ponto de vista técnico, a escolha de trabalhar com este formato semi-estruturado apresentam *edge-cases* bem especificos como caracteres especiais e emojis, tags ou textos de marcação para certos tipos de interação (envio de mensagem de áudio, vídeo, arquivos etc), mensagens fragmentadas, formatos inconsistentes entre outras coisas que iremos explorar tratar neste projeto.
 
-```{mermaid}
-flowchart LR
-    subgraph PREP["DATA PREPARATION"]
-        A[Data Profiling] --> B[Data Cleaning]
-        B --> C[Data Wrangling]
-        C --> D[Feature Engineering]
-    end
-    
-    subgraph ANALYSIS["DATA ANALYSIS"]
-        E[EDA] --> F[Descritiva]
-        F --> G[Avançada]
-    end
-    
-    PREP --> ANALYSIS
-    ANALYSIS --> H[Comunicação]
-```
+## Objetivo
 
----
+Transformar um export bruto do WhatsApp (`_chat.txt`) em um dataset estruturado para realizar analises de forma reprodutível, passando por todas as fase de preparação, agregação e enriquecimento dos dados até às suas análises e visualizações. Neste relatório, documentarei cada etapa do processo da pipeline de dados criado exclusivamente para este cenário.
 
-## Documentos do Projeto
+![Pipeline de dados completo demonstra práticas de Data Engineering e Data Science, desde a investigação inicial do arquivo bruto até análises avançadas.](./assets/images/ds-pipeline-to-insight.png){fig-align="center"}
+
+::: callout-note
+### Estudo de caso
+
+Como estudo de caso vou utilizar o histórico de \~14 meses de mensagens entre minha namorada e eu (\~92K mensagens, \~5MB). Para além do aprendizado em ciência de dados e *analytics*, essa escolha se deu por conta de uma ideia que tive de fazer análises textuais sobre nosso primeiro ano de namoro, extraindo visualizações e insights para criar um "*presente digital analítico*" do nosso 1º ano de namoro 😍 🥰. Após preparar os dados iremos vincular as datas de quando estivemos juntos durante este um ano (\~10 viagens em 2025) às mensagens daquele período.
+
+Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riqueza, como a transcrição automatizada de áudios e vídeos, padronizando toda mídia possível em formato texto.
+:::
+
+# Navegação
 
 | Fase | Documento | Descrição |
-|------|-----------|-----------|
-| — | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo bruto |
+|------------------|---------------------------|---------------------------|
+| Exploration | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo bruto |
 | Cleaning | [01-data-cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | Wrangling | [02-data-wrangling](notebooks/02-data-wrangling.qmd) | Parsing, vinculação de mídia, transcrição |
 | Features | [03-feature-engineering](notebooks/03-feature-engineering.qmd) | Criação de variáveis derivadas |
-| Analysis | [04-eda](notebooks/04-eda.qmd) | Análise exploratória |
-| Analysis | [05-advanced-analysis](notebooks/05-advanced-analysis.qmd) | Clustering, PCA, radar charts |
+| Analysis | [04-eda](notebooks/04-eda.qmd) | Descritivos das variáveis, tabelas e gráficos |
+| Analysis | [05-advanced-analysis](notebooks/05-advanced-analysis.qmd) | Clustering, MCA, séries temporais |
 
----
+## Documentos úteis
 
-## Dataset Final
+-   [Dicionário de Dados](docs/data-dictionary.md)
+-   [Como organizar seus dados](data/README.md)
 
-| Métrica | Valor |
-|---------|-------|
-| **Mensagens** | 91.924 |
-| **Features** | 35 |
-| **Período** | Out/2024 — Out/2025 |
-| **Participantes** | 2 (anonimizados como P1, P2) |
+------------------------------------------------------------------------
 
-### Categorias de Features
+# Estrutura do Projeto
 
-- **Base:** timestamp, remetente, tipo_midia, conteudo
-- **Temporais:** dia_semana, periodo_dia, mes, ano, is_weekend
-- **Texto:** char_count, word_count, has_emoji, has_question, has_exclamation
-- **Conversacionais:** tempo_resposta, is_reply_quick, is_conversation_start
-- **Contextuais:** contexto_relacional, is_juntos, sentiment_score
-
----
-
-## Estrutura do Projeto
-
-```
+```         
 whatsapp-ds-analytics/
 ├── index.qmd                 # Este documento
 ├── assets/images/            # Diagramas e recursos estáticos
@@ -82,10 +63,3 @@ whatsapp-ds-analytics/
 ├── analysis/                 # Gráficos gerados (não versionado)
 └── docs/                     # Documentação adicional
 ```
-
----
-
-## Links Úteis
-
-- [Dicionário de Dados](docs/data-dictionary.md)
-- [Como organizar seus dados](data/README.md)

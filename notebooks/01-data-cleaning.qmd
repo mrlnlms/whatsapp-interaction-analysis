@@ -1,0 +1,274 @@
+---
+title: "Data Cleaning"
+subtitle: "Limpeza e normalização do arquivo bruto"
+author: "Marlon L."
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import sys
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Carrega .env e adiciona src ao path
+load_dotenv()
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+from cleaning import run_pipeline, CLEANING_STEPS
+from utils import format_audit_table, format_summary_table, generate_impact_analysis
+
+# Define arquivos
+RAW_FILE = PATHS['raw']
+INTERIM_DIR = PATHS['interim']
+
+print(f"📁 Projeto: {PROJECT_ROOT}")
+print(f"📄 Arquivo de entrada: {RAW_FILE.name}")
+print(f"📂 Diretório de saída: {INTERIM_DIR}")
+```
+
+# Data Cleaning
+
+Com base nas descobertas documentadas no [Data Profiling](00-data-profiling.qmd), esta etapa implementa as transformações de limpeza necessárias para preparar o arquivo bruto para parsing e análise.
+
+## Objetivo
+
+Transformar o arquivo bruto exportado do WhatsApp em um arquivo limpo e otimizado, removendo caracteres invisíveis, linhas vazias, normalizando espaços e anonimizando participantes.
+
+------------------------------------------------------------------------
+
+## Configuração e Execução do Pipeline
+
+```{python}
+#| label: pipeline-config
+#| code-fold: false
+
+# =============================================================================
+# 🔧 CONFIGURAÇÃO DO PIPELINE
+# 
+# Para mudar a ordem: reordene os itens da lista
+# Para remover etapa: remova o ID da lista
+# Para ver etapas disponíveis: print(list(CLEANING_STEPS.keys()))
+#
+# IDs disponíveis:
+#   - 'u200e'           : Remove caractere invisível U+200E
+#   - 'empty_timestamps': Remove timestamps vazios (múltiplas mídias)
+#   - 'empty_lines'     : Remove linhas vazias
+#   - 'whitespace'      : Normaliza espaços internos
+#   - 'anonymize'       : Anonimiza participantes (Marlon→P1, Lê 🖤→P2)
+#   - 'timestamps'      : Otimiza formato do timestamp
+#   - 'indentation'     : Remove indentação de linhas de continuação
+# =============================================================================
+
+PIPELINE_ORDER = [
+    'u200e',
+    'anonymize',
+    'timestamps',
+    'indentation',
+    'empty_lines',
+    'whitespace',
+    'empty_timestamps',
+]
+```
+
+```{python}
+#| label: execute-pipeline
+
+# Executa o pipeline
+result = run_pipeline(
+    order=PIPELINE_ORDER,
+    raw_file=RAW_FILE,
+    output_dir=INTERIM_DIR,
+    show_progress=True
+)
+
+# Extrai resultados para uso posterior
+outputs = result['outputs']
+audits = result['audits']
+metrics = result['metrics']
+df_audit = result['df_audit']
+totals = result['totals']
+FINAL_OUTPUT = result['final_output']
+```
+
+------------------------------------------------------------------------
+
+## Pipeline de Transformação
+
+```{python}
+#| label: render-pipeline
+#| output: asis
+#| echo: false
+
+# Renderiza cada etapa como um accordion
+for i, step_id in enumerate(PIPELINE_ORDER):
+    step = CLEANING_STEPS[step_id]
+    step_num = i + 1
+    audit = audits[step_id]
+    step_metrics = metrics[step_id]
+    
+    print(f'''<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+▸ Etapa {step_num}: {step['name']}
+</summary>
+
+**Sobre esta transformação:**
+
+{step['description']}
+
+---
+
+**Resultado:**
+''')
+    
+    # Mostra métricas específicas
+    for key, value in step_metrics.items():
+        if isinstance(value, dict):
+            for k, v in value.items():
+                print(f"- {k}: {v:,}")
+        else:
+            print(f"- {key.replace('_', ' ').title()}: {value:,}")
+    
+    # Mostra auditoria resumida
+    print(f'''
+**Auditoria:**
+
+| Métrica | Valor |
+|---------|-------|
+| Entrada | {audit['input']['size_formatted']} ({audit['input']['total_lines']:,} linhas) |
+| Saída | {audit['output']['size_formatted']} ({audit['output']['total_lines']:,} linhas) |
+| Redução | {audit['delta_bytes']:,} bytes ({audit['delta_percent']:.2f}%) |
+
+</details>
+''')
+```
+
+------------------------------------------------------------------------
+
+## Auditoria Final do Pipeline
+
+```{python}
+#| label: prepare-audit-list
+#| output: false
+
+# Lista de audits na ordem do pipeline
+audit_list = [audits[step_id] for step_id in PIPELINE_ORDER]
+```
+
+::: panel-tabset
+## Comparação de Estágios
+
+```{python}
+#| label: show-audit-table
+#| echo: false
+
+format_audit_table(df_audit, include_chars=True).style.hide(axis='index')
+```
+
+## Resumo por Etapa
+
+```{python}
+#| label: show-summary
+#| echo: false
+
+format_summary_table(audit_list).style.hide(axis='index')
+```
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-tip icon="false" collapse="false"}
+## 🎯 Resultado Final
+
+```{python}
+#| echo: false
+
+print(f"📁 Arquivo original: {totals['original_formatted']}")
+print(f"📁 Arquivo final: {totals['final_formatted']}")
+print(f"📦 Redução total: {totals['total_bytes']:,} bytes ({totals['total_percent']:.2f}%)")
+print(f"📉 Linhas removidas: {totals['total_lines']:,}")
+print(f"🔤 Caracteres removidos: {totals['total_chars']:,}")
+print(f"✅ Arquivo de saída: {FINAL_OUTPUT.name}")
+```
+
+O arquivo limpo está pronto para a próxima etapa: **parsing e estruturação em DataFrame**.
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-note icon="false" collapse="false"}
+## 📊 Reflexão: Impacto no Dataset Enriquecido
+
+```{python}
+#| echo: false
+
+impact = generate_impact_analysis(totals, enrichment_factor=8.0)
+
+print(f"📁 Arquivo bruto:")
+print(f"   • Original: {impact['original_mb']:.2f} MB")
+print(f"   • Após limpeza: {impact['final_mb']:.2f} MB")
+print(f"   • Redução: {impact['reduction_pct']:.2f}%\n")
+
+print(f"📈 Projeção para dataset enriquecido (fator ~{impact['enrichment_factor']:.0f}x):")
+print(f"   • Sem otimização: ~{impact['projected_original_mb']:.1f} MB")
+print(f"   • Com otimização: ~{impact['projected_optimized_mb']:.1f} MB")
+print(f"   • Economia projetada: ~{impact['projected_savings_mb']:.1f} MB\n")
+
+print(f"💡 Cada caractere removido agora significa menos dados para:")
+print(f"   • Armazenar em disco e memória")
+print(f"   • Processar em operações de NLP")
+print(f"   • Transferir entre sistemas")
+print(f"   • Incluir em embeddings e modelos")
+```
+
+A limpeza realizada nesta etapa não apenas organiza os dados, mas **reduz significativamente o custo computacional** de todas as operações subsequentes.
+:::
+
+------------------------------------------------------------------------
+
+## Arquivo de Saída
+
+O arquivo final agora possui:
+
+-   ✅ Formato otimizado: `DD/MM/YY HH:MM:SS Remetente: Conteúdo`
+-   ✅ Participantes anonimizados (P1, P2)
+-   ✅ Sem caracteres invisíveis
+-   ✅ Sem linhas/timestamps vazios
+-   ✅ Espaços e indentação normalizados
+
+::: {.callout-note appearance="simple" collapse="true"}
+### 📋 Regex para parsing do arquivo limpo
+
+``` python
+# Padrão para identificar início de mensagem
+message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
+
+# Grupos de captura:
+# 1: Data (DD/MM/YY)
+# 2: Hora (HH:MM:SS)
+# 3: Remetente (P1 ou P2)
+# 4: Conteúdo da mensagem
+```
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com o arquivo limpo, seguimos para:
+
+1.  [**Data Wrangling**](02-data-wrangling.qmd) — Parsing, agregação de multilinha, vinculação de mídia
+2.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
