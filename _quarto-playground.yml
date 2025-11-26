@@ -1,0 +1,32 @@
+# Perfil RADICAL - Mudanças visuais extremas
+# Uso: quarto preview --profile playground
+
+format:
+  html:
+    theme: superhero
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+    code-tools: false
+    code-line-numbers: true
+    code-overflow: scroll
+    highlight-style: dracula
+    fontsize: 1.1em
+    linestretch: 1.7
+
+website:
+  title: "🔬 MODO PLAYGROUND"
+  
+  navbar:
+    background: "#ff6600"
+    foreground: light
+    title: "🧪 PLAYGROUND MODE"
+    
+  sidebar: false
+    
+  page-footer:
+    background: "#333"
+    foreground: light
+    center: |
+      🎨 **PLAYGROUND ATIVO** — Tema: Superhero | Sidebar: OFF | Code: Expandido
