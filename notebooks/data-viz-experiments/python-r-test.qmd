@@ -1,0 +1,53 @@
+---
+title: "Python + R no mesmo documento"
+format: html
+---
+
+## Python
+
+```{python}
+import pandas as pd
+
+df = pd.DataFrame({
+    'nome': ['Ana', 'Bruno', 'Carla'],
+    'idade': [25, 30, 28],
+    'cidade': ['SP', 'RJ', 'BH']
+})
+
+print(df)
+```
+
+## R
+
+```{r}
+library(ggplot2)
+
+# Cria dados
+dados <- data.frame(
+  x = 1:10,
+  y = rnorm(10)
+)
+
+# Plot simples
+ggplot(dados, aes(x, y)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_line(alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Gráfico em R")
+```
+
+## Compartilhando dados (R acessando Python)
+
+```{r}
+library(reticulate)
+
+# Acessa o DataFrame criado no Python
+py$df
+```
+
+## Compartilhando dados (Python acessando R)
+
+```{python}
+# Acessa o dataframe criado no R
+print(r.dados)
+```
