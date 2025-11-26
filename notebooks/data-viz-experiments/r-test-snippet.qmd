@@ -1,0 +1,81 @@
+## Teste R: Interativo + Animado
+
+```{r}
+#| label: setup-r
+#| message: false
+
+# Instala se não tiver (só roda 1x)
+# install.packages(c("ggplot2", "plotly", "gganimate", "gifski"))
+
+library(ggplot2)
+library(plotly)
+library(gganimate)
+```
+
+```{r}
+#| label: dados-fake
+
+# Simula dados tipo WhatsApp
+set.seed(42)
+dados <- data.frame(
+  mes = rep(1:12, each = 2),
+  remetente = rep(c("P1", "P2"), 12),
+  mensagens = c(
+    850, 720,   # Jan
+    920, 880,   # Fev
+    1100, 950,  # Mar
+    980, 1050,  # Abr
+    1200, 1180, # Mai
+    890, 920,   # Jun
+    1050, 980,  # Jul
+    1300, 1250, # Ago
+    1150, 1100, # Set
+    1400, 1320, # Out
+    1100, 1050, # Nov
+    1500, 1450  # Dez
+  )
+)
+dados$mes_nome <- month.abb[dados$mes]
+dados$mes_nome <- factor(dados$mes_nome, levels = month.abb)
+```
+
+### Gráfico Interativo (hover, zoom)
+
+```{r}
+#| label: interativo
+
+p <- ggplot(dados, aes(x = mes_nome, y = mensagens, fill = remetente)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("P1" = "#E91E63", "P2" = "#2196F3")) +
+  theme_minimal() +
+  labs(
+    title = "Mensagens por Mês",
+    x = NULL,
+    y = "Mensagens",
+    fill = "Quem"
+  )
+
+ggplotly(p)
+```
+
+### Gráfico Animado (GIF)
+
+```{r}
+#| label: animado
+
+p_anim <- ggplot(dados, aes(x = mes_nome, y = mensagens, fill = remetente)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("P1" = "#E91E63", "P2" = "#2196F3")) +
+  theme_minimal() +
+  labs(
+    title = "Mês: {closest_state}",
+    x = NULL,
+    y = "Mensagens",
+    fill = "Quem"
+  ) +
+  transition_states(mes_nome, transition_length = 2, state_length = 1) +
+  enter_grow() +
+  exit_fade()
+
+animate(p_anim, nframes = 100, fps = 10, width = 600, height = 400)
+```
