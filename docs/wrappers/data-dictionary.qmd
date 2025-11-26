@@ -1,0 +1,8 @@
+---
+title: "Dicionário de Dados"
+subtitle: "Documentação das variáveis do dataset"
+author: "Marlon L."
+date: today
+---
+
+{{< include ../data-dictionary.md >}}

@@ -1,0 +1,8 @@
+---
+title: "Guia de Setup"
+subtitle: "Instalação e configuração do projeto"
+author: "Marlon L."
+date: today
+---
+
+{{< include ../SETUP-GUIDE.md >}}

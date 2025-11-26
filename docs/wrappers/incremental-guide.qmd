@@ -1,0 +1,8 @@
+---
+title: "Guia de Processamento Incremental"
+subtitle: "Como rodar o pipeline com novos exports"
+author: "Marlon L."
+date: today
+---
+
+{{< include ../INCREMENTAL-GUIDE.md >}}
