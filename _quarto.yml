@@ -2,6 +2,15 @@ project:
   type: website
   output-dir: _site
 
+execute:
+  warning: false
+  message: false
+  echo: false
+  freeze: false
+  cache: false
+  jupyter: whatsapp-ds
+  daemon: false
+
 website:
   title: "WhatsApp DS Analytics"
   description: "Pipeline de Data Science para análise de conversas do WhatsApp"
@@ -25,8 +34,19 @@ website:
             text: "04 - EDA"
           - href: notebooks/05-advanced-analysis.qmd
             text: "05 - Advanced Analysis"
-      - href: docs/data-dictionary.md
-        text: "Dicionário de Dados"
+      - text: "Docs"
+        menu:
+          - href: docs/wrappers/data-dictionary.qmd
+            text: "Dicionário de Dados"
+          - href: docs/wrappers/incremental-guide.qmd
+            text: "Guia de Processamento Incremental"
+          - href: docs/wrappers/setup-guide.qmd
+            text: "Guia de Instalação"
+          - href: python-r-test.qmd
+            text: "Integração R+Python"
+          - href: galeria-whatsapp-completa.qmd
+            text: "Galeria R Scripts for WhatsApp Analysis"
+            
     
     tools:
       - icon: github
@@ -36,10 +56,9 @@ website:
     style: "docked"
     search: true
     contents:
-      - section: "Projeto"
+      - section: "Home"
         contents:
           - index.qmd
-          - docs/data-dictionary.md
       - section: "Data Preparation"
         contents:
           - notebooks/00-data-profiling.qmd
@@ -50,7 +69,11 @@ website:
         contents:
           - notebooks/04-eda.qmd
           - notebooks/05-advanced-analysis.qmd
-
+      - section: "Documentos do Projeto"
+        contents:
+          - docs/wrappers/data-dictionary.qmd
+          - docs/wrappers/incremental-guide.qmd
+          - docs/wrappers/setup-guide.qmd
   page-footer:
     center: |
       Desenvolvido por [@mrlnlms](https://github.com/mrlnlms)
@@ -61,14 +84,7 @@ format:
     toc: true
     toc-depth: 3
     code-fold: true
+    code-summary: "Código"
     code-tools: true
     code-overflow: wrap
     highlight-style: github
-
-execute:
-  warning: false
-  message: false
-  echo: true
-  freeze: false
-  jupyter: whatsapp-ds
-  daemon: false
