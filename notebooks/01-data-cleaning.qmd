@@ -3,15 +3,6 @@ title: "Data Cleaning"
 subtitle: "Limpeza e normalização do arquivo bruto"
 author: "Marlon L."
 date: today
-format:
-  html:
-    toc: true
-    toc-depth: 3
-    code-fold: true
-    theme: cosmo
-execute:
-  warning: false
-  echo: false
 ---
 
 ```{python}
