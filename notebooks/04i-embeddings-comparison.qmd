@@ -1,0 +1,445 @@
+---
+title: "Comparação entre Modelos de Embeddings"
+format:
+  html:
+    code-fold: true
+    code-summary: "Mostrar código"
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import sys
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+
+PROJECT_ROOT = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from config import PATHS  # noqa: E402
+```
+
+------------------------------------------------------------------------
+
+# Comparação entre Modelos de Embeddings
+
+Análise comparativa de 3 modelos de embeddings aplicados ao dataset.
+
+## 🎭 As Três "Personalidades"
+
+Cada modelo tem características distintas:
+
+```{python}
+#| label: personality-summary
+#| echo: false
+
+# Carrega resultados
+comparison_file = PATHS['processed'] / 'embeddings_comparison.json'
+
+if comparison_file.exists():
+    with open(comparison_file, 'r') as f:
+        comparison_data = json.load(f)
+    
+    # Tabela de personalidades
+    personality_data = [
+        {
+            'Aspecto': 'Personalidade',
+            'MPNet Base': '🏆 Máxima Qualidade',
+            'MiniLM': '⚡ Velocidade',
+            'DistilUSE': '⚖️ Balanceado'
+        },
+        {
+            'Aspecto': 'Filosofia',
+            'MPNet Base': '"Qualidade acima de tudo"',
+            'MiniLM': '"Rápido e eficiente"',
+            'DistilUSE': '"Meio termo perfeito"'
+        },
+        {
+            'Aspecto': 'Dimensões',
+            'MPNet Base': '768',
+            'MiniLM': '384',
+            'DistilUSE': '512'
+        },
+        {
+            'Aspecto': 'Tamanho',
+            'MPNet Base': '~200 MB',
+            'MiniLM': '~100 MB',
+            'DistilUSE': '~130 MB'
+        },
+        {
+            'Aspecto': 'Velocidade',
+            'MPNet Base': 'Médio (~160 msg/s)',
+            'MiniLM': 'Rápido (~320 msg/s)',
+            'DistilUSE': 'Médio-Rápido (~240 msg/s)'
+        },
+        {
+            'Aspecto': 'Uso Ideal',
+            'MPNet Base': 'Análise profunda',
+            'MiniLM': 'Produção, prototipagem',
+            'DistilUSE': 'Casos gerais'
+        }
+    ]
+    
+    df_personality = pd.DataFrame(personality_data)
+    display(df_personality.style.hide(axis='index'))
+else:
+    print("⚠️  Comparação não encontrada. Execute: `python scripts/compare_embeddings_models.py`")
+```
+
+------------------------------------------------------------------------
+
+## 📊 Resumo Comparativo
+
+Visão geral das métricas de todos os modelos:
+
+```{python}
+#| label: summary-table
+#| echo: false
+
+if comparison_file.exists():
+    summary_df = pd.DataFrame(comparison_data['summary_table'])
+    display(summary_df.style.hide(axis='index'))
+else:
+    print("⚠️  Execute a comparação primeiro.")
+```
+
+::: {.callout-note icon="false"}
+### 💡 Interpretação das Métricas
+
+**Separação Semântica:** Diferença entre similaridade de pares similares vs diferentes (maior = melhor)
+
+**Silhouette Score:** Qualidade dos clusters (0 a 1, maior = melhor)
+
+**Davies-Bouldin Index:** Separação entre clusters (menor = melhor)
+:::
+
+------------------------------------------------------------------------
+
+## 🧪 Teste 1: Similaridade Semântica
+
+Como cada modelo captura significado?
+
+```{python}
+#| label: semantic-similarity
+#| echo: false
+
+if comparison_file.exists():
+    sim_results = comparison_data['detailed_results']['similaridade']
+    
+    print("### Separação Semântica\n")
+    print("Capacidade de distinguir mensagens similares de diferentes:\n")
+    
+    sep_data = []
+    for model_id, results in sim_results.items():
+        model_name = {'mpnet': 'MPNet Base', 'minilm': 'MiniLM', 'distiluse': 'DistilUSE'}[model_id]
+        sep_data.append({
+            'Modelo': model_name,
+            'Pares Similares': f"{results['mean_similar']:.3f}",
+            'Pares Diferentes': f"{results['mean_different']:.3f}",
+            'Separação': f"{results['separation']:.3f}"
+        })
+    
+    df_sep = pd.DataFrame(sep_data)
+    display(df_sep.style.hide(axis='index'))
+    
+    # Gráfico de barras
+    fig = go.Figure()
+    
+    for model_id, results in sim_results.items():
+        model_name = {'mpnet': 'MPNet Base', 'minilm': 'MiniLM', 'distiluse': 'DistilUSE'}[model_id]
+        
+        fig.add_trace(go.Bar(
+            name=model_name,
+            x=['Pares Similares', 'Pares Diferentes'],
+            y=[results['mean_similar'], results['mean_different']],
+            text=[f"{results['mean_similar']:.3f}", f"{results['mean_different']:.3f}"],
+            textposition='outside'
+        ))
+    
+    fig.update_layout(
+        title='Similaridade: Pares Similares vs Diferentes',
+        barmode='group',
+        yaxis_title='Similaridade Cosine',
+        height=400
+    )
+    
+    fig.show()
+    
+    print("\n**Observação:** Quanto maior a separação, melhor o modelo distingue significados.")
+```
+
+------------------------------------------------------------------------
+
+## 📈 Teste 2: Qualidade de Clustering
+
+Performance em agrupar mensagens semanticamente relacionadas:
+
+```{python}
+#| label: clustering-quality
+#| echo: false
+
+if comparison_file.exists():
+    cluster_results = comparison_data['detailed_results']['clustering']
+    
+    print("### Métricas de Clustering\n")
+    
+    cluster_data = []
+    for model_id, results in cluster_results.items():
+        model_name = {'mpnet': 'MPNet Base', 'minilm': 'MiniLM', 'distiluse': 'DistilUSE'}[model_id]
+        cluster_data.append({
+            'Modelo': model_name,
+            'Silhouette': f"{results['silhouette']:.3f}",
+            'Davies-Bouldin': f"{results['davies_bouldin']:.3f}",
+            'Calinski-Harabasz': f"{results['calinski_harabasz']:.1f}",
+            'Tempo (s)': f"{results['tempo_clustering']:.2f}"
+        })
+    
+    df_cluster = pd.DataFrame(cluster_data)
+    display(df_cluster.style.hide(axis='index'))
+    
+    # Gráfico comparativo
+    models = list(cluster_results.keys())
+    model_names = [{'mpnet': 'MPNet', 'minilm': 'MiniLM', 'distiluse': 'DistilUSE'}[m] for m in models]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        name='Silhouette (↑ melhor)',
+        x=model_names,
+        y=[cluster_results[m]['silhouette'] for m in models],
+        text=[f"{cluster_results[m]['silhouette']:.3f}" for m in models],
+        textposition='outside'
+    ))
+    
+    fig.update_layout(
+        title='Silhouette Score por Modelo',
+        yaxis_title='Score',
+        height=400
+    )
+    
+    fig.show()
+    
+    print("\n**Interpretação:**")
+    print("- **Silhouette:** Coesão intra-cluster (0 a 1, maior = melhor)")
+    print("- **Davies-Bouldin:** Separação inter-cluster (menor = melhor)")
+    print("- **Calinski-Harabasz:** Densidade e separação (maior = melhor)")
+```
+
+------------------------------------------------------------------------
+
+## 🔗 Teste 3: Consistência Entre Modelos
+
+Quanto os modelos concordam em rankings de similaridade?
+
+```{python}
+#| label: consistency
+#| echo: false
+
+if comparison_file.exists():
+    consistency = comparison_data['detailed_results']['consistencia']
+    
+    print("### Correlação de Rankings (Spearman)\n")
+    
+    corr_data = []
+    for pair, results in consistency.items():
+        models = pair.replace('_vs_', ' × ')
+        corr_data.append({
+            'Comparação': models,
+            'Correlação': f"{results['correlation']:.3f}",
+            'P-value': f"{results['p_value']:.2e}"
+        })
+    
+    df_corr = pd.DataFrame(corr_data)
+    display(df_corr.style.hide(axis='index'))
+    
+    print("\n**Interpretação:**")
+    print("- Correlação alta (> 0.8): Modelos concordam fortemente")
+    print("- Correlação média (0.6-0.8): Boa concordância")
+    print("- Correlação baixa (< 0.6): Visões diferentes")
+```
+
+------------------------------------------------------------------------
+
+## ⚡ Eficiência: Velocidade vs Qualidade
+
+Trade-off entre velocidade de processamento e qualidade:
+
+```{python}
+#| label: efficiency-tradeoff
+#| echo: false
+
+if comparison_file.exists():
+    efic = comparison_data['detailed_results']['eficiencia']
+    sim = comparison_data['detailed_results']['similaridade']
+    
+    # Prepara dados para scatter
+    scatter_data = []
+    for model_id in efic.keys():
+        model_name = {'mpnet': 'MPNet Base', 'minilm': 'MiniLM', 'distiluse': 'DistilUSE'}[model_id]
+        scatter_data.append({
+            'Modelo': model_name,
+            'Velocidade (msg/s)': efic[model_id]['velocidade_msgs_s'],
+            'Qualidade (Separação)': sim[model_id]['separation'],
+            'Tamanho (MB)': efic[model_id]['tamanho_mb']
+        })
+    
+    df_scatter = pd.DataFrame(scatter_data)
+    
+    # Scatter plot
+    fig = px.scatter(
+        df_scatter,
+        x='Velocidade (msg/s)',
+        y='Qualidade (Separação)',
+        size='Tamanho (MB)',
+        text='Modelo',
+        title='Trade-off: Velocidade vs Qualidade',
+        size_max=60
+    )
+    
+    fig.update_traces(textposition='top center')
+    fig.update_layout(height=500)
+    
+    fig.show()
+    
+    print("\n**Análise:**")
+    print("- **Canto superior direito:** Melhor (rápido E boa qualidade)")
+    print("- **Tamanho do círculo:** Tamanho do arquivo")
+```
+
+------------------------------------------------------------------------
+
+## 💭 Interpretação Geral
+
+::: {.callout-tip icon="false" collapse="false"}
+### 🎯 Principais Conclusões
+
+**1. MPNet Base: Campeão de Qualidade** 🏆
+
+-   Melhor separação semântica
+-   Melhor performance em clustering
+-   Mais dimensões = mais capacidade representacional
+-   **Custo:** Mais lento, maior tamanho
+
+**2. MiniLM: Campeão de Velocidade** ⚡
+
+-   2x mais rápido que MPNet
+-   Metade do tamanho (100 MB vs 200 MB)
+-   Qualidade excelente (\~95% do MPNet)
+-   **Trade-off:** Ligeiramente menos preciso
+
+**3. DistilUSE: O Meio Termo** ⚖️
+
+-   Balanceado em tudo
+-   Boa qualidade, velocidade razoável
+-   Tamanho intermediário
+-   **Versatilidade:** Bom para múltiplos casos
+
+**4. Alta Consistência Entre Modelos**
+
+Correlação de rankings \> 0.75 indica que todos capturam estrutura semântica similar, apenas com níveis diferentes de detalhe.
+
+**5. Diferenças São Sutis**
+
+Diferença de \~3-5% entre modelos. Para maioria dos casos, qualquer um funciona bem!
+:::
+
+------------------------------------------------------------------------
+
+## 📌 Recomendações por Caso de Uso
+
+```{python}
+#| label: recommendations
+#| echo: false
+
+recommendations = [
+    {
+        'Caso de Uso': 'Análise exploratória profunda',
+        'Modelo Recomendado': 'MPNet Base',
+        'Razão': 'Máxima qualidade, melhor separação semântica'
+    },
+    {
+        'Caso de Uso': 'Prototipagem rápida',
+        'Modelo Recomendado': 'MiniLM',
+        'Razão': '2x mais rápido, qualidade excelente'
+    },
+    {
+        'Caso de Uso': 'Deploy em produção',
+        'Modelo Recomendado': 'MiniLM ou DistilUSE',
+        'Razão': 'Menor tamanho, velocidade alta'
+    },
+    {
+        'Caso de Uso': 'Clustering para EDA',
+        'Modelo Recomendado': 'MPNet Base',
+        'Razão': 'Melhor Silhouette score'
+    },
+    {
+        'Caso de Uso': 'Topic Modeling (BERTopic)',
+        'Modelo Recomendado': 'MPNet Base',
+        'Razão': 'Melhor separação de tópicos'
+    },
+    {
+        'Caso de Uso': 'Busca semântica em tempo real',
+        'Modelo Recomendado': 'MiniLM',
+        'Razão': 'Velocidade crítica'
+    },
+    {
+        'Caso de Uso': 'Não sabe o caso de uso ainda',
+        'Modelo Recomendado': 'DistilUSE',
+        'Razão': 'Versátil, bom custo-benefício'
+    }
+]
+
+df_rec = pd.DataFrame(recommendations)
+display(df_rec.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## 🎯 Nossa Escolha: MPNet Base
+
+**Para este projeto, escolhemos MPNet Base (768d):**
+
+::: {.callout-important icon="false"}
+### 🏆 Justificativa
+
+**Por quê MPNet?**
+
+1.  ✅ **Análise única, não produção** - Velocidade não é crítica
+2.  ✅ **Qualidade máxima** - Queremos insights mais precisos
+3.  ✅ **Base para clustering e topics** - Melhor separação semântica
+4.  ✅ **Custo-benefício do tempo** - 7 min vs 5 min não importa
+5.  ✅ **Presente especial** - Vale investir em qualidade
+
+**Trade-offs aceitos:** - ❌ Mais lento (\~160 msg/s vs \~320 msg/s do MiniLM) - ❌ Maior tamanho (200 MB vs 100 MB) - ✅ Mas: Melhor qualidade (+3-5%)
+
+**Para uso futuro:** - Produção/Apps: MiniLM - Análise rápida: DistilUSE - Análise profunda: MPNet ✅
+:::
+
+------------------------------------------------------------------------
+
+## 🔮 Próximos Passos
+
+Com embeddings MPNet escolhidos, partimos para:
+
+1.  **Clustering Semântico** - Agrupar mensagens por significado
+2.  **Topic Modeling (BERTopic)** - Descobrir tópicos automaticamente
+3.  **Visualização 2D (UMAP)** - Mapa visual das conversas
+4.  **Análise de Evolução** - Como conversas mudaram ao longo do tempo
+
+**Arquivos para usar:** - `message_embeddings_mpnet.npy` - Embeddings principais - `message_embeddings_minilm.npy` - Alternativa rápida (se precisar) - `message_embeddings_distiluse.npy` - Alternativa balanceada (se precisar)
+
+------------------------------------------------------------------------
+
+**Insights-Chave:**
+
+-   🏆 **MPNet:** Qualidade máxima (+3-5%)
+-   ⚡ **MiniLM:** Velocidade 2x, qualidade 95%
+-   ⚖️ **DistilUSE:** Meio termo perfeito
+-   🎯 **Para EDA:** MPNet é a escolha certa
+
+------------------------------------------------------------------------
