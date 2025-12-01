@@ -1,6 +1,6 @@
 ---
-title: "Discovery & Data Profiling"
-subtitle: "Investigação sistemática da estrutura do arquivo bruto"
+title: "Data Profiling"
+subtitle: "Catalogação sistemática de padrões e edge cases"
 author: "Marlon L."
 date: today
 format:
@@ -38,141 +38,56 @@ from profiling import get_file_overview, get_lines_at_position, get_lines_contai
 
 # Define arquivo raw como variável global do notebook
 RAW_FILE = PATHS['raw']
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
 ```
 
-# Discovery & Data Profiling
-
-Toda pipeline de dados começa com a **investigação do arquivo bruto** antes de qualquer transformação. Este documento registra o processo de descoberta — desde a primeira impressão até a catalogação sistemática de padrões, anomalias e edge cases que orientarão as etapas seguintes.
-
-## Discovery
-
-Antes de qualquer processamento, precisamos **entender o que temos em mãos**. O primeiro passo é abrir o arquivo bruto e navegar pelo conteúdo — observar padrões visuais, testar hipóteses, identificar anomalias. É uma fase exploratória e livre, onde as primeiras impressões orientam a investigação posterior.
-
-Para começar, vamos extrair os metadados básicos do arquivo: tamanho, número de linhas, densidade de caracteres. Essas métricas fornecem uma noção inicial da escala do desafio.
-
-::: panel-tabset
-## Visão geral da fonte de dados
+## Configuração
 
 ```{python}
-#| label: file-overview
-#| output: false
-# Obtém metadados
-overview = get_file_overview(RAW_FILE)
-# Extrai nome do arquivo
-ARQUIVO_NOME = Path(overview['arquivo']).name
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Arquivo', 'Valor': f'<code>{RAW_FILE.name}</code>', 'Path': format_relative_path(RAW_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
 ```
 
-```{python}
-#| label: show-file-overview
-#| echo: false
-df_overview = format_file_overview_table(overview)
-df_overview.style.hide(axis='index')
-```
+------------------------------------------------------------------------
 
-## Estatísticas de Densidade
+# Data Profiling
 
-```{python}
-#| label: density-stats
-#| output: false
-density = get_file_density_stats(RAW_FILE)
-```
-
-```{python}
-#| label: show-density-table
-#| echo: false
-
-df_density = format_density_stats_table(density)
-df_density.style.hide(axis='index')
-```
-:::
-
-### Overview dos dados
-
-Após importar a fonte de dados para a pipeline e extrair os metadados, vamos examinar o conteúdo para entender **a natureza dos dados que estamos lidando**. O formato segue uma estrutura semi-estruturada aparentemente simples: `[DD/MM/YY, HH:MM:SS] Remetente: Mensagem`.
-
-![](../assets/images/data-overview_2025-11-21%2010.35.55.gif)
-
-> *Dados brutos exportados do WhatsApp — histórico de \~1 ano visualizado no Positron.*
-
-À primeira vista a estrutura parece regular, mas a tabela de amostras abaixo revela outros padrões que aumentam a complexidade do parsing.
-
-::: {.callout-note collapse="true"}
-#### Amostras do arquivo *`{python} ARQUIVO_NOME`*
-
-```{python}
-#| label: sample-data
-df = multi_position_preview_dataframe(
-    RAW_FILE,
-    n_lines=3,
-    positions=[0, 25, 50, 75, 100]
-)
-
-df.style.hide(axis='index')
-```
-
-> *Linhas distribuídas por quartis (0%, 25%, 50%, 75%, 100%) para visualizar padrões ao longo do documento.*
-:::
-
-::: {.callout-caution icon="false" collapse="true"}
-### 💡 Insights Iniciais
-
-**Volume e Complexidade**
-
--   \~97K linhas, mas apenas \~70K mensagens reais (estimativa: 1,4 linhas/mensagem)
--   Metadados (timestamps, nomes) e linhas vazias (1,2%) ocupam espaço considerável
--   Para contexto: SMS Spam Collection (referência em NLP) tem apenas 5,6K mensagens — este dataset é **12x maior**
-
-**Densidade e Variação**
-
--   Média de 50 chars/linha, típico de mensagens de chat
--   **Alta variação:** 1 a 1.103 caracteres (moda em 45)
--   Diferença entre mediana (45) e média (50) indica **outliers** (mensagens muito longas)
--   Importante: boa parte dos caracteres são metadados, não conteúdo de mensagem
-
-**Implicações para o Pipeline**
-
--   ✅ Arquivo de 5MB é leve — processamento em memória viável
--   ⚠️ Transcrição de áudios/vídeos pode expandir o dataset significativamente
--   🔧 Necessário separar metadados (timestamp, remetente) do conteúdo real
--   🔧 Parsing deve lidar com mensagens multilinha (detectadas nas amostras)
--   🔧 Caracteres especiais (emoji no nome "Lê 🖤") exigem encoding UTF-8
-
-**Padrões Observados nas Amostras**
-
--   Mensagens omitidas: `image omitted`, `video note omitted`
--   Mídias anexadas: `<arquivo.opus>`
--   Mensagens multilinha (ex: linha 48667-48669)
--   Linhas vazias entre mensagens
--   URLs compartilhadas
-:::
-
-## Data Profiling
-
-Após a exploração inicial, chegou o momento de **sistematizar e aprofundar as descobertas**. Enquanto o Discovery ofereceu uma primeira impressão visual e métrica, esta etapa vai além: investiga **sistematicamente** cada elemento estrutural do arquivo, cataloga **todos os tipos de padrões** (não apenas os visíveis à primeira vista), e documenta **edge cases** que podem quebrar parsers ingênuos.
+Após a exploração inicial no [Data Discovery](00-data-discovery.qmd), chegou o momento de **sistematizar e aprofundar as descobertas**. Enquanto o Discovery ofereceu uma primeira impressão visual e métrica, esta etapa vai além: investiga **sistematicamente** cada elemento estrutural do arquivo, cataloga **todos os tipos de padrões** (não apenas os visíveis à primeira vista), e documenta **edge cases** que podem quebrar parsers ingênuos.
 
 Esta seção cria uma referência técnica completa que fundamenta as decisões de limpeza e parsing nas etapas seguintes.
 
-<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+## Elementos Estruturais
 
-<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+### Timestamps
 
-▸ Elementos Estruturais
-
-</summary>
-
-::: {.callout-note title="Timestamps" icon="false" appearance="simple" collapse="true"}
 O formato padrão de timestamp é `[DD/MM/YY, HH:MM:SS]`.
 
 ```{python}
-#| label: timestamp-pattern2
+#| label: timestamp-pattern
+#| output: false
 
 # Contagem de linhas com timestamp válido
 pattern_timestamp = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
-count_pattern(RAW_FILE, pattern_timestamp)
+stats_timestamp = count_pattern(RAW_FILE, pattern_timestamp)
 ```
-:::
 
-::: {.callout-note title="Remententes" icon="false" appearance="simple" collapse="true"}
+-   Total de ocorrências: `{python} f"{stats_timestamp['total_ocorrencias']:,}"`
+-   Linhas com timestamp: `{python} f"{stats_timestamp['linhas_com_pattern']:,}"`
+
+### Remetentes
+
 Após o timestamp, o nome do remetente aparece seguido de dois pontos (`:`).
 
 ```{python}
@@ -182,25 +97,33 @@ Após o timestamp, o nome do remetente aparece seguido de dois pontos (`:`).
 get_lines_at_position(RAW_FILE, position=10, n=3)
 ```
 
-> Remetentes podem conter **emojis** e **caracteres especiais** (ex: `Lê 🖤`). O parser precisa considerar isso.\
-:::
+> Remetentes podem conter **emojis** e **caracteres especiais** (ex: `Lê 🖤`). O parser precisa considerar isso.
 
-:::: {.callout-note title="Caractere Invisível U+200E" icon="false" appearance="simple" collapse="true"}
+### Caractere Invisível U+200E
+
 O caractere `U+200E` (Left-to-Right Mark) aparece frequentemente no export. É um caractere de controle de direção de texto.
 
 ```{python}
 #| label: u200e-analysis
+#| output: false
 
 # Quantas ocorrências existem?
 stats_u200e = count_pattern(RAW_FILE, '\u200e')
-print(f"📊 Estatísticas do U+200E:")
-print(f"   • Total de ocorrências: {stats_u200e['total_ocorrencias']:,}")
-print(f"   • Linhas afetadas: {stats_u200e['linhas_com_pattern']:,}")
+u200e_total = stats_u200e['total_ocorrencias']
+u200e_linhas = stats_u200e['linhas_com_pattern']
 ```
 
+**Estatísticas do U+200E:**
+
+-   Total de ocorrências: `{python} f"{u200e_total:,}"`
+-   Linhas afetadas: `{python} f"{u200e_linhas:,}"`
+
+**Exemplos de linhas com U+200E:**
+
 ```{python}
-# Exemplos de onde aparece
-print("\n🔍 Exemplos de linhas com U+200E:")
+#| label: u200e-examples
+#| echo: false
+
 get_lines_containing(RAW_FILE, '\u200e', n=5)
 ```
 
@@ -214,30 +137,23 @@ Este caractere será **removido** na etapa de limpeza pois:
 -   Representa \~4.6% do tamanho do arquivo
 :::
 
-\
-::::
+------------------------------------------------------------------------
 
-</details>
+## Taxonomia de Mensagens
 
-<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+### Mensagens de Texto
 
-<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+#### Texto Puro
 
-▸ Taxonomia de Mensagens
-
-</summary>
-
-:::::::: {.callout-note title="Mensagens de Texto" icon="false" appearance="minimal" collapse="true"}
-::: {.callout-tip title="Texto Puro" icon="false" appearance="simple" collapse="true"}
 ```{python}
 #| label: text-pure
 
 # Mensagens simples (sem mídia, sem marcadores especiais)
 get_lines_matching(RAW_FILE, r'\] .+?: [A-Za-zÀ-ú]', n=3)
 ```
-:::
 
-::: {.callout-tip title="Texto com Emojis" icon="false" appearance="simple" collapse="true"}
+#### Texto com Emojis
+
 ```{python}
 #| label: text-emoji
 
@@ -245,27 +161,31 @@ get_lines_matching(RAW_FILE, r'\] .+?: [A-Za-zÀ-ú]', n=3)
 get_lines_containing(RAW_FILE, '😂', n=2)
 get_lines_containing(RAW_FILE, '❤', n=2)
 ```
-:::
 
-::: {.callout-tip title="Texto com Links" icon="false" appearance="simple" collapse="true"}
+#### Texto com Links
+
 ```{python}
 #| label: text-links
 
 # Mensagens com URLs
 get_lines_matching(RAW_FILE, r'https?://', n=3)
 ```
-:::
 
-:::: {.callout-tip title="Linhas de continuação" icon="false" appearance="simple" collapse="true"}
+#### Linhas de Continuação
+
 Mensagens longas podem ocupar múltiplas linhas. Linhas sem timestamp são continuações da mensagem anterior.
 
 ```{python}
 #| label: multiline-examples
+#| output: false
 
 # Linhas que NÃO começam com timestamp (continuações)
 pattern_no_timestamp = r'^(?!\[?\d{2}/\d{2}/\d{2})'
-count_pattern(RAW_FILE, pattern_no_timestamp)
+stats_continuation = count_pattern(RAW_FILE, pattern_no_timestamp)
 ```
+
+-   Total de linhas sem timestamp: `{python} f"{stats_continuation['total_ocorrencias']:,}"`
+-   Estas são linhas de continuação de mensagens multilinha.
 
 ::: callout-warning
 ### Decisão de Wrangling
@@ -273,50 +193,68 @@ count_pattern(RAW_FILE, pattern_no_timestamp)
 O parser deve **agregar** linhas de continuação ao conteúdo da mensagem anterior, preservando quebras de linha originais.
 :::
 
-\
-::::
+### Mensagens de Mídia
 
-\
-::::::::
+#### Mídias Omitidas
 
-:::::: {.callout-note title="Mensagens de Mídia" icon="false" appearance="simple" collapse="true"}
-::: {.callout-tip title="Mídias Omitidas" icon="false" appearance="simple" collapse="true"}
 Quando o export não inclui os arquivos de mídia:
 
 ```{python}
 #| label: media-omitted
+#| output: false
 
-tipos_omitidos = ['audio omitted', 'image omitted', 'video omitted', 
+tipos_omitidos = ['audio omitted', 'image omitted', 'video omitted',
                   'sticker omitted', 'GIF omitted', 'document omitted']
 
-print("📊 Contagem de mídias omitidas:\n")
+midias_omitidas = {}
 for tipo in tipos_omitidos:
     stats = count_pattern(RAW_FILE, tipo)
     if stats['total_ocorrencias'] > 0:
-        print(f"   • {tipo}: {stats['total_ocorrencias']:,}")
+        midias_omitidas[tipo] = stats['total_ocorrencias']
 ```
+
+**Contagem de mídias omitidas:**
 
 ```{python}
-# Exemplos
-print("\n🔍 Exemplos de mídia omitida:")
+#| label: show-media-omitted
+#| echo: false
+
+display(pd.DataFrame([
+    {'Tipo': k, 'Contagem': f"{v:,}"}
+    for k, v in midias_omitidas.items()
+]).style.hide(axis='index'))
+```
+
+**Exemplos de mídia omitida:**
+
+```{python}
+#| label: media-omitted-examples
+#| echo: false
+
 get_lines_containing(RAW_FILE, 'audio omitted', n=2)
 ```
-:::
 
-:::: {.callout-tip title="Mídias Anexadas" icon="false" appearance="simple" collapse="true"}
+#### Mídias Anexadas
+
 Quando o export inclui os arquivos:
 
 ```{python}
 #| label: media-attached
+#| output: false
 
 # Padrão: <attached: FILENAME.ext>
 stats_attached = count_pattern(RAW_FILE, r'<attached:')
-print(f"📊 Mídias anexadas: {stats_attached['total_ocorrencias']:,}")
+midias_anexadas_total = stats_attached['total_ocorrencias']
 ```
 
+-   Mídias anexadas: `{python} f"{midias_anexadas_total:,}"`
+
+**Exemplos de mídia anexada:**
+
 ```{python}
-# Exemplos por tipo
-print("\n🔍 Exemplos de mídia anexada:")
+#| label: media-attached-examples
+#| echo: false
+
 get_lines_matching(RAW_FILE, r'<attached:.*\.opus>', n=2)  # Áudio
 get_lines_matching(RAW_FILE, r'<attached:.*\.jpg>', n=2)   # Imagem
 get_lines_matching(RAW_FILE, r'<attached:.*\.mp4>', n=2)   # Vídeo
@@ -329,58 +267,74 @@ get_lines_matching(RAW_FILE, r'<attached:.*\.mp4>', n=2)   # Vídeo
 
 Exemplo: `00000001-AUDIO-2025-08-21-21-31-39.opus`
 :::
-::::
 
-\
-::::::
+### Mensagens Especiais
 
-:::::: {.callout-note title="Mensagens Especiais" icon="false" appearance="simple" collapse="true"}
-::: {.callout-tip title="Mensagens Editadas" icon="false" appearance="simple" collapse="true"}
+#### Mensagens Editadas
+
 ```{python}
 #| label: msg-edited
+#| output: false
 
 stats_edited = count_pattern(RAW_FILE, r'<This message was edited>')
-print(f"📊 Mensagens editadas: {stats_edited['total_ocorrencias']:,}")
+msgs_editadas = stats_edited['total_ocorrencias']
+```
+
+-   Mensagens editadas: `{python} f"{msgs_editadas:,}"`
+
+```{python}
+#| label: msg-edited-examples
+#| echo: false
 
 get_lines_containing(RAW_FILE, '<This message was edited>', n=2)
 ```
-:::
 
-::: {.callout-tip title="Mensagens Deletadas" icon="false" appearance="simple" collapse="true"}
+#### Mensagens Deletadas
+
 ```{python}
 #| label: msg-deleted
+#| output: false
 
 stats_deleted = count_pattern(RAW_FILE, r'This message was deleted')
-print(f"📊 Mensagens deletadas: {stats_deleted['total_ocorrencias']:,}")
+msgs_deletadas = stats_deleted['total_ocorrencias']
+```
+
+-   Mensagens deletadas: `{python} f"{msgs_deletadas:,}"`
+
+```{python}
+#| label: msg-deleted-examples
+#| echo: false
 
 get_lines_containing(RAW_FILE, 'This message was deleted', n=2)
 ```
-:::
 
-::: {.callout-tip title="Chamadas de Voz/Vídeo" icon="false" appearance="simple" collapse="true"}
+#### Chamadas de Voz/Vídeo
+
 ```{python}
 #| label: msg-calls
+#| output: false
 
 stats_calls = count_pattern(RAW_FILE, r'(Missed|Voice|Video) (voice |video )?call')
-print(f"📊 Registros de chamadas: {stats_calls['total_ocorrencias']:,}")
+registros_chamadas = stats_calls['total_ocorrencias']
+```
+
+-   Registros de chamadas: `{python} f"{registros_chamadas:,}"`
+
+```{python}
+#| label: msg-calls-examples
+#| echo: false
 
 get_lines_containing(RAW_FILE, 'call', n=3)
 ```
-:::
 
-\
-::::::
+------------------------------------------------------------------------
 
-</details>
-
-#### **Visão Consolidada**
+### Visão Consolidada
 
 Após investigar sistematicamente todos os elementos, podemos visualizar a estrutura completa do arquivo:
 
-:::: {.callout-tip icon="false" collapse="true"}
-## 🌲 Estrutura do Arquivo WhatsApp Export
+**🌲 Estrutura do Arquivo WhatsApp Export**
 
-::: {style="background: #EFF9EB; padding: 0px; border-radius: 2px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #333; line-height: 1.2;"}
 ```         
 Elementos Estruturais
 │
@@ -413,13 +367,11 @@ Taxonomia de Mensagens
 │       ├── Imagem (.jpg, .png)
 │       └── Documento (.pdf, .docx)
 │
-└────── Especial
-        ├── Editada (<This message was edited>)
-        ├── Deletada (This message was deleted)
-        └── Chamada (Missed/Voice/Video call)
+└── Especial
+    ├── Editada (<This message was edited>)
+    ├── Deletada (This message was deleted)
+    └── Chamada (Missed/Voice/Video call)
 ```
-:::
-::::
 
 ------------------------------------------------------------------------
 
@@ -469,5 +421,4 @@ r'<attached: (.+?)>'
 
 Com o profiling completo, seguimos para:
 
-1.  [**Data Cleaning**](01-data-cleaning.qmd) — Implementar limpeza
-2.  [**Data Wrangling**](02-data-wrangling.qmd) — Parsing e estruturação
+1.  [**Data Cleaning**](01-data-cleaning.qmd) — Implementar limpeza baseada nas descobertas
