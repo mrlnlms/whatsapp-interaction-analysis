@@ -1,0 +1,471 @@
+---
+title: "Sentiment Roberta"
+subtitle: "Model-Based Features"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+
+# Define arquivos
+INPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+OUTPUT_FILE = PATHS['processed'] / 'messages_with_models.parquet'
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
+```
+
+## Configuração
+
+```{python}
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{INPUT_FILE.name}</code>', 'Path': format_relative_path(INPUT_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{OUTPUT_FILE.name}</code>', 'Path': format_relative_path(OUTPUT_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook cria **features baseadas em modelos de Machine Learning** que complementam as features estruturais criadas no notebook anterior.
+
+⚠️ **IMPORTANTE:** Todas as análises deste notebook são:
+
+-   **Computacionalmente custosas** (podem levar vários minutos)
+
+-   **Totalmente opcionais** (não são necessárias para EDA básico)
+
+-   **Requerem hardware adequado** (GPU recomendada para alguns modelos)
+
+As features de modelos **não são executadas automaticamente** durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+#| output: false
+
+# Carrega dataset enriquecido
+df = pd.read_parquet(INPUT_FILE)
+
+n_mensagens = len(df)
+n_colunas = len(df.columns)
+periodo_inicio = df['timestamp'].min().strftime('%d/%m/%Y')
+periodo_fim = df['timestamp'].max().strftime('%d/%m/%Y')
+```
+
+```{python}
+#| label: show-data-summary
+
+dados_resumo = [
+    {'Métrica': 'Mensagens', 'Valor': f'{n_mensagens:,}'},
+    {'Métrica': 'Colunas', 'Valor': f'{n_colunas}'},
+    {'Métrica': 'Período', 'Valor': f'{periodo_inicio} → {periodo_fim}'},
+]
+
+display(pd.DataFrame(dados_resumo).style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## Modelo 1: Twitter-XLM-RoBERTa
+
+Modelo especializado em texto curto (tweets), multilingual, com excelente performance em português.
+
+### Características
+
+-   **Treinamento:** \~200M tweets em 100+ idiomas
+-   **Otimização:** Mensagens curtas e informais (ideal para WhatsApp)
+-   **Classes:** 3 (positive, neutral, negative)
+-   **Especial:** Lida bem com emojis e linguagem coloquial
+
+### Features Criadas
+
+```{python}
+#| label: sentiment-roberta-features-plan
+
+# Features do modelo Twitter-RoBERTa
+features_sentimento_roberta = [
+    {
+        'Feature': '<code>sentimento_roberta_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Classificação do sentimento em 3 classes',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Análise de tom emocional das conversas'
+    },
+    {
+        'Feature': '<code>sentimento_roberta_score</code>',
+        'Tipo': 'float',
+        'Definição': 'Score de confiança do modelo (0-1)',
+        'Valores': '0.0 a 1.0',
+        'Uso': 'Intensidade/confiança da predição, filtrar predições incertas'
+    },
+]
+
+# Adiciona aliases canônicos (retrocompatibilidade)
+features_sentimento_roberta.extend([
+    {
+        'Feature': '<code>sentimento_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Alias para sentimento_roberta_label (modelo padrão)',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Compatibilidade com código existente'
+    },
+    {
+        'Feature': '<code>sentimento_score</code>',
+        'Tipo': 'float',
+        'Definição': 'Alias para sentimento_roberta_score (modelo padrão)',
+        'Valores': '0.0 a 1.0',
+        'Uso': 'Compatibilidade com código existente'
+    },
+])
+
+df_plan_sentimento_roberta = pd.DataFrame(features_sentimento_roberta)
+display(df_plan_sentimento_roberta.style.hide(axis='index'))
+```
+
+::: {.callout-note icon="false" collapse="true"}
+#### 📝 Nota sobre Nomenclatura
+
+As features são criadas com prefixo `sentimento_roberta_*` para permitir comparação futura com outros modelos. Aliases sem prefixo (`sentimento_label`, `sentimento_score`) são mantidos para retrocompatibilidade.
+:::
+
+### Execução
+
+**Script:** `scripts/sentiment_twitter_roberta.py`
+
+Para executar a análise de sentimento com Twitter-RoBERTa:
+
+```{python}
+#| label: sentiment-roberta-execution
+#| echo: true
+#| eval: false
+#| code-fold: false
+
+import subprocess
+
+print("🤖 Iniciando análise de sentimento...")
+print("📦 Modelo: Twitter-XLM-RoBERTa")
+print("⏱️  Tempo estimado: 15-30 minutos (CPU) ou 5-10 minutos (GPU)\n")
+
+# Executa script específico
+result = subprocess.run(['python', 'scripts/sentiment_twitter_roberta.py'])
+
+if result.returncode == 0:
+    print("\n✅ Análise concluída com sucesso!")
+    print(f"📁 Arquivo gerado: {OUTPUT_FILE}")
+else:
+    print("\n❌ Erro na execução. Verifique os logs acima.")
+```
+
+**Ou via terminal:**
+
+``` bash
+python scripts/sentiment_twitter_roberta.py
+```
+
+### Resultados
+
+::::: panel-tabset
+#### Análise de Sentimento
+
+Resultados da classificação de sentimento aplicada às mensagens.
+
+##### 📊 Distribuição de Sentimentos
+
+```{python}
+#| label: sentiment-roberta-distribution
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_metadata.json'
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+
+if metadata_file.exists() and output_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    total = metadata['mensagens_processadas']
+    dist_data = []
+    
+    for label, count in metadata['distribuicao'].items():
+        pct = count / total * 100
+        emoji = {'positive': '😊', 'neutral': '😐', 'negative': '😢'}.get(label, '')
+        dist_data.append({
+            'Sentimento': f"{emoji} {label.capitalize()}",
+            'Quantidade': f"{count:,}",
+            'Percentual': f"{pct:.1f}%",
+            'Confiança Média': f"{metadata['confianca_media'][label]:.3f}"
+        })
+    
+    df_dist = pd.DataFrame(dist_data)
+    display(df_dist.style.hide(axis='index'))
+    
+    # Armazena dados para próxima seção
+    global df_models
+    df_models = pd.read_parquet(output_file)
+else:
+    print("⚠️  Análise não encontrada. Execute: `python scripts/sentiment_twitter_roberta.py`")
+```
+
+##### 🔍 Exemplos por Sentimento
+
+::: panel-tabset
+###### 😊 Positive
+
+```{python}
+#| label: exemplos-roberta-positive
+#| echo: false
+
+if 'df_models' in globals() and 'sentimento_roberta_label' in df_models.columns:
+    exemplos = df_models[df_models['sentimento_roberta_label'] == 'positive'][
+        ['conteudo', 'sentimento_roberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😐 Neutral
+
+```{python}
+#| label: exemplos-roberta-neutral
+#| echo: false
+
+if 'df_models' in globals() and 'sentimento_roberta_label' in df_models.columns:
+    exemplos = df_models[df_models['sentimento_roberta_label'] == 'neutral'][
+        ['conteudo', 'sentimento_roberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😢 Negative
+
+```{python}
+#| label: exemplos-roberta-negative
+#| echo: false
+
+if 'df_models' in globals() and 'sentimento_roberta_label' in df_models.columns:
+    exemplos = df_models[df_models['sentimento_roberta_label'] == 'negative'][
+        ['conteudo', 'sentimento_roberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+:::
+
+::: {.callout-tip icon="false" collapse="false"}
+##### 💡 Interpretação dos Resultados
+
+**Tom Geral: EQUILIBRADO E SAUDÁVEL** ✅
+
+-   **Positivo (28%)** 🟢 → Carinho e afeto presentes
+-   **Neutro (49%)** ⚪ → Coordenação e informação (normal)
+-   **Negativo (23%)** 🔴 → Vulnerabilidade compartilhada (saudável)
+
+**Características de um relacionamento saudável:**
+
+-   ✅ Tem positividade (não é só reclamação)
+-   ✅ Tem espaço para negativo (vulnerabilidade)
+-   ✅ Muita comunicação prática (neutro)
+
+**🎯 Insights Principais:**
+
+-   Modelo funcionou bem - Confiança média \>60%
+-   Dados realistas - 33% sem texto é normal no WhatsApp
+-   Distribuição saudável - Não é tóxico (\< 30% negativo)
+-   Neutro domina - Conversas práticas do dia a dia
+-   Exemplos fazem sentido - Classificações coerentes
+
+**🔮 Próximos Passos no EDA:**
+
+-   📈 Timeline emocional ao longo dos meses
+-   👥 Comparação entre remetentes
+-   🌍 Sentimento durante encontros vs distância
+-   ⏰ Variação por período do dia
+-   📅 Diferenças entre dias da semana
+:::
+
+#### Processamento
+
+Informações técnicas sobre a execução da análise de sentimento.
+
+##### 📋 Informações do Processamento
+
+```{python}
+#| label: processing-roberta-info
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_metadata.json'
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    info_proc = pd.DataFrame([
+        {'Métrica': 'Modelo', 'Valor': metadata['modelo'].split('/')[-1]},
+        {'Métrica': 'Executado em', 'Valor': pd.to_datetime(metadata['timestamp_execucao']).strftime('%d/%m/%Y %H:%M:%S')},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata['tempo_total_minutos']:.2f} minutos"},
+        {'Métrica': 'Batch size', 'Valor': str(metadata['batch_size'])},
+    ])
+    
+    display(info_proc.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+##### 📈 Estatísticas Gerais
+
+```{python}
+#| label: processing-roberta-stats
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    stats_gerais = pd.DataFrame([
+        {
+            'Métrica': 'Total de mensagens',
+            'Quantidade': f"{metadata['mensagens_total']:,}",
+            'Percentual': '100.0%'
+        },
+        {
+            'Métrica': 'Processadas',
+            'Quantidade': f"{metadata['mensagens_processadas']:,}",
+            'Percentual': f"{metadata['mensagens_processadas']/metadata['mensagens_total']*100:.1f}%"
+        },
+        {
+            'Métrica': 'Puladas',
+            'Quantidade': f"{metadata['mensagens_puladas']:,}",
+            'Percentual': f"{metadata['mensagens_puladas']/metadata['mensagens_total']*100:.1f}%"
+        },
+    ])
+    
+    display(stats_gerais.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+#### Código de Validação
+
+Este código mostra como validar os resultados após executar a análise.
+
+```{python}
+#| label: sentiment-roberta-validation-code
+#| echo: true
+#| eval: false
+
+import json
+
+# Caminhos
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+metadata_file = PATHS['processed'] / 'sentiment_metadata.json'
+
+# Verifica se arquivos existem
+if output_file.exists() and metadata_file.exists():
+    
+    # 1. Carrega metadados do processamento
+    with open(metadata_file, 'r') as f:
+        metadata = json.load(f)
+    
+    print("📋 Informações do Processamento:")
+    print(f"   Modelo: {metadata['modelo'].split('/')[-1]}")
+    print(f"   Device: {metadata['device']}")
+    print(f"   Tempo: {metadata['tempo_total_minutos']:.2f} min")
+    print(f"   Processadas: {metadata['mensagens_processadas']:,}")
+    
+    # 2. Carrega dados
+    df = pd.read_parquet(output_file)
+    
+    # 3. Verifica colunas
+    if 'sentimento_roberta_label' in df.columns:
+        print("\n✅ Análise encontrada!\n")
+        
+        # Distribuição
+        print("📊 Distribuição:")
+        display(df['sentimento_roberta_label'].value_counts())
+        
+        # Estatísticas de confiança
+        print("\n📈 Confiança:")
+        display(df['sentimento_roberta_label'].describe())
+        
+        # Exemplos por sentimento
+        print("\n🔍 Exemplos:")
+        for label in ['positive', 'neutral', 'negative']:
+            if label in df['sentimento_roberta_label'].values:
+                print(f"\n{label.upper()}:")
+                exemplos = df[df['sentimento_roberta_label'] == label][
+                    ['conteudo', 'sentimento_roberta_score']
+                ].head(3)
+                display(exemplos)
+    else:
+        print("⚠️  Colunas não encontradas no DataFrame")
+        
+else:
+    print("⚠️  Arquivos não encontrados.")
+    print("\n💡 Execute primeiro:")
+    print("   python scripts/sentiment_twitter_roberta.py")
+```
+:::::
+
+------------------------------------------------------------------------

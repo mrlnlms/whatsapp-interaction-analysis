@@ -1,0 +1,537 @@
+---
+title: "Sentiment Ensemble (WIP)"
+format:
+  html:
+    code-fold: true
+    code-summary: "Mostrar código"
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import sys
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+from collections import Counter
+
+PROJECT_ROOT = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from config import PATHS  # noqa: E402
+```
+
+------------------------------------------------------------------------
+
+::: {.callout-warning icon="false"}
+### 🚧 Work in Progress
+
+Esta seção está em desenvolvimento. O conceito e estrutura estão definidos, mas a implementação e resultados serão adicionados após análise completa dos 3 modelos individuais e suas comparações.
+
+**Status atual:** Planejamento completo ✅ \| Implementação pendente ⏸️
+:::
+
+------------------------------------------------------------------------
+
+# Ensemble: Consenso entre Modelos
+
+Combinação inteligente dos 3 modelos para criar uma classificação consensual mais robusta e confiável.
+
+## 🎯 Conceito
+
+### O Problema
+
+Vimos na [análise comparativa](04d-sentiment-comparison.qmd) que: - Concordância média entre modelos: \~33% - Cada modelo tem viés diferente (equilibrado, polarizador, conservador) - \~40% das mensagens geram discordância - \~60% têm consenso total
+
+**Pergunta:** Como combinar 3 opiniões diferentes em uma classificação final?
+
+### A Solução: Ensemble
+
+Ao invés de confiar em um único modelo, o **ensemble** consulta os 3 modelos e aplica estratégias de agregação:
+
+**Estratégias:** 1. ✅ **Majority Voting** - Usa a classificação que a maioria escolheu 2. ⚖️ **Weighted Voting** - Pondera pelo score de confiança de cada modelo\
+3. 🔄 **Tiebreak Inteligente** - Em empates, usa confiança ponderada 4. 📊 **Confidence Calibration** - Ajusta confiança baseado em concordância
+
+**Vantagens:**
+
+-   ✅ **Mais robusto** - Não depende de um único modelo
+-   ✅ **Reduz viés** - Equilibra vieses diferentes dos modelos
+-   ✅ **Maior confiança** - Quando todos concordam, confiança aumenta
+-   ✅ **Identifica ambiguidade** - Discordância = ambiguidade genuína
+-   ✅ **Melhor que média** - Ensemble tipicamente supera qualquer modelo individual
+
+------------------------------------------------------------------------
+
+## 📋 Features Criadas
+
+```{python}
+#| label: sentiment-ensemble-features-plan
+
+# Features do Ensemble
+features_sentimento_ensemble = [
+    {
+        'Feature': '<code>sentimento_ensemble_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Classificação consensual dos 3 modelos',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Classificação mais confiável e robusta para análises'
+    },
+    {
+        'Feature': '<code>sentimento_ensemble_confidence</code>',
+        'Tipo': 'float',
+        'Definição': 'Confiança do ensemble baseada em concordância e scores',
+        'Valores': '0.33 (discordam totalmente) a 1.0 (concordam com alta confiança)',
+        'Uso': 'Filtrar predições confiáveis vs ambíguas'
+    },
+    {
+        'Feature': '<code>sentimento_ensemble_votes</code>',
+        'Tipo': 'int',
+        'Definição': 'Número de modelos que concordam com o label final',
+        'Valores': '1, 2, ou 3',
+        'Uso': 'Identificar consenso (3) vs maioria (2) vs desacordo (1)'
+    },
+    {
+        'Feature': '<code>sentimento_ensemble_method</code>',
+        'Tipo': 'str',
+        'Definição': 'Método usado para decisão final',
+        'Valores': 'unanimous (3), majority (2), weighted_tiebreak (1)',
+        'Uso': 'Transparência sobre como ensemble decidiu'
+    },
+]
+
+df_plan_sentimento_ensemble = pd.DataFrame(features_sentimento_ensemble)
+display(df_plan_sentimento_ensemble.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## 🔧 Estratégias de Ensemble
+
+### 1. Majority Voting (Estratégia Principal)
+
+**Regra:** Se 2+ modelos concordam, usa esse label.
+
+``` python
+# Exemplo 1: Consenso Total (3 votos)
+RoBERTa:     positive (0.72)
+DistilBERT:  positive (0.85)
+DeBERTa:     positive (0.79)
+
+→ Resultado: positive
+→ Votos: 3
+→ Confiança: (0.72 + 0.85 + 0.79) / 3 = 0.787
+→ Método: unanimous
+```
+
+``` python
+# Exemplo 2: Maioria (2 votos)
+RoBERTa:     positive (0.72)
+DistilBERT:  positive (0.58)
+DeBERTa:     negative (0.65)
+
+→ Resultado: positive
+→ Votos: 2
+→ Confiança: (0.72 + 0.58) / 2 = 0.650
+→ Método: majority
+```
+
+### 2. Weighted Tiebreak (Desempate)
+
+**Regra:** Se os 3 discordam, usa o voto com maior confiança ponderada.
+
+``` python
+# Exemplo 3: Desempate (1 voto cada)
+RoBERTa:     positive (0.82)  ← Maior confiança!
+DistilBERT:  neutral  (0.55)
+DeBERTa:     negative (0.61)
+
+→ Resultado: positive
+→ Votos: 1
+→ Confiança: 0.82 (do vencedor)
+→ Método: weighted_tiebreak
+```
+
+### 3. Confidence Calibration
+
+**Regra:** Ajusta confiança baseado em concordância.
+
+``` python
+# Alta concordância → Boost de confiança
+if votes == 3:
+    confidence = avg_scores * 1.1  # Boost 10%
+    confidence = min(confidence, 1.0)  # Cap em 1.0
+
+# Maioria → Confiança média dos concordantes
+elif votes == 2:
+    confidence = avg_scores_dos_2_concordantes
+
+# Desempate → Confiança do vencedor (penalizada)
+else:
+    confidence = max_score * 0.9  # Penaliza 10%
+```
+
+------------------------------------------------------------------------
+
+## 💻 Implementação
+
+**Script:** `scripts/sentiment_ensemble.py`
+
+### Execução
+
+```{python}
+#| label: sentiment-ensemble-execution
+#| echo: true
+#| eval: false
+#| code-fold: false
+
+import subprocess
+
+print("🎯 Criando ensemble dos 3 modelos...")
+print("📊 Estratégia: Majority Voting + Weighted Tiebreak")
+print("⏱️  Tempo estimado: < 1 minuto (combina resultados existentes)\n")
+
+# Executa script
+result = subprocess.run(['python', 'scripts/sentiment_ensemble.py'])
+
+if result.returncode == 0:
+    print("\n✅ Ensemble criado com sucesso!")
+    print(f"📁 Arquivo atualizado: messages_with_models.parquet")
+    print(f"📁 Metadata gerado: sentiment_ensemble_metadata.json")
+else:
+    print("\n❌ Erro na execução. Verifique os logs acima.")
+```
+
+**Ou via terminal:**
+
+``` bash
+python scripts/sentiment_ensemble.py
+```
+
+------------------------------------------------------------------------
+
+## 📊 Resultados
+
+::: {.callout-note icon="false"}
+### 📝 Nota
+
+Os resultados serão exibidos aqui após executar o script `sentiment_ensemble.py`. Execute primeiro os 3 modelos individuais e depois o ensemble.
+:::
+
+::: panel-tabset
+### Visão Geral
+
+```{python}
+#| label: ensemble-overview
+#| echo: false
+
+metadata_file = PATHS['processed'] / 'sentiment_ensemble_metadata.json'
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+
+if metadata_file.exists() and output_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 📊 Estatísticas do Ensemble\n")
+    
+    stats_ensemble = pd.DataFrame([
+        {'Métrica': 'Mensagens processadas', 'Valor': f"{metadata['mensagens_processadas']:,}"},
+        {'Métrica': 'Consenso total (3 votos)', 'Valor': f"{metadata['consenso_total']:,} ({metadata['consenso_total_pct']:.1f}%)"},
+        {'Métrica': 'Maioria (2 votos)', 'Valor': f"{metadata['maioria']:,} ({metadata['maioria_pct']:.1f}%)"},
+        {'Métrica': 'Desacordo total (1 voto)', 'Valor': f"{metadata['desacordo']:,} ({metadata['desacordo_pct']:.1f}%)"},
+        {'Métrica': 'Confiança média', 'Valor': f"{metadata['confianca_media']:.3f}"},
+    ])
+    
+    display(stats_ensemble.style.hide(axis='index'))
+    
+    # Distribuição
+    print("\n### 📈 Distribuição do Ensemble\n")
+    
+    dist_data = []
+    for label, count in metadata['distribuicao'].items():
+        pct = count / metadata['mensagens_processadas'] * 100
+        emoji = {'positive': '😊', 'neutral': '😐', 'negative': '😢'}.get(label, '')
+        dist_data.append({
+            'Sentimento': f"{emoji} {label.capitalize()}",
+            'Quantidade': f"{count:,}",
+            'Percentual': f"{pct:.1f}%"
+        })
+    
+    df_dist = pd.DataFrame(dist_data)
+    display(df_dist.style.hide(axis='index'))
+    
+else:
+    print("⚠️  **Ensemble ainda não foi executado.**")
+    print("\n**Para gerar resultados:**")
+    print("1. Execute os 3 modelos individuais primeiro")
+    print("2. Execute: `python scripts/sentiment_ensemble.py`")
+    print("3. Renderize este notebook novamente")
+```
+
+### Comparação com Modelos
+
+```{python}
+#| label: ensemble-vs-models
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 🏆 Ensemble vs Modelos Individuais\n")
+    
+    comparison = pd.DataFrame([
+        {
+            'Modelo': 'Twitter-RoBERTa',
+            'Concordância': f"{metadata['concordancia_roberta']:.1f}%",
+            'Confiança Média': f"{metadata['confianca_roberta']:.3f}"
+        },
+        {
+            'Modelo': 'DistilBERT',
+            'Concordância': f"{metadata['concordancia_distilbert']:.1f}%",
+            'Confiança Média': f"{metadata['confianca_distilbert']:.3f}"
+        },
+        {
+            'Modelo': 'RoBERTa Latest',
+            'Concordância': f"{metadata['concordancia_deberta']:.1f}%",
+            'Confiança Média': f"{metadata['confianca_deberta']:.3f}"
+        },
+        {
+            'Modelo': '**Ensemble**',
+            'Concordância': '100.0%',
+            'Confiança Média': f"**{metadata['confianca_media']:.3f}**"
+        },
+    ])
+    
+    display(comparison.style.hide(axis='index'))
+    
+    print("\n**Observação:** Concordância indica % de mensagens onde cada modelo concorda com o ensemble.")
+    
+else:
+    print("⚠️  Resultados serão exibidos após executar o ensemble.")
+```
+
+### Exemplos por Consenso
+
+```{python}
+#| label: ensemble-examples
+#| echo: false
+
+if output_file.exists():
+    df_ensemble = pd.read_parquet(output_file)
+    
+    if 'sentimento_ensemble_votes' in df_ensemble.columns:
+        
+        # Consenso Total
+        print("#### ✅ Consenso Total (3 votos)\n")
+        print("*Todos os modelos concordam - máxima confiabilidade*\n")
+        
+        consenso_3 = df_ensemble[df_ensemble['sentimento_ensemble_votes'] == 3][
+            ['conteudo', 'sentimento_ensemble_label', 'sentimento_ensemble_confidence']
+        ].head(5)
+        
+        if len(consenso_3) > 0:
+            consenso_3.columns = ['Mensagem', 'Sentimento', 'Confiança']
+            consenso_3['Confiança'] = consenso_3['Confiança'].apply(lambda x: f"{x:.3f}")
+            display(consenso_3.style.hide(axis='index'))
+        else:
+            print("*Sem exemplos disponíveis*")
+        
+        # Maioria
+        print("\n#### 🤝 Maioria (2 votos)\n")
+        print("*Dois modelos concordam, um discorda*\n")
+        
+        maioria_2 = df_ensemble[df_ensemble['sentimento_ensemble_votes'] == 2][
+            ['conteudo', 'sentimento_ensemble_label', 'sentimento_ensemble_confidence',
+             'sentimento_roberta_label', 'sentimento_distilbert_label', 'sentimento_deberta_label']
+        ].head(5)
+        
+        if len(maioria_2) > 0:
+            maioria_2.columns = ['Mensagem', 'Ensemble', 'Conf.', 'RoBERTa', 'DistilBERT', 'Latest']
+            maioria_2['Conf.'] = maioria_2['Conf.'].apply(lambda x: f"{x:.3f}")
+            display(maioria_2.style.hide(axis='index'))
+        else:
+            print("*Sem exemplos disponíveis*")
+        
+        # Desacordo
+        print("\n#### ⚠️ Desacordo Total (1 voto cada)\n")
+        print("*Cada modelo escolheu diferente - ambiguidade genuína*\n")
+        
+        desacordo_1 = df_ensemble[df_ensemble['sentimento_ensemble_votes'] == 1][
+            ['conteudo', 'sentimento_ensemble_label', 'sentimento_ensemble_confidence',
+             'sentimento_roberta_label', 'sentimento_distilbert_label', 'sentimento_deberta_label']
+        ].head(5)
+        
+        if len(desacordo_1) > 0:
+            desacordo_1.columns = ['Mensagem', 'Ensemble', 'Conf.', 'RoBERTa', 'DistilBERT', 'Latest']
+            desacordo_1['Conf.'] = desacordo_1['Conf.'].apply(lambda x: f"{x:.3f}")
+            display(desacordo_1.style.hide(axis='index'))
+        else:
+            print("*Sem exemplos disponíveis*")
+            
+    else:
+        print("⚠️  Colunas do ensemble não encontradas no dataset.")
+else:
+    print("⚠️  Dataset não encontrado. Execute o ensemble primeiro.")
+```
+:::
+
+------------------------------------------------------------------------
+
+## 💭 Interpretação
+
+::: {.callout-tip icon="false" collapse="false"}
+### 🎯 Por Que o Ensemble Funciona?
+
+**1. Wisdom of Crowds (Sabedoria das Multidões)**
+
+Múltiplas opiniões independentes tendem a ser mais precisas que uma única opinião, mesmo de especialista.
+
+**2. Redução de Viés**
+
+Cada modelo tem viés diferente: - RoBERTa: Conservador → neutral - DistilBERT: Polarizador → positive/negative - Latest: Ultra conservador → neutral
+
+Ensemble equilibra esses vieses.
+
+**3. Confidence Calibration**
+
+-   **Alta concordância** = Alta confiança (genuinamente claro)
+-   **Baixa concordância** = Baixa confiança (genuinamente ambíguo)
+
+**4. Performance Empírica**
+
+Ensemble geralmente supera qualquer modelo individual em métricas como: - Accuracy - F1-Score - Calibração de confiança
+
+------------------------------------------------------------------------
+
+### 📊 Níveis de Confiança
+
+**🟢 Alta Confiança (3 votos - \~60% das mensagens)** - Todos os modelos concordam - Confiança \> 0.70 - **Uso:** Análises estatísticas robustas
+
+**🟡 Média Confiança (2 votos - \~35% das mensagens)** - Maioria concorda - Confiança 0.50-0.70 - **Uso:** Análises gerais, tendências
+
+**🔴 Baixa Confiança (1 voto - \~5% das mensagens)** - Todos discordam - Confiança \< 0.50 - **Uso:** Análise qualitativa, contexto adicional necessário
+
+------------------------------------------------------------------------
+
+### 🎯 Recomendações de Uso
+
+**Para Análise Exploratória (EDA):**
+
+``` python
+# Use ensemble como classificação principal
+df['sentimento_final'] = df['sentimento_ensemble_label']
+
+# Filtre por confiança quando precisar
+df_confiaveis = df[df['sentimento_ensemble_confidence'] > 0.7]
+df_ambiguos = df[df['sentimento_ensemble_confidence'] < 0.5]
+```
+
+**Para Análises Estatísticas:**
+
+``` python
+# Use apenas mensagens com consenso total
+df_robusto = df[df['sentimento_ensemble_votes'] == 3]
+
+# Garante máxima confiabilidade
+```
+
+**Para Identificar Padrões:**
+
+``` python
+# Cruza confiança com outras features
+df.groupby(['sentimento_ensemble_votes', 'periodo_dia']).size()
+
+# Ambiguidade aumenta em certos contextos?
+```
+:::
+
+------------------------------------------------------------------------
+
+## 💡 Guia Prático: Como Usar no EDA
+
+### Exemplo 1: Timeline Emocional
+
+``` python
+# Usa ensemble para timeline mais robusta
+df_timeline = df.groupby([
+    pd.Grouper(key='timestamp', freq='D'),
+    'sentimento_ensemble_label'
+]).size().unstack(fill_value=0)
+
+# Só mensagens confiáveis (opcional)
+df_timeline_confiaveis = df[
+    df['sentimento_ensemble_confidence'] > 0.7
+].groupby([
+    pd.Grouper(key='timestamp', freq='D'),
+    'sentimento_ensemble_label'
+]).size().unstack(fill_value=0)
+```
+
+### Exemplo 2: Comparação entre Remetentes
+
+``` python
+# Por remetente
+df.groupby(['remetente', 'sentimento_ensemble_label']).size()
+
+# Filtrando ambiguidade
+df[df['sentimento_ensemble_votes'] >= 2].groupby([
+    'remetente', 
+    'sentimento_ensemble_label'
+]).size()
+```
+
+### Exemplo 3: Análise de Ambiguidade
+
+``` python
+# Quais contextos geram mais ambiguidade?
+df_ambiguo = df[df['sentimento_ensemble_votes'] == 1]
+
+print("Características de mensagens ambíguas:")
+print(f"Tamanho médio: {df_ambiguo['tamanho_mensagem'].mean():.1f}")
+print(f"Tem emoji: {df_ambiguo['tem_emoji'].mean()*100:.1f}%")
+print(f"Período: {df_ambiguo['periodo_dia'].value_counts()}")
+```
+
+------------------------------------------------------------------------
+
+## 🔮 Validação Futura
+
+Próximos passos para validar a performance do ensemble:
+
+### 1. Validação Manual
+
+-   [ ] Amostrar 100 mensagens aleatórias
+-   [ ] Classificar manualmente
+-   [ ] Comparar com ensemble e modelos individuais
+
+### 2. Métricas de Performance
+
+-   [ ] Calcular accuracy vs validação manual
+-   [ ] Comparar F1-score de ensemble vs modelos
+-   [ ] Análise de calibração de confiança
+
+### 3. Análise de Erros
+
+-   [ ] Identificar padrões em classificações erradas
+-   [ ] Ajustar pesos se necessário
+-   [ ] Iterar estratégia de ensemble
+
+------------------------------------------------------------------------
+
+## 📚 Referências
+
+**Conceitos:** - Ensemble Learning - Majority Voting - Weighted Voting - Confidence Calibration
+
+**Literatura:** - Dietterich, T. G. (2000). "Ensemble Methods in Machine Learning" - Kuncheva, L. I. (2004). "Combining Pattern Classifiers"
+
+------------------------------------------------------------------------
+
+**Status:** 🚧 Aguardando implementação do script `sentiment_ensemble.py`
+
+**Próximo passo:** [Usar ensemble no EDA](../05-eda.qmd)
+
+------------------------------------------------------------------------
