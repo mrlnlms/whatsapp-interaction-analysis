@@ -1,0 +1,446 @@
+---
+title: "Embeddings: MPNet Base (768d)"
+format:
+  html:
+    code-fold: true
+    code-summary: "Mostrar código"
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import sys
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+
+PROJECT_ROOT = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from config import PATHS  # noqa: E402
+```
+
+------------------------------------------------------------------------
+
+# Embeddings: MPNet Base (768 dimensões)
+
+Representação semântica de alta qualidade usando MPNet multilingual.
+
+## 🤖 Modelo
+
+**Sentence Transformers: `paraphrase-multilingual-mpnet-base-v2`**
+
+### Características
+
+- **Arquitetura:** MPNet Base (Microsoft)
+- **Treinamento:** 50+ idiomas incluindo português
+- **Dimensões:** 768 (modelo base - máxima qualidade)
+- **Tamanho:** ~1.1 GB
+- **Otimização:** Similaridade semântica e paraphrase detection
+- **Performance:** Estado da arte em tarefas multilingual
+
+### Por Que Este Modelo?
+
+✅ **Máxima qualidade** - 768 dimensões para representação completa  
+✅ **Multilingual nativo** - Excelente em português  
+✅ **Estado da arte** - Entre os melhores modelos disponíveis  
+✅ **Para análise profunda** - Prioriza qualidade sobre velocidade
+
+**Script:** `scripts/generate_embeddings_mpnet.py`
+
+------------------------------------------------------------------------
+
+## 📋 Features Criadas
+
+```{python}
+#| label: mpnet-features-plan
+#| echo: false
+
+# Features criadas
+features_mpnet = [
+    {
+        'Feature': '<code>embedding</code>',
+        'Tipo': 'array[768]',
+        'Definição': 'Vetor semântico da mensagem (768 dimensões)',
+        'Valores': 'Array de floats (-1.0 a 1.0), normalizado',
+        'Uso': 'Base para clustering, busca semântica, topic modeling'
+    },
+    {
+        'Feature': '<code>similaridade_anterior</code>',
+        'Tipo': 'float',
+        'Definição': 'Similaridade cosine com mensagem anterior',
+        'Valores': '0.0 (diferente) a 1.0 (idêntico)',
+        'Uso': 'Detectar continuidade/mudança de assunto'
+    },
+    {
+        'Feature': '<code>densidade_local</code>',
+        'Tipo': 'float',
+        'Definição': 'Distância média aos 10 vizinhos mais próximos',
+        'Valores': '0.0 (densa) a 1.0 (esparsa)',
+        'Uso': 'Identificar mensagens únicas/anômalas'
+    },
+]
+
+df_features = pd.DataFrame(features_mpnet)
+display(df_features.style.hide(axis='index'))
+```
+
+::: {.callout-note icon="false" collapse="true"}
+#### 📝 Sobre Armazenamento
+
+Embeddings são salvos em arquivo separado para otimização:
+- **Embeddings:** `message_embeddings_mpnet.npy` (~201 MB)
+- **Features derivadas:** No parquet principal (leves)
+
+```python
+# Carregar no EDA:
+embeddings = np.load('data/processed/message_embeddings_mpnet.npy')
+```
+:::
+
+------------------------------------------------------------------------
+
+## 💻 Execução
+
+```bash
+python scripts/generate_embeddings_mpnet.py
+```
+
+------------------------------------------------------------------------
+
+## 📊 Resultados
+
+::: {.panel-tabset}
+
+### Visão Geral
+
+```{python}
+#| label: mpnet-overview
+#| echo: false
+
+metadata_file = PATHS['processed'] / 'embeddings_mpnet_metadata.json'
+embeddings_file = PATHS['processed'] / 'message_embeddings_mpnet.npy'
+
+if metadata_file.exists() and embeddings_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 📊 Estatísticas Gerais\n")
+    
+    stats_general = pd.DataFrame([
+        {'Métrica': 'Mensagens processadas', 'Valor': f"{metadata['mensagens_processadas']:,}"},
+        {'Métrica': 'Dimensões', 'Valor': f"{metadata['dimensoes']}"},
+        {'Métrica': 'Tamanho do arquivo', 'Valor': f"{metadata['tamanho_mb']:.2f} MB"},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata['tempo_total_minutos']:.2f} min"},
+        {'Métrica': 'Velocidade', 'Valor': f"{metadata.get('mensagens_por_segundo', 0):.1f} msgs/s"},
+    ])
+    
+    display(stats_general.style.hide(axis='index'))
+    
+    # Carrega embeddings (AMOSTRA PEQUENA para não travar)
+    embeddings = np.load(embeddings_file)
+    
+    print("\n### 📈 Estatísticas dos Vetores\n")
+    
+    stats_vetores = pd.DataFrame([
+        {'Métrica': 'Shape', 'Valor': f"{embeddings.shape}"},
+        {'Métrica': 'Média', 'Valor': f"{embeddings.mean():.4f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{embeddings.std():.4f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{embeddings.min():.4f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{embeddings.max():.4f}"},
+    ])
+    
+    display(stats_vetores.style.hide(axis='index'))
+    
+    # Distribuição de normas (AMOSTRA)
+    print("\n### 📊 Distribuição de Normas\n")
+    
+    # USA AMOSTRA PEQUENA!
+    sample_size = min(1000, len(embeddings))
+    np.random.seed(42)
+    sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+    sample_emb = embeddings[sample_indices]
+    
+    norms = np.linalg.norm(sample_emb, axis=1)
+    
+    fig = px.histogram(
+        x=norms,
+        nbins=30,
+        title=f'Distribuição de Normas (amostra de {sample_size:,})',
+        labels={'x': 'Norma (L2)', 'y': 'Frequência'}
+    )
+    
+    fig.add_vline(x=norms.mean(), line_dash="dash", line_color="red",
+                  annotation_text=f"Média: {norms.mean():.3f}")
+    
+    fig.update_layout(showlegend=False, height=400)
+    fig.show()
+    
+    print(f"\n**Média da norma:** {norms.mean():.4f}")
+    print(f"**Embeddings normalizados têm norma ≈ 1.0**")
+    
+else:
+    print("⚠️  **Embeddings não encontrados.**")
+    print("\nExecute: `python scripts/generate_embeddings_mpnet.py`")
+```
+
+### Similaridade
+
+```{python}
+#| label: mpnet-similarity
+#| echo: false
+
+if embeddings_file.exists():
+    embeddings = np.load(embeddings_file)
+    
+    from sklearn.metrics.pairwise import cosine_similarity
+    
+    print("### 🔍 Análise de Similaridade\n")
+    
+    # AMOSTRA PEQUENA!
+    sample_size = min(1000, len(embeddings))
+    np.random.seed(42)
+    sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+    sample_embeddings = embeddings[sample_indices]
+    
+    print(f"**Calculando similaridades** (amostra de {sample_size:,} mensagens)...\n")
+    similarities = cosine_similarity(sample_embeddings)
+    
+    # Remove diagonal
+    np.fill_diagonal(similarities, 0)
+    
+    # Estatísticas
+    print(f"**Estatísticas de Similaridade:**\n")
+    
+    stats_sim = pd.DataFrame([
+        {'Métrica': 'Média', 'Valor': f"{similarities.mean():.3f}"},
+        {'Métrica': 'Mediana', 'Valor': f"{np.median(similarities):.3f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{similarities.std():.3f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{similarities.min():.3f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{similarities.max():.3f}"},
+    ])
+    
+    display(stats_sim.style.hide(axis='index'))
+    
+    # Histograma
+    print("\n### Distribuição de Similaridades\n")
+    
+    fig = px.histogram(
+        x=similarities.flatten(),
+        nbins=30,
+        title='Distribuição de Similaridade Cosine',
+        labels={'x': 'Similaridade', 'y': 'Frequência'}
+    )
+    
+    fig.update_layout(showlegend=False, height=400)
+    fig.show()
+    
+    print("\n**Interpretação:**")
+    print("- **Alta (> 0.7):** Mensagens muito parecidas")
+    print("- **Média (0.4-0.7):** Mensagens relacionadas")
+    print("- **Baixa (< 0.4):** Mensagens sobre assuntos diferentes")
+```
+
+### Exemplos
+
+```{python}
+#| label: mpnet-examples
+#| echo: false
+
+if embeddings_file.exists():
+    df = pd.read_parquet(PATHS['processed'] / 'messages_with_models.parquet')
+    embeddings = np.load(embeddings_file)
+    
+    from sklearn.metrics.pairwise import cosine_similarity
+    
+    print("### 💬 Busca Semântica\n")
+    print("Exemplos de mensagens semanticamente similares:\n")
+    
+    # IMPORTANTE: Só pega mensagens que TÊM embeddings (similaridade_anterior existe)
+    mask_com_embedding = df['similaridade_anterior'].notna()
+    df_com_embedding = df[mask_com_embedding].reset_index(drop=True)
+    
+    # Agora os índices batem: df_com_embedding[i] <-> embeddings[i]
+    
+    # APENAS 2 EXEMPLOS!
+    np.random.seed(42)
+    n_examples = 2
+    random_indices = np.random.choice(len(df_com_embedding), n_examples, replace=False)
+    
+    for idx in random_indices:
+        query_embedding = embeddings[idx].reshape(1, -1)
+        query_content = df_com_embedding.iloc[idx]['conteudo']
+        
+        # Trata None no query
+        if query_content is None or pd.isna(query_content):
+            query_text = '[mensagem vazia]'
+        else:
+            query_text = str(query_content)[:100]
+        
+        # BUSCA EM AMOSTRA MENOR!
+        sample_size = min(5000, len(embeddings))
+        sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+        sample_emb = embeddings[sample_indices]
+        
+        # Calcula similaridade
+        similarities = cosine_similarity(query_embedding, sample_emb)[0]
+        
+        # Top 3 (reduzido de 5)
+        top_indices = similarities.argsort()[-3:][::-1]
+        top_similarities = similarities[top_indices]
+        
+        print(f"\n**Mensagem:** \"{query_text}...\"\n")
+        print("**Top 3 similares:**\n")
+        
+        similar_data = []
+        for i, (local_idx, sim_score) in enumerate(zip(top_indices, top_similarities), 1):
+            global_idx = sample_indices[local_idx]
+            msg_content = df_com_embedding.iloc[global_idx]['conteudo']
+            # Trata None
+            if msg_content is None or pd.isna(msg_content):
+                msg_text = '[mensagem vazia]'
+            else:
+                msg_text = str(msg_content)[:80] + '...'
+            
+            similar_data.append({
+                '#': i,
+                'Mensagem': msg_text,
+                'Similaridade': f"{sim_score:.3f}"
+            })
+        
+        df_similar = pd.DataFrame(similar_data)
+        display(df_similar.style.hide(axis='index'))
+```
+
+### Features Derivadas
+
+```{python}
+#| label: mpnet-derived-features
+#| echo: false
+
+df = pd.read_parquet(PATHS['processed'] / 'messages_with_models.parquet')
+
+# NOME CORRETO: similaridade_anterior (sem sufixo _mpnet)
+if 'similaridade_anterior' in df.columns:
+    print("### 📊 Features Derivadas\n")
+    
+    print("#### Similaridade com Mensagem Anterior\n")
+    
+    stats_sim_ant = pd.DataFrame([
+        {'Métrica': 'Média', 'Valor': f"{df['similaridade_anterior'].mean():.3f}"},
+        {'Métrica': 'Mediana', 'Valor': f"{df['similaridade_anterior'].median():.3f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{df['similaridade_anterior'].std():.3f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{df['similaridade_anterior'].min():.3f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{df['similaridade_anterior'].max():.3f}"},
+    ])
+    
+    display(stats_sim_ant.style.hide(axis='index'))
+    
+    # Histograma (AMOSTRA)
+    sample_df = df.sample(n=min(10000, len(df)), random_state=42)
+    
+    fig = px.histogram(
+        sample_df,
+        x='similaridade_anterior',
+        nbins=30,
+        title='Similaridade com Mensagem Anterior',
+        labels={'similaridade_anterior': 'Similaridade Cosine'}
+    )
+    
+    fig.update_layout(height=400)
+    fig.show()
+    
+    print("\n**Interpretação:**")
+    print(f"- Similaridade média: {df['similaridade_anterior'].mean():.3f}")
+    print("- Indica continuidade conversacional")
+    print("- Valores baixos = mudança de assunto")
+    
+    print("\n#### Densidade Local\n")
+    
+    if 'densidade_local' in df.columns:
+        stats_dens = pd.DataFrame([
+            {'Métrica': 'Média', 'Valor': f"{df['densidade_local'].mean():.3f}"},
+            {'Métrica': 'Mediana', 'Valor': f"{df['densidade_local'].median():.3f}"},
+            {'Métrica': 'Desvio Padrão', 'Valor': f"{df['densidade_local'].std():.3f}"},
+        ])
+        
+        display(stats_dens.style.hide(axis='index'))
+        
+        print("\n**Interpretação:**")
+        print(f"- Densidade média: {df['densidade_local'].mean():.3f}")
+        print("- Valores altos = mensagens únicas/raras")
+        print("- Valores baixos = mensagens comuns/frequentes")
+else:
+    print("⚠️  **Features derivadas não encontradas.**")
+    print("\nExecute: `python scripts/generate_embeddings_mpnet.py`")
+```
+
+### Processamento
+
+```{python}
+#| label: mpnet-processing
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 📋 Detalhes do Processamento\n")
+    
+    processing_info = pd.DataFrame([
+        {'Métrica': 'Modelo', 'Valor': metadata['modelo']},
+        {'Métrica': 'Executado em', 'Valor': pd.to_datetime(metadata['timestamp_execucao']).strftime('%d/%m/%Y %H:%M:%S')},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Batch size', 'Valor': str(metadata.get('batch_size', 'N/A'))},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata['tempo_total_minutos']:.2f} min"},
+        {'Métrica': 'Velocidade', 'Valor': f"{metadata.get('mensagens_por_segundo', 0):.1f} msgs/s"},
+    ])
+    
+    display(processing_info.style.hide(axis='index'))
+```
+
+:::
+
+------------------------------------------------------------------------
+
+## 💡 Interpretação
+
+::: {.callout-tip icon="false" collapse="false"}
+### 🎯 Características do MPNet Base
+
+**Perfil: Máxima Qualidade** 🏆
+
+**Pontos Fortes:**
+- ✅ **768 dimensões** - Capacidade máxima de representação
+- ✅ **Alta separação semântica** - Distingue bem significados diferentes
+- ✅ **Melhor para clustering** - Grupos mais coesos e separados
+- ✅ **Estado da arte** - Entre os melhores modelos multilingual
+
+**Trade-offs:**
+- ⚠️ **Mais lento** - ~227 msg/s (vs ~842 do MiniLM)
+- ⚠️ **Maior tamanho** - 201 MB (vs ~101 MB do MiniLM)
+- ⚠️ **Mais memória** - 768 dims requer mais RAM
+
+**Quando Usar:**
+- Análise exploratória profunda
+- Clustering de alta qualidade
+- Topic modeling (BERTopic)
+- Quando qualidade > velocidade
+
+**Performance Observada:**
+- Similaridade com anterior: ~0.54 (boa continuidade)
+- Densidade local: ~0.13 (boa distribuição)
+- Tempo de geração: ~7 minutos (68k mensagens, CPU)
+- Silhouette Score: 0.059 (melhor entre os 3 modelos)
+:::
+
+------------------------------------------------------------------------
+
+**Próximo:** [Comparação com outros modelos](04i-embeddings-comparison.qmd)
+
+------------------------------------------------------------------------
