@@ -379,30 +379,22 @@ def merge_transcriptions(df: pd.DataFrame, df_transcriptions: pd.DataFrame) -> p
 def enrich_content(df: pd.DataFrame) -> pd.DataFrame:
     """
     Cria coluna 'conteudo_enriquecido' substituindo mídias por transcrições.
-    
-    Para áudio/vídeo com transcrição:
-        [AUDIO TRANSCRITO] {transcrição}
-        [Arquivo: filename]
+
+    O conteúdo original (audio omitted, video omitted, etc) é substituído
+    diretamente pela transcrição pura, sem adicionar tags ou referências ao arquivo.
     """
     df = df.copy()
-    
+
     def build_enriched_content(row):
         # Se não tem transcrição, mantém original
         if not row.get('tem_transcricao') or pd.isna(row.get('transcricao')):
             return row['conteudo']
-        
-        tipo = row.get('tipo_arquivo', 'MEDIA')
-        transcricao = row['transcricao']
-        arquivo = row.get('arquivo', '')
-        is_synthetic = row.get('is_synthetic', False)
-        
-        if is_synthetic:
-            return f"[{tipo} TRANSCRITO - ÓRFÃO] {transcricao}\n[Arquivo: {arquivo}]"
-        else:
-            return f"[{tipo} TRANSCRITO] {transcricao}\n[Arquivo: {arquivo}]"
-    
+
+        # Retorna apenas a transcrição pura, sem tags
+        return row['transcricao']
+
     df['conteudo_enriquecido'] = df.apply(build_enriched_content, axis=1)
-    
+
     return df
 
 
@@ -702,11 +694,12 @@ Agrega linhas de continuação (mensagens multilinha) e cria timestamp datetime.
     },
     'classify': {
         'name': 'Classificação de mensagens',
-        'description': '''Classifica cada mensagem por tipo:
-- Texto: puro, com emoji, com link
-- Mídia omitida: audio, image, video, sticker, gif, document
-- Mídia anexada: audio, image, video, sticker, contact
-- Sistema: deleted, edited, calls'''
+        'description': '''Classifica cada mensagem por tipo (21 tipos possíveis):
+
+- **Texto (3):** text_pure, text_with_emoji, text_with_link
+- **Mídia omitida (7):** audio, image, video, video_note, sticker, gif, document
+- **Mídia anexada (6):** audio, image, video, sticker, contact, file
+- **Sistema (5):** message_deleted, message_edited, voice_call, missed_call, system_message'''
     },
     'media': {
         'name': 'Vinculação de mídia',
@@ -720,8 +713,9 @@ Suporta transcrições via Groq/Whisper API ou CSV pré-existente.'''
     },
     'enrich': {
         'name': 'Enriquecimento de conteúdo',
-        'description': '''Substitui conteúdo de mídias por transcrições.
-Formato: [AUDIO TRANSCRITO] {transcrição}'''
+        'description': '''Substitui marcadores de mídia pelas transcrições correspondentes.
+
+O conteúdo original (`audio omitted`, `video omitted`, etc) é substituído diretamente pela transcrição pura, sem adicionar tags, marcadores ou referências ao arquivo.'''
     },
     'export': {
         'name': 'Exportação de arquivos',
