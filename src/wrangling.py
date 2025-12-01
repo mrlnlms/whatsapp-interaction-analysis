@@ -378,24 +378,97 @@ def merge_transcriptions(df: pd.DataFrame, df_transcriptions: pd.DataFrame) -> p
 
 def enrich_content(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Cria coluna 'conteudo_enriquecido' substituindo mídias por transcrições.
-
-    O conteúdo original (audio omitted, video omitted, etc) é substituído
-    diretamente pela transcrição pura, sem adicionar tags ou referências ao arquivo.
+    Enriquece conteúdo e adiciona coluna de grupo de mensagem.
+    
+    Cria duas colunas:
+    1. grupo_mensagem: Categoria limpa (AUDIO, VID, IMG, TEXT, etc.)
+    2. conteudo_enriquecido: Transcrição pura OU conteúdo original
+    
+    Categorias:
+    - TEXT: Mensagens de texto (puro, com emoji, com link)
+    - AUDIO: Áudios
+    - VID: Vídeos (inclui video_note)
+    - IMG: Imagens
+    - STICKER: Stickers
+    - GIF: GIFs
+    - DOC: Documentos
+    - CONTACT: Contatos
+    - FILE: Outros arquivos
+    - SYSTEM: Mensagens do sistema
+    - CALL: Chamadas (voz/vídeo/perdida)
     """
     df = df.copy()
-
-    def build_enriched_content(row):
-        # Se não tem transcrição, mantém original
-        if not row.get('tem_transcricao') or pd.isna(row.get('transcricao')):
-            return row['conteudo']
-
-        # Retorna apenas a transcrição pura, sem tags
-        return row['transcricao']
-
-    df['conteudo_enriquecido'] = df.apply(build_enriched_content, axis=1)
-
+    
+    # Mapeamento tipo_mensagem → grupo_mensagem
+    TAG_MAPPING = {
+        # Áudio
+        'audio_omitted': 'AUDIO',
+        'audio_attached': 'AUDIO',
+        
+        # Vídeo (UNIFICADO)
+        'video_omitted': 'VID',
+        'video_attached': 'VID',
+        'video_note_omitted': 'VID',
+        
+        # Imagem
+        'image_omitted': 'IMG',
+        'image_attached': 'IMG',
+        
+        # Sticker
+        'sticker_omitted': 'STICKER',
+        'sticker_attached': 'STICKER',
+        
+        # GIF
+        'gif_omitted': 'GIF',
+        
+        # Documento
+        'document_omitted': 'DOC',
+        
+        # Contato
+        'contact_attached': 'CONTACT',
+        
+        # Arquivo genérico
+        'file_attached': 'FILE',
+        
+        # Texto
+        'text_pure': 'TEXT',
+        'text_with_emoji': 'TEXT',
+        'text_with_link': 'TEXT',
+        
+        # Sistema
+        'message_deleted': 'SYSTEM',
+        'message_edited': 'SYSTEM',
+        'voice_call': 'CALL',
+        'video_call': 'CALL',
+        'missed_call': 'CALL',
+        'system_message': 'SYSTEM',
+    }
+    
+    def build_enriched_data(row):
+        tipo = row['tipo_mensagem']
+        grupo = TAG_MAPPING.get(tipo, 'OTHER')  # Fallback se tipo desconhecido
+        
+        # Define conteúdo baseado no grupo
+        if grupo in ['AUDIO', 'VID', 'IMG', 'STICKER', 'GIF', 'DOC', 'CONTACT', 'FILE']:
+            # É mídia → verifica se tem transcrição
+            if row.get('tem_transcricao') and pd.notna(row.get('transcricao')):
+                conteudo = row['transcricao']
+            else:
+                conteudo = None  # Mídia sem transcrição
+        else:
+            # Texto, sistema, chamadas → mantém conteúdo original
+            conteudo = row['conteudo']
+        
+        return {'grupo_mensagem': grupo, 'conteudo_enriquecido': conteudo}
+    
+    # Aplica enriquecimento
+    enriched_data = df.apply(build_enriched_data, axis=1)
+    
+    df['grupo_mensagem'] = enriched_data.apply(lambda x: x['grupo_mensagem'])
+    df['conteudo_enriquecido'] = enriched_data.apply(lambda x: x['conteudo_enriquecido'])
+    
     return df
+
 
 
 # =============================================================================
@@ -508,10 +581,32 @@ COLUMNS_CORE = [
     'timestamp',
     'remetente',
     'tipo_mensagem',
-    'conteudo_enriquecido',
+    'grupo_mensagem',      # NOVA: tags padronizadas
+    'conteudo_enriquecido', # Será renomeada para 'conteudo' no export
     'arquivo',
+    'tem_transcricao',      # Será renomeada para 'transcricao' (bool)
+    'is_synthetic',         # Será renomeada para 'date_match'
+]
+
+# Todas as colunas (debug/auditoria) - MANTÉM conteudo original
+COLUMNS_FULL = [
+    'linha_original',
+    'data',
+    'hora',
+    'timestamp',
+    'remetente',
+    'conteudo',             # ORIGINAL (com tags inline se quiser)
+    'tipo_mensagem',
+    'grupo_mensagem',       # NOVA
+    'conteudo_enriquecido', # LIMPO
+    'arquivo',
+    'arquivo_existe',
+    'extensao',
+    'tipo_arquivo',
+    'arquivo_path',
     'tem_transcricao',
     'transcricao',
+    'transcription_status',
     'is_synthetic',
 ]
 
@@ -531,27 +626,12 @@ def export_optimized(
     show_progress: bool = True
 ) -> dict:
     """
-    Exporta DataFrame em múltiplos formatos otimizados.
+    Exporta DataFrame em múltiplos formatos otimizados com renomeação de colunas.
     
-    Args:
-        df: DataFrame com mensagens
-        output_dir: Diretório de saída
-        formats: Lista de formatos. Default: ['csv_full', 'csv_core', 'parquet']
-                 Opções: 'csv_full', 'csv_core', 'csv_minimal', 'parquet', 'parquet_minimal'
-        show_progress: Se True, imprime progresso
-        
-    Returns:
-        Dict com paths e tamanhos dos arquivos gerados
-        
-    Formatos:
-        - csv_full: Todas as 17 colunas (debug/auditoria)
-        - csv_core: 8 colunas essenciais (análise)
-        - csv_minimal: 4 colunas mínimas (lightweight)
-        - parquet: 8 colunas com tipos otimizados (performance)
-        - parquet_minimal: 4 colunas (máxima performance)
-        
-    Nota:
-        Parquet requer pyarrow: pip install pyarrow
+    Renomeações aplicadas no dataset CORE/MINIMAL:
+    - conteudo_enriquecido → conteudo
+    - tem_transcricao → transcricao
+    - is_synthetic → date_match
     """
     if formats is None:
         formats = ['csv_full', 'csv_core', 'parquet']
@@ -561,80 +641,93 @@ def export_optimized(
     
     outputs = {}
     
-    # Verifica se pyarrow está disponível
+    # Mapeamento de renomeação
+    RENAME_MAP = {
+        'conteudo_enriquecido': 'conteudo',
+        'tem_transcricao': 'transcricao',
+        'is_synthetic': 'date_match'
+    }
+    
+    # Verifica pyarrow
     parquet_available = True
     try:
         import pyarrow
     except ImportError:
         parquet_available = False
         if any('parquet' in f for f in formats):
-            print("⚠️ pyarrow não instalado. Parquet será ignorado. Instale com: pip install pyarrow")
+            print("⚠️ pyarrow não instalado. Parquet será ignorado.")
     
     if show_progress:
         print("📦 Exportando datasets otimizados...\n")
     
-    # Prepara DataFrame com tipos otimizados para parquet
     def optimize_dtypes(df_subset):
         df_opt = df_subset.copy()
         
-        # Timestamp como datetime
         if 'timestamp' in df_opt.columns and df_opt['timestamp'].dtype == 'object':
             df_opt['timestamp'] = pd.to_datetime(df_opt['timestamp'])
         
         # Booleans
-        bool_cols = ['tem_transcricao', 'is_synthetic', 'arquivo_existe']
+        bool_cols = ['transcricao', 'date_match', 'arquivo_existe']  # RENOMEADOS
         for col in bool_cols:
             if col in df_opt.columns:
                 df_opt[col] = df_opt[col].astype(bool)
         
-        # Categorias (baixa cardinalidade)
-        cat_cols = ['remetente', 'tipo_mensagem', 'tipo_arquivo', 'extensao']
+        # Categorias
+        cat_cols = ['remetente', 'tipo_mensagem', 'grupo_mensagem', 'tipo_arquivo', 'extensao']
         for col in cat_cols:
             if col in df_opt.columns:
                 df_opt[col] = df_opt[col].astype('category')
         
         return df_opt
     
-    # Filtra colunas existentes
     def filter_columns(columns):
         return [c for c in columns if c in df.columns]
     
     for fmt in formats:
-        # Pula parquet se não tiver pyarrow
         if 'parquet' in fmt and not parquet_available:
             continue
             
         if fmt == 'csv_full':
+            # Full: MANTÉM nomes originais + conteudo original
             path = output_dir / 'messages_full.csv'
             cols = filter_columns(COLUMNS_FULL)
             df[cols].to_csv(path, index=False, encoding='utf-8')
             
         elif fmt == 'csv_core':
+            # Core: RENOMEIA colunas
             path = output_dir / 'messages.csv'
             cols = filter_columns(COLUMNS_CORE)
-            df[cols].to_csv(path, index=False, encoding='utf-8')
+            df_export = df[cols].copy()
+            df_export = df_export.rename(columns=RENAME_MAP)
+            df_export.to_csv(path, index=False, encoding='utf-8')
             
         elif fmt == 'csv_minimal':
             path = output_dir / 'messages_minimal.csv'
             cols = filter_columns(COLUMNS_MINIMAL)
-            df[cols].to_csv(path, index=False, encoding='utf-8')
+            df_export = df[cols].copy()
+            df_export = df_export.rename(columns=RENAME_MAP)
+            df_export.to_csv(path, index=False, encoding='utf-8')
             
         elif fmt == 'parquet':
+            # Parquet: RENOMEIA colunas + otimiza tipos
             path = output_dir / 'messages.parquet'
             cols = filter_columns(COLUMNS_CORE)
-            df_opt = optimize_dtypes(df[cols])
+            df_export = df[cols].copy()
+            df_export = df_export.rename(columns=RENAME_MAP)
+            df_opt = optimize_dtypes(df_export)
             df_opt.to_parquet(path, index=False, engine='pyarrow')
             
         elif fmt == 'parquet_minimal':
             path = output_dir / 'messages_minimal.parquet'
             cols = filter_columns(COLUMNS_MINIMAL)
-            df_opt = optimize_dtypes(df[cols])
+            df_export = df[cols].copy()
+            df_export = df_export.rename(columns=RENAME_MAP)
+            df_opt = optimize_dtypes(df_export)
             df_opt.to_parquet(path, index=False, engine='pyarrow')
         
         else:
             continue
         
-        # Calcula tamanho
         size_bytes = path.stat().st_size
         size_mb = size_bytes / (1024 * 1024)
         
@@ -653,9 +746,6 @@ def export_optimized(
         if 'csv_full' in outputs and 'parquet' in outputs:
             ratio = outputs['csv_full']['size_mb'] / outputs['parquet']['size_mb']
             print(f"   • CSV Full / Parquet: {ratio:.1f}x maior")
-        if 'csv_core' in outputs and 'parquet' in outputs:
-            savings = (1 - outputs['parquet']['size_mb'] / outputs['csv_core']['size_mb']) * 100
-            print(f"   • Economia Parquet vs CSV Core: {savings:.1f}%")
     
     return outputs
 
@@ -694,12 +784,7 @@ Agrega linhas de continuação (mensagens multilinha) e cria timestamp datetime.
     },
     'classify': {
         'name': 'Classificação de mensagens',
-        'description': '''Classifica cada mensagem por tipo (21 tipos possíveis):
-
-- **Texto (3):** text_pure, text_with_emoji, text_with_link
-- **Mídia omitida (7):** audio, image, video, video_note, sticker, gif, document
-- **Mídia anexada (6):** audio, image, video, sticker, contact, file
-- **Sistema (5):** message_deleted, message_edited, voice_call, missed_call, system_message'''
+        'description': 'Classifica cada mensagem por tipo (21 tipos possíveis).'
     },
     'media': {
         'name': 'Vinculação de mídia',
@@ -713,22 +798,18 @@ Suporta transcrições via Groq/Whisper API ou CSV pré-existente.'''
     },
     'enrich': {
         'name': 'Enriquecimento de conteúdo',
-        'description': '''Substitui marcadores de mídia pelas transcrições correspondentes.
+        'description': '''Cria coluna `grupo_mensagem` com categorias padronizadas e enriquece conteúdo.
 
-O conteúdo original (`audio omitted`, `video omitted`, etc) é substituído diretamente pela transcrição pura, sem adicionar tags, marcadores ou referências ao arquivo.'''
+    **Categorias:** `TEXT`, `AUDIO`, `VID`, `IMG`, `STICKER`, `GIF`, `DOC`, `CONTACT`, `FILE`, `SYSTEM`, `CALL`
+
+    **Regras:**
+    - Mídia com transcrição → transcrição no conteúdo
+    - Mídia sem transcrição → conteúdo vazio
+    - Texto/sistema → conteúdo original'''
     },
     'export': {
         'name': 'Exportação de arquivos',
-        'description': '''Exporta datasets em múltiplos formatos:
-
-**Datasets estruturados:**
-- messages_full.csv (17 cols) — Debug/auditoria
-- messages.csv (8 cols) — Análise
-- messages.parquet (8 cols) — Performance
-
-**Arquivos de corpus (TXT):**
-- chat_complete.txt, chat_p1.txt, chat_p2.txt
-- corpus_full.txt, corpus_p1.txt, corpus_p2.txt'''
+        'description': 'Exporta datasets em múltiplos formatos (CSV, Parquet, TXT).'
     },
 }
 
