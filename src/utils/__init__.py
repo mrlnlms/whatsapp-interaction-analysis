@@ -9,14 +9,15 @@ from .dataframe_helpers import (
 )
 from .file_helpers import get_file_overview, get_file_density_stats
 from .audit import (
-    audit_transformation, 
-    audit_pipeline, 
+    audit_transformation,
+    audit_pipeline,
     format_audit_table,
     format_summary_table,
     generate_impact_analysis,
     get_file_stats,
     format_bytes
 )
+from .text_helpers import format_markdown_lists
 
 __all__ = [
     # DataFrame helpers
@@ -34,4 +35,6 @@ __all__ = [
     'generate_impact_analysis',
     'get_file_stats',
     'format_bytes',
+    # Text helpers
+    'format_markdown_lists',
 ]
