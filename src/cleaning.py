@@ -44,12 +44,16 @@ def remove_u200e(input_file, output_file):
 def remove_empty_timestamps(input_file, output_file):
     """
     Remove timestamps vazios seguidos de múltiplas mídias consecutivas.
-    
-    Quando múltiplas mídias são enviadas simultaneamente, o WhatsApp registra
+
+    Quando múltiplas mídias são enviadas simultaneamente, o WhatsApp pode registrar
     uma linha com timestamp e remetente vazios, seguida das mídias. A primeira
     linha é redundante e pode ser removida.
+
+    IMPORTANTE: Esta função roda APÓS a otimização de timestamps, então o formato
+    esperado é: DD/MM/YY HH:MM:SS (sem colchetes).
     """
-    timestamp_pattern = r'^\[\d{2}/\d{2}/\d{2}, \d{2}:\d{2}:\d{2}\]'
+    # Formato após otimização de timestamps
+    timestamp_pattern = r'^\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
     media_patterns = [
         '<attached:', 'audio omitted', 'image omitted', 'video omitted', 
         'sticker omitted', 'GIF omitted', 'document omitted'

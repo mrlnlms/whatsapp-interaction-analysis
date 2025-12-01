@@ -3,10 +3,6 @@ title: "WhatsApp DS Analytics"
 subtitle: "Pipeline de Data Science para análise de conversas"
 author: "Marlon"
 date: today
-format:
-  html:
-    toc: true
-    theme: cosmo
 ---
 
 # Introdução
@@ -40,7 +36,7 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 ## Pipeline Principal
 
 | Fase | Documento | Descrição |
-|------------------|---------------------------|---------------------------|
+|-------------------|---------------------------|---------------------------|
 | Exploration | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo bruto |
 | Cleaning | [01-data-cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | Wrangling | [02-data-wrangling](notebooks/02-data-wrangling.qmd) | Parsing, vinculação de mídia, transcrição |
@@ -136,7 +132,7 @@ whatsapp-ds-analytics/
 O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 
 | Arquivo | Descrição | Uso |
-|-------------------------|------------------------------|-----------------|
+|-------------------------|-----------------------------|------------------|
 | `messages.csv` | Dataset principal (8 colunas) | **Use este para análises** |
 | `messages.parquet` | Mesmo conteúdo, \~3x menor | Performance |
 | `messages_full.csv` | Versão completa (17 colunas) | Debug/auditoria |
