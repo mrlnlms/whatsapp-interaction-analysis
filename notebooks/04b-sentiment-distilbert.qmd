@@ -1,0 +1,459 @@
+---
+title: "DistilBERT Multilingual"
+subtitle: "Model-Based Features"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+
+# Define arquivos
+INPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+OUTPUT_FILE = PATHS['processed'] / 'messages_with_models.parquet'
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
+```
+
+## Configuração
+
+```{python}
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{INPUT_FILE.name}</code>', 'Path': format_relative_path(INPUT_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{OUTPUT_FILE.name}</code>', 'Path': format_relative_path(OUTPUT_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook cria **features baseadas em modelos de Machine Learning** que complementam as features estruturais criadas no notebook anterior.
+
+⚠️ **IMPORTANTE:** Todas as análises deste notebook são:
+
+-   **Computacionalmente custosas** (podem levar vários minutos)
+
+-   **Totalmente opcionais** (não são necessárias para EDA básico)
+
+-   **Requerem hardware adequado** (GPU recomendada para alguns modelos)
+
+As features de modelos **não são executadas automaticamente** durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+#| output: false
+
+# Carrega dataset enriquecido
+df = pd.read_parquet(INPUT_FILE)
+
+n_mensagens = len(df)
+n_colunas = len(df.columns)
+periodo_inicio = df['timestamp'].min().strftime('%d/%m/%Y')
+periodo_fim = df['timestamp'].max().strftime('%d/%m/%Y')
+```
+
+```{python}
+#| label: show-data-summary
+
+dados_resumo = [
+    {'Métrica': 'Mensagens', 'Valor': f'{n_mensagens:,}'},
+    {'Métrica': 'Colunas', 'Valor': f'{n_colunas}'},
+    {'Métrica': 'Período', 'Valor': f'{periodo_inicio} → {periodo_fim}'},
+]
+
+display(pd.DataFrame(dados_resumo).style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## Modelo 2: DistilBERT Multilingual
+
+Modelo leve otimizado via destilação de conhecimento, 60% menor e 2x mais rápido que modelos BERT tradicionais.
+
+### Características
+
+-   **Treinamento:** Destilado de BERT multilingual (\~50 idiomas incluindo PT)
+-   **Otimização:** Velocidade mantendo \~95% da performance
+-   **Classes:** 3 (positive, neutral, negative)
+-   **Especial:** 66M parâmetros vs 270M do RoBERTa (75% menor)
+
+**Script:** `scripts/sentiment_distilbert.py`
+
+### Features Criadas
+
+```{python}
+#| label: sentiment-distilbert-features-plan
+
+# Features do modelo DistilBERT
+features_sentimento_distilbert = [
+    {
+        'Feature': '<code>sentimento_distilbert_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Classificação do sentimento em 3 classes (DistilBERT)',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Comparação de velocidade vs precisão com RoBERTa'
+    },
+    {
+        'Feature': '<code>sentimento_distilbert_score</code>',
+        'Tipo': 'float',
+        'Definição': 'Score de confiança do DistilBERT (0-1)',
+        'Valores': '0.0 a 1.0',
+        'Uso': 'Análise de trade-off velocidade/confiança'
+    },
+]
+
+df_plan_sentimento_distilbert = pd.DataFrame(features_sentimento_distilbert)
+display(df_plan_sentimento_distilbert.style.hide(axis='index'))
+```
+
+::: {.callout-note icon="false" collapse="true"}
+#### 📝 Sobre Destilação de Conhecimento
+
+DistilBERT usa **knowledge distillation**: um modelo menor (student) aprende a imitar um modelo grande (teacher). Resultado: 60% menor, 60% mais rápido, mantendo \~95% da performance.
+:::
+
+### Execução
+
+**Script:** `scripts/sentiment_distilbert.py`
+
+Para executar a análise de sentimento com DistilBERT:
+
+```{python}
+#| label: sentiment-distilbert-execution
+#| echo: true
+#| eval: false
+#| code-fold: false
+
+import subprocess
+
+print("🤖 Iniciando análise de sentimento...")
+print("📦 Modelo: DistilBERT Multilingual")
+print("⏱️  Tempo estimado: 10-15 minutos (CPU) ou 3-5 minutos (GPU)")
+print("⚡ ~2x mais rápido que Twitter-RoBERTa\n")
+
+# Executa script específico
+result = subprocess.run(['python', 'scripts/sentiment_distilbert.py'])
+
+if result.returncode == 0:
+    print("\n✅ Análise concluída com sucesso!")
+    print(f"📁 Arquivo atualizado: {OUTPUT_FILE}")
+else:
+    print("\n❌ Erro na execução. Verifique os logs acima.")
+```
+
+**Ou via terminal:**
+
+``` bash
+python scripts/sentiment_distilbert.py
+```
+
+### Resultados
+
+::::: panel-tabset
+#### Análise de Sentimento
+
+Resultados da classificação de sentimento aplicada às mensagens.
+
+##### 📊 Distribuição de Sentimentos
+
+```{python}
+#| label: sentiment-distilbert-distribution
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_distilbert_metadata.json'
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+
+if metadata_file.exists() and output_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    total = metadata['mensagens_processadas']
+    dist_data = []
+    
+    for label, count in metadata['distribuicao'].items():
+        pct = count / total * 100
+        emoji = {'positive': '😊', 'neutral': '😐', 'negative': '😢'}.get(label, '')
+        dist_data.append({
+            'Sentimento': f"{emoji} {label.capitalize()}",
+            'Quantidade': f"{count:,}",
+            'Percentual': f"{pct:.1f}%",
+            'Confiança Média': f"{metadata['confianca_media'][label]:.3f}"
+        })
+    
+    df_dist = pd.DataFrame(dist_data)
+    display(df_dist.style.hide(axis='index'))
+    
+    # Armazena dados para próxima seção
+    global df_models_distilbert
+    df_models_distilbert = pd.read_parquet(output_file)
+else:
+    print("⚠️  Análise não encontrada. Execute: `python scripts/sentiment_distilbert.py`")
+```
+
+##### 🔍 Exemplos por Sentimento
+
+::: panel-tabset
+###### 😊 Positive
+
+```{python}
+#| label: exemplos-distilbert-positive
+#| echo: false
+
+if 'df_models_distilbert' in globals() and 'sentimento_distilbert_label' in df_models_distilbert.columns:
+    exemplos = df_models_distilbert[df_models_distilbert['sentimento_distilbert_label'] == 'positive'][
+        ['conteudo', 'sentimento_distilbert_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😐 Neutral
+
+```{python}
+#| label: exemplos-distilbert-neutral
+#| echo: false
+
+if 'df_models_distilbert' in globals() and 'sentimento_distilbert_label' in df_models_distilbert.columns:
+    exemplos = df_models_distilbert[df_models_distilbert['sentimento_distilbert_label'] == 'neutral'][
+        ['conteudo', 'sentimento_distilbert_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😢 Negative
+
+```{python}
+#| label: exemplos-distilbert-negative
+#| echo: false
+
+if 'df_models_distilbert' in globals() and 'sentimento_distilbert_label' in df_models_distilbert.columns:
+    exemplos = df_models_distilbert[df_models_distilbert['sentimento_distilbert_label'] == 'negative'][
+        ['conteudo', 'sentimento_distilbert_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+:::
+
+::: {.callout-tip icon="false" collapse="false"}
+##### 💡 Interpretação dos Resultados
+
+**Tom Geral: POLARIZADO E OTIMISTA** 🎭
+
+-   **Positivo (62%)** 🟢 → Maioria das interações vistas como positivas
+-   **Negativo (33%)** 🔴 → Parte significativa com tom negativo
+-   **Neutro (5%)** ⚪ → Quase não identifica neutralidade
+
+**Características do DistilBERT:**
+
+-   ⚡ Modelo polarizador - força interpretação para positivo/negativo
+-   🎯 Captura nuances sutis que podem passar despercebidas
+-   📊 Confiança média moderada (\~54%) - menos certeza que RoBERTa
+-   🔄 Reduz neutralidade ao mínimo (5% vs 49% do RoBERTa)
+
+**🎯 Insights Principais:**
+
+-   Modelo funcionou rapidamente - \~14 minutos (2x mais rápido!)
+-   Distribuição polarizada - tende a escolher um lado
+-   Confiança moderada - 54% (menor que RoBERTa)
+-   Quase elimina categoria neutral - foco em positivo/negativo
+-   Processamento eficiente - 66M params vs 270M do RoBERTa
+
+**⚖️ Trade-off Identificado:**
+
+-   ✅ Velocidade: 2x mais rápido
+-   ⚠️ Confiança: \~20% menor
+-   🔀 Viés diferente: Prefere polarizar ao invés de neutralizar
+
+**📌 Observação:**
+
+Este modelo tem uma "personalidade" diferente do RoBERTa. Enquanto RoBERTa é conservador e neutro, DistilBERT é ousado e polarizador. Ambas as visões são válidas e revelam aspectos diferentes das conversas.
+:::
+
+#### Processamento
+
+Informações técnicas sobre a execução da análise de sentimento.
+
+##### 📋 Informações do Processamento
+
+```{python}
+#| label: processing-distilbert-info
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_distilbert_metadata.json'
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    info_proc = pd.DataFrame([
+        {'Métrica': 'Modelo', 'Valor': metadata['modelo'].split('/')[-1]},
+        {'Métrica': 'Executado em', 'Valor': pd.to_datetime(metadata['timestamp_execucao']).strftime('%d/%m/%Y %H:%M:%S')},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata['tempo_total_minutos']:.2f} minutos"},
+        {'Métrica': 'Batch size', 'Valor': str(metadata['batch_size'])},
+    ])
+    
+    display(info_proc.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+##### 📈 Estatísticas Gerais
+
+```{python}
+#| label: processing-distilbert-stats
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    stats_gerais = pd.DataFrame([
+        {
+            'Métrica': 'Total de mensagens',
+            'Quantidade': f"{metadata['mensagens_total']:,}",
+            'Percentual': '100.0%'
+        },
+        {
+            'Métrica': 'Processadas',
+            'Quantidade': f"{metadata['mensagens_processadas']:,}",
+            'Percentual': f"{metadata['mensagens_processadas']/metadata['mensagens_total']*100:.1f}%"
+        },
+        {
+            'Métrica': 'Puladas',
+            'Quantidade': f"{metadata['mensagens_puladas']:,}",
+            'Percentual': f"{metadata['mensagens_puladas']/metadata['mensagens_total']*100:.1f}%"
+        },
+    ])
+    
+    display(stats_gerais.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+#### Código de Validação
+
+Este código mostra como validar os resultados após executar a análise.
+
+```{python}
+#| label: sentiment-distilbert-validation-code
+#| echo: true
+#| eval: false
+
+import json
+
+# Caminhos
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+metadata_file = PATHS['processed'] / 'sentiment_distilbert_metadata.json'
+
+# Verifica se arquivos existem
+if output_file.exists() and metadata_file.exists():
+    
+    # 1. Carrega metadados
+    with open(metadata_file, 'r') as f:
+        metadata = json.load(f)
+    
+    print("📋 Informações do Processamento:")
+    print(f"   Modelo: {metadata['modelo'].split('/')[-1]}")
+    print(f"   Device: {metadata['device']}")
+    print(f"   Tempo: {metadata['tempo_total_minutos']:.2f} min")
+    print(f"   Processadas: {metadata['mensagens_processadas']:,}")
+    
+    # 2. Carrega dados
+    df = pd.read_parquet(output_file)
+    
+    # 3. Verifica colunas
+    if 'sentimento_distilbert_label' in df.columns:
+        print("\n✅ Análise encontrada!\n")
+        
+        # Distribuição
+        print("📊 Distribuição:")
+        display(df['sentimento_distilbert_label'].value_counts())
+        
+        # Estatísticas de confiança
+        print("\n📈 Confiança:")
+        display(df['sentimento_distilbert_score'].describe())
+        
+        # Exemplos
+        print("\n🔍 Exemplos:")
+        for label in ['positive', 'neutral', 'negative']:
+            if label in df['sentimento_distilbert_label'].values:
+                print(f"\n{label.upper()}:")
+                exemplos = df[df['sentimento_distilbert_label'] == label][
+                    ['conteudo', 'sentimento_distilbert_score']
+                ].head(3)
+                display(exemplos)
+    else:
+        print("⚠️  Colunas não encontradas no DataFrame")
+        
+else:
+    print("⚠️  Arquivos não encontrados.")
+    print("\n💡 Execute primeiro:")
+    print("   python scripts/sentiment_distilbert.py")
+```
+:::::
+
+------------------------------------------------------------------------

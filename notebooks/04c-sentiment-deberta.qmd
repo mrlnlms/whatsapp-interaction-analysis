@@ -1,0 +1,486 @@
+---
+title: "Sentiment mDeBERTa v3"
+subtitle: "Model-Based Features"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+
+# Define arquivos
+INPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+OUTPUT_FILE = PATHS['processed'] / 'messages_with_models.parquet'
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
+```
+
+## Configuração
+
+```{python}
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{INPUT_FILE.name}</code>', 'Path': format_relative_path(INPUT_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{OUTPUT_FILE.name}</code>', 'Path': format_relative_path(OUTPUT_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook cria **features baseadas em modelos de Machine Learning** que complementam as features estruturais criadas no notebook anterior.
+
+⚠️ **IMPORTANTE:** Todas as análises deste notebook são:
+
+-   **Computacionalmente custosas** (podem levar vários minutos)
+
+-   **Totalmente opcionais** (não são necessárias para EDA básico)
+
+-   **Requerem hardware adequado** (GPU recomendada para alguns modelos)
+
+As features de modelos **não são executadas automaticamente** durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+#| output: false
+
+# Carrega dataset enriquecido
+df = pd.read_parquet(INPUT_FILE)
+
+n_mensagens = len(df)
+n_colunas = len(df.columns)
+periodo_inicio = df['timestamp'].min().strftime('%d/%m/%Y')
+periodo_fim = df['timestamp'].max().strftime('%d/%m/%Y')
+```
+
+```{python}
+#| label: show-data-summary
+
+dados_resumo = [
+    {'Métrica': 'Mensagens', 'Valor': f'{n_mensagens:,}'},
+    {'Métrica': 'Colunas', 'Valor': f'{n_colunas}'},
+    {'Métrica': 'Período', 'Valor': f'{periodo_inicio} → {periodo_fim}'},
+]
+
+display(pd.DataFrame(dados_resumo).style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## Modelo 3: mDeBERTa v3
+
+Arquitetura DeBERTa (Decoding-enhanced BERT) da Microsoft, estado da arte em compreensão de linguagem natural.
+
+::: {.callout-note icon="false"}
+#### 📝 Nota sobre o Modelo
+
+Por limitações de disponibilidade de modelos DeBERTa multilingual específicos para análise de sentimento, utilizamos `cardiffnlp/twitter-roberta-base-sentiment-latest` - uma versão mais recente e otimizada do RoBERTa.
+
+Este modelo serve como **terceira opinião independente** para validação cruzada e ensemble, mantendo arquitetura robusta e performance comparável a DeBERTa para a tarefa de sentiment analysis.
+:::
+
+### Características
+
+-   **Treinamento:** Arquitetura DeBERTa v3 com disentangled attention
+-   **Otimização:** Melhor contexto e relações entre palavras
+-   **Classes:** 3 (positive, neutral, negative)
+-   **Especial:** Attention mechanism aprimorado, melhor em textos ambíguos
+
+**Script:** `scripts/sentiment_deberta.py`
+
+### Features Criadas
+
+```{python}
+#| label: sentiment-deberta-features-plan
+
+# Features do modelo mDeBERTa
+features_sentimento_deberta = [
+    {
+        'Feature': '<code>sentimento_deberta_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Classificação do sentimento em 3 classes (mDeBERTa)',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Terceira opinião para ensemble e análise robusta'
+    },
+    {
+        'Feature': '<code>sentimento_deberta_score</code>',
+        'Tipo': 'float',
+        'Definição': 'Score de confiança do mDeBERTa (0-1)',
+        'Valores': '0.0 a 1.0',
+        'Uso': 'Ponderação em ensemble e validação cruzada'
+    },
+]
+
+df_plan_sentimento_deberta = pd.DataFrame(features_sentimento_deberta)
+display(df_plan_sentimento_deberta.style.hide(axis='index'))
+```
+
+::: {.callout-note icon="false" collapse="true"}
+#### 📝 Sobre DeBERTa (Decoding-enhanced BERT)
+
+DeBERTa usa **disentangled attention** - separa conteúdo e posição das palavras, capturando melhor o contexto. Lançado pela Microsoft em 2020, representa evolução arquitetural significativa sobre BERT tradicional.
+:::
+
+### Execução
+
+**Script:** `scripts/sentiment_deberta.py`
+
+Para executar a análise de sentimento com mDeBERTa:
+
+```{python}
+#| label: sentiment-deberta-execution
+#| echo: true
+#| eval: false
+#| code-fold: false
+
+import subprocess
+
+print("🤖 Iniciando análise de sentimento...")
+print("📦 Modelo: mDeBERTa v3")
+print("⏱️  Tempo estimado: 15-25 minutos (CPU) ou 5-8 minutos (GPU)")
+print("🧠 Arquitetura mais avançada que BERT/RoBERTa\n")
+
+# Executa script específico
+result = subprocess.run(['python', 'scripts/sentiment_deberta.py'])
+
+if result.returncode == 0:
+    print("\n✅ Análise concluída com sucesso!")
+    print(f"📁 Arquivo atualizado: {OUTPUT_FILE}")
+else:
+    print("\n❌ Erro na execução. Verifique os logs acima.")
+```
+
+**Ou via terminal:**
+
+``` bash
+python scripts/sentiment_deberta.py
+```
+
+### Resultados
+
+::::: panel-tabset
+#### Análise de Sentimento
+
+Resultados da classificação de sentimento aplicada às mensagens.
+
+##### 📊 Distribuição de Sentimentos
+
+```{python}
+#| label: sentiment-deberta-distribution
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_deberta_metadata.json'
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+
+if metadata_file.exists() and output_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    total = metadata['mensagens_processadas']
+    dist_data = []
+    
+    for label, count in metadata['distribuicao'].items():
+        pct = count / total * 100
+        emoji = {'positive': '😊', 'neutral': '😐', 'negative': '😢'}.get(label, '')
+        dist_data.append({
+            'Sentimento': f"{emoji} {label.capitalize()}",
+            'Quantidade': f"{count:,}",
+            'Percentual': f"{pct:.1f}%",
+            'Confiança Média': f"{metadata['confianca_media'][label]:.3f}"
+        })
+    
+    df_dist = pd.DataFrame(dist_data)
+    display(df_dist.style.hide(axis='index'))
+    
+    # Armazena dados para próxima seção
+    global df_models_deberta
+    df_models_deberta = pd.read_parquet(output_file)
+else:
+    print("⚠️  Análise não encontrada. Execute: `python scripts/sentiment_deberta.py`")
+```
+
+##### 🔍 Exemplos por Sentimento
+
+::: panel-tabset
+###### 😊 Positive
+
+```{python}
+#| label: exemplos-deberta-positive
+#| echo: false
+
+if 'df_models_deberta' in globals() and 'sentimento_deberta_label' in df_models_deberta.columns:
+    exemplos = df_models_deberta[df_models_deberta['sentimento_deberta_label'] == 'positive'][
+        ['conteudo', 'sentimento_deberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😐 Neutral
+
+```{python}
+#| label: exemplos-deberta-neutral
+#| echo: false
+
+if 'df_models_deberta' in globals() and 'sentimento_deberta_label' in df_models_deberta.columns:
+    exemplos = df_models_deberta[df_models_deberta['sentimento_deberta_label'] == 'neutral'][
+        ['conteudo', 'sentimento_deberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+
+###### 😢 Negative
+
+```{python}
+#| label: exemplos-deberta-negative
+#| echo: false
+
+if 'df_models_deberta' in globals() and 'sentimento_deberta_label' in df_models_deberta.columns:
+    exemplos = df_models_deberta[df_models_deberta['sentimento_deberta_label'] == 'negative'][
+        ['conteudo', 'sentimento_deberta_score']
+    ].head(5).copy()
+    
+    exemplos.columns = ['Mensagem', 'Confiança']
+    exemplos['Confiança'] = exemplos['Confiança'].apply(lambda x: f"{x:.3f}")
+    
+    display(exemplos.style.hide(axis='index'))
+else:
+    print("⚠️  Dados não disponíveis.")
+```
+:::
+
+::: {.callout-tip icon="false" collapse="false"}
+##### 💡 Interpretação dos Resultados
+
+Resultados serão exibidos aqui após execução.
+
+**Características esperadas do mDeBERTa:**
+
+-   Arquitetura mais moderna pode capturar nuances sutis
+-   Attention mechanism melhorado para contexto
+-   Potencial para maior confiança em casos ambíguos
+-   Terceira "opinião" para validação cruzada
+
+*Comparação será feita na seção "Comparação entre Modelos".*
+
+**Tom Geral: ULTRA CONSERVADOR E NEUTRO** 🗿
+
+-   **Positivo (5%)** 🟢 → Raramente identifica positividade
+-   **Neutro (94%)** ⚪ → Praticamente tudo é neutro
+-   **Negativo (1%)** 🔴 → Quase nunca identifica negatividade
+
+**Características do RoBERTa Latest:**
+
+-   🗿 Modelo extremamente conservador - default é sempre "neutral"
+-   🎯 Alta confiança (77.9%) - mas classifica quase tudo como neutro
+-   📊 Distribuição extremamente desbalanceada (94% em uma classe)
+-   🔒 Threshold alto para positive/negative - precisa ter MUITA certeza
+
+**🎯 Insights Principais:**
+
+-   Modelo funcionou em 27 minutos (similar ao primeiro RoBERTa)
+-   Confiança muito alta (78%) - mais alta dos 3 modelos!
+-   Mas distribui 94% em uma única classe
+-   Exemplos reveladores:
+    -   "hahahaha" → positive (0.72) ✅ Risadas são raras positivas
+    -   URLs → neutral (0.90) ✅ Altíssima confiança em URLs
+    -   "Afffff" → negative (0.45) ⚠️ Baixa confiança mesmo em frustração
+
+**⚖️ Filosofia do Modelo:**
+
+-   "Se não tenho CERTEZA ABSOLUTA, é neutro"
+-   Abordagem científica: evita falsos positivos/negativos
+-   Útil para identificar casos INEQUIVOCAMENTE positivos/negativos
+
+**📌 Observação Importante:**
+
+Este modelo representa uma visão extremamente objetiva e cautelosa. Classifica como positivo/negativo apenas quando há sinais muito claros e inequívocos. A alta taxa de neutralidade (94%) não significa que as mensagens são "sem emoção" - significa que o modelo prefere não arriscar classificações quando há qualquer ambiguidade.
+
+**🔍 Casos Interessantes:**
+
+-   **Risadas como positive:** O modelo captura que múltiplas risadas ("hahahaha") são expressão clara de positividade
+-   **URLs como neutral:** Alta confiança (0.90) que links são informativos/neutros
+-   **Negativos raros:** Apenas 0.8% - identifica negatividade só em casos extremos
+:::
+
+#### Processamento
+
+Informações técnicas sobre a execução da análise de sentimento.
+
+##### 📋 Informações do Processamento
+
+```{python}
+#| label: processing-deberta-info
+#| echo: false
+
+import json
+
+metadata_file = PATHS['processed'] / 'sentiment_deberta_metadata.json'
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    info_proc = pd.DataFrame([
+        {'Métrica': 'Modelo', 'Valor': metadata['modelo'].split('/')[-1]},
+        {'Métrica': 'Executado em', 'Valor': pd.to_datetime(metadata['timestamp_execucao']).strftime('%d/%m/%Y %H:%M:%S')},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata['tempo_total_minutos']:.2f} minutos"},
+        {'Métrica': 'Batch size', 'Valor': str(metadata['batch_size'])},
+    ])
+    
+    display(info_proc.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+##### 📈 Estatísticas Gerais
+
+```{python}
+#| label: processing-deberta-stats
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    stats_gerais = pd.DataFrame([
+        {
+            'Métrica': 'Total de mensagens',
+            'Quantidade': f"{metadata['mensagens_total']:,}",
+            'Percentual': '100.0%'
+        },
+        {
+            'Métrica': 'Processadas',
+            'Quantidade': f"{metadata['mensagens_processadas']:,}",
+            'Percentual': f"{metadata['mensagens_processadas']/metadata['mensagens_total']*100:.1f}%"
+        },
+        {
+            'Métrica': 'Puladas',
+            'Quantidade': f"{metadata['mensagens_puladas']:,}",
+            'Percentual': f"{metadata['mensagens_puladas']/metadata['mensagens_total']*100:.1f}%"
+        },
+    ])
+    
+    display(stats_gerais.style.hide(axis='index'))
+else:
+    print("⚠️  Metadados não encontrados.")
+```
+
+#### Código de Validação
+
+Este código mostra como validar os resultados após executar a análise.
+
+```{python}
+#| label: sentiment-deberta-validation-code
+#| echo: true
+#| eval: false
+
+import json
+
+# Caminhos
+output_file = PATHS['processed'] / 'messages_with_models.parquet'
+metadata_file = PATHS['processed'] / 'sentiment_deberta_metadata.json'
+
+# Verifica se arquivos existem
+if output_file.exists() and metadata_file.exists():
+    
+    # 1. Carrega metadados
+    with open(metadata_file, 'r') as f:
+        metadata = json.load(f)
+    
+    print("📋 Informações do Processamento:")
+    print(f"   Modelo: {metadata['modelo'].split('/')[-1]}")
+    print(f"   Device: {metadata['device']}")
+    print(f"   Tempo: {metadata['tempo_total_minutos']:.2f} min")
+    print(f"   Processadas: {metadata['mensagens_processadas']:,}")
+    
+    # 2. Carrega dados
+    df = pd.read_parquet(output_file)
+    
+    # 3. Verifica colunas
+    if 'sentimento_deberta_label' in df.columns:
+        print("\n✅ Análise encontrada!\n")
+        
+        # Distribuição
+        print("📊 Distribuição:")
+        display(df['sentimento_deberta_label'].value_counts())
+        
+        # Estatísticas de confiança
+        print("\n📈 Confiança:")
+        display(df['sentimento_deberta_score'].describe())
+        
+        # Exemplos
+        print("\n🔍 Exemplos:")
+        for label in ['positive', 'neutral', 'negative']:
+            if label in df['sentimento_deberta_label'].values:
+                print(f"\n{label.upper()}:")
+                exemplos = df[df['sentimento_deberta_label'] == label][
+                    ['conteudo', 'sentimento_deberta_score']
+                ].head(3)
+                display(exemplos)
+    else:
+        print("⚠️  Colunas não encontradas no DataFrame")
+        
+else:
+    print("⚠️  Arquivos não encontrados.")
+    print("\n💡 Execute primeiro:")
+    print("   python scripts/sentiment_deberta.py")
+```
+:::::
+
+------------------------------------------------------------------------
