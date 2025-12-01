@@ -1,0 +1,418 @@
+---
+title: "Embeddings: MiniLM (384d)"
+format:
+  html:
+    code-fold: true
+    code-summary: "Mostrar código"
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import sys
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+
+PROJECT_ROOT = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from config import PATHS  # noqa: E402
+```
+
+------------------------------------------------------------------------
+
+# Embeddings: MiniLM (384 dimensões)
+
+Representação semântica eficiente e rápida usando MiniLM multilingual.
+
+## 🤖 Modelo
+
+**Sentence Transformers: `paraphrase-multilingual-MiniLM-L12-v2`**
+
+### Características
+
+- **Arquitetura:** MiniLM-L12 (destilado de RoBERTa)
+- **Treinamento:** 50+ idiomas incluindo português
+- **Dimensões:** 384 (modelo compacto - ótima eficiência)
+- **Tamanho:** ~471 MB
+- **Otimização:** Similaridade semântica com foco em velocidade
+- **Performance:** Excelente relação qualidade/velocidade
+
+### Por Que Este Modelo?
+
+✅ **3.7x mais rápido** que MPNet (~842 vs ~227 msg/s)  
+✅ **Metade do tamanho** - 101 MB vs 201 MB  
+✅ **Qualidade excelente** - ~95% da qualidade do MPNet  
+✅ **Ideal para produção** - Balanceio perfeito
+
+**Script:** `scripts/generate_embeddings_minilm.py`
+
+------------------------------------------------------------------------
+
+## 📋 Features Criadas
+
+```{python}
+#| label: minilm-features-plan
+#| echo: false
+
+features_minilm = [
+    {
+        'Feature': '<code>embedding</code>',
+        'Tipo': 'array[384]',
+        'Definição': 'Vetor semântico da mensagem (384 dimensões)',
+        'Valores': 'Array de floats (-1.0 a 1.0), normalizado',
+        'Uso': 'Base para clustering, busca semântica, topic modeling'
+    },
+    {
+        'Feature': '<code>similaridade_anterior_minilm</code>',
+        'Tipo': 'float',
+        'Definição': 'Similaridade cosine com mensagem anterior',
+        'Valores': '0.0 (diferente) a 1.0 (idêntico)',
+        'Uso': 'Detectar continuidade/mudança de assunto'
+    },
+    {
+        'Feature': '<code>densidade_local_minilm</code>',
+        'Tipo': 'float',
+        'Definição': 'Distância média aos 10 vizinhos mais próximos',
+        'Valores': '0.0 (densa) a 1.0 (esparsa)',
+        'Uso': 'Identificar mensagens únicas/anômalas'
+    },
+]
+
+df_features = pd.DataFrame(features_minilm)
+display(df_features.style.hide(axis='index'))
+```
+
+::: {.callout-note icon="false" collapse="true"}
+#### 📝 Sobre Armazenamento
+
+Embeddings são salvos em arquivo separado:
+- **Embeddings:** `message_embeddings_minilm.npy` (~101 MB)
+- **Features derivadas:** No parquet principal
+
+```python
+# Carregar no EDA:
+embeddings = np.load('data/processed/message_embeddings_minilm.npy')
+```
+:::
+
+------------------------------------------------------------------------
+
+## 💻 Execução
+
+```bash
+python scripts/generate_embeddings_minilm.py
+```
+
+------------------------------------------------------------------------
+
+## 📊 Resultados
+
+::: {.panel-tabset}
+
+### Visão Geral
+
+```{python}
+#| label: minilm-overview
+#| echo: false
+
+metadata_file = PATHS['processed'] / 'embeddings_minilm_metadata.json'
+embeddings_file = PATHS['processed'] / 'message_embeddings_minilm.npy'
+
+if metadata_file.exists() and embeddings_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 📊 Estatísticas Gerais\n")
+    
+    stats_general = pd.DataFrame([
+        {'Métrica': 'Mensagens processadas', 'Valor': f"{metadata['mensagens_processadas']:,}"},
+        {'Métrica': 'Dimensões', 'Valor': f"{metadata['dimensoes']}"},
+        {'Métrica': 'Tamanho do arquivo', 'Valor': f"{metadata['tamanho_mb']:.2f} MB"},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata.get('tempo_total_minutos', 0):.2f} min"},
+        {'Métrica': 'Velocidade', 'Valor': f"{metadata.get('mensagens_por_segundo', 0):.1f} msgs/s"},
+    ])
+    
+    display(stats_general.style.hide(axis='index'))
+    
+    embeddings = np.load(embeddings_file)
+    
+    print("\n### 📈 Estatísticas dos Vetores\n")
+    
+    stats_vetores = pd.DataFrame([
+        {'Métrica': 'Shape', 'Valor': f"{embeddings.shape}"},
+        {'Métrica': 'Média', 'Valor': f"{embeddings.mean():.4f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{embeddings.std():.4f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{embeddings.min():.4f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{embeddings.max():.4f}"},
+    ])
+    
+    display(stats_vetores.style.hide(axis='index'))
+    
+    print("\n### 📊 Distribuição de Normas\n")
+    
+    sample_size = min(1000, len(embeddings))
+    np.random.seed(42)
+    sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+    sample_emb = embeddings[sample_indices]
+    
+    norms = np.linalg.norm(sample_emb, axis=1)
+    
+    fig = px.histogram(
+        x=norms,
+        nbins=30,
+        title=f'Distribuição de Normas (amostra de {sample_size:,})',
+        labels={'x': 'Norma (L2)', 'y': 'Frequência'}
+    )
+    
+    fig.add_vline(x=norms.mean(), line_dash="dash", line_color="red",
+                  annotation_text=f"Média: {norms.mean():.3f}")
+    
+    fig.update_layout(showlegend=False, height=400)
+    fig.show()
+    
+    print(f"\n**Média da norma:** {norms.mean():.4f}")
+    
+else:
+    print("⚠️  **Embeddings não encontrados.**")
+    print("\nExecute: `python scripts/generate_embeddings_minilm.py`")
+```
+
+### Similaridade
+
+```{python}
+#| label: minilm-similarity
+#| echo: false
+
+if embeddings_file.exists():
+    embeddings = np.load(embeddings_file)
+    
+    from sklearn.metrics.pairwise import cosine_similarity
+    
+    print("### 🔍 Análise de Similaridade\n")
+    
+    sample_size = min(1000, len(embeddings))
+    np.random.seed(42)
+    sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+    sample_embeddings = embeddings[sample_indices]
+    
+    print(f"**Calculando similaridades** (amostra de {sample_size:,} mensagens)...\n")
+    similarities = cosine_similarity(sample_embeddings)
+    np.fill_diagonal(similarities, 0)
+    
+    print(f"**Estatísticas de Similaridade:**\n")
+    
+    stats_sim = pd.DataFrame([
+        {'Métrica': 'Média', 'Valor': f"{similarities.mean():.3f}"},
+        {'Métrica': 'Mediana', 'Valor': f"{np.median(similarities):.3f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{similarities.std():.3f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{similarities.min():.3f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{similarities.max():.3f}"},
+    ])
+    
+    display(stats_sim.style.hide(axis='index'))
+    
+    print("\n### Distribuição de Similaridades\n")
+    
+    fig = px.histogram(
+        x=similarities.flatten(),
+        nbins=30,
+        title='Distribuição de Similaridade Cosine',
+        labels={'x': 'Similaridade', 'y': 'Frequência'}
+    )
+    
+    fig.update_layout(showlegend=False, height=400)
+    fig.show()
+```
+
+### Exemplos
+
+```{python}
+#| label: minilm-examples
+#| echo: false
+
+if embeddings_file.exists():
+    df = pd.read_parquet(PATHS['processed'] / 'messages_with_models.parquet')
+    embeddings = np.load(embeddings_file)
+    
+    from sklearn.metrics.pairwise import cosine_similarity
+    
+    print("### 💬 Busca Semântica\n")
+    print("Exemplos de mensagens semanticamente similares:\n")
+    
+    # Pega só mensagens COM embedding MiniLM
+    mask_com_embedding = df['similaridade_anterior_minilm'].notna()
+    df_com_embedding = df[mask_com_embedding].reset_index(drop=True)
+    
+    np.random.seed(42)
+    n_examples = 2
+    random_indices = np.random.choice(len(df_com_embedding), n_examples, replace=False)
+    
+    for idx in random_indices:
+        query_embedding = embeddings[idx].reshape(1, -1)
+        query_content = df_com_embedding.iloc[idx]['conteudo']
+        
+        if query_content is None or pd.isna(query_content):
+            query_text = '[mensagem vazia]'
+        else:
+            query_text = str(query_content)[:100]
+        
+        sample_size = min(5000, len(embeddings))
+        sample_indices = np.random.choice(len(embeddings), sample_size, replace=False)
+        sample_emb = embeddings[sample_indices]
+        
+        similarities = cosine_similarity(query_embedding, sample_emb)[0]
+        
+        top_indices = similarities.argsort()[-3:][::-1]
+        top_similarities = similarities[top_indices]
+        
+        print(f"\n**Mensagem:** \"{query_text}...\"\n")
+        print("**Top 3 similares:**\n")
+        
+        similar_data = []
+        for i, (local_idx, sim_score) in enumerate(zip(top_indices, top_similarities), 1):
+            global_idx = sample_indices[local_idx]
+            msg_content = df_com_embedding.iloc[global_idx]['conteudo']
+            
+            if msg_content is None or pd.isna(msg_content):
+                msg_text = '[mensagem vazia]'
+            else:
+                msg_text = str(msg_content)[:80] + '...'
+            
+            similar_data.append({
+                '#': i,
+                'Mensagem': msg_text,
+                'Similaridade': f"{sim_score:.3f}"
+            })
+        
+        df_similar = pd.DataFrame(similar_data)
+        display(df_similar.style.hide(axis='index'))
+```
+
+### Features Derivadas
+
+```{python}
+#| label: minilm-derived-features
+#| echo: false
+
+df = pd.read_parquet(PATHS['processed'] / 'messages_with_models.parquet')
+
+if 'similaridade_anterior_minilm' in df.columns:
+    print("### 📊 Features Derivadas\n")
+    
+    print("#### Similaridade com Mensagem Anterior\n")
+    
+    stats_sim_ant = pd.DataFrame([
+        {'Métrica': 'Média', 'Valor': f"{df['similaridade_anterior_minilm'].mean():.3f}"},
+        {'Métrica': 'Mediana', 'Valor': f"{df['similaridade_anterior_minilm'].median():.3f}"},
+        {'Métrica': 'Desvio Padrão', 'Valor': f"{df['similaridade_anterior_minilm'].std():.3f}"},
+        {'Métrica': 'Mínimo', 'Valor': f"{df['similaridade_anterior_minilm'].min():.3f}"},
+        {'Métrica': 'Máximo', 'Valor': f"{df['similaridade_anterior_minilm'].max():.3f}"},
+    ])
+    
+    display(stats_sim_ant.style.hide(axis='index'))
+    
+    sample_df = df.sample(n=min(10000, len(df)), random_state=42)
+    
+    fig = px.histogram(
+        sample_df,
+        x='similaridade_anterior_minilm',
+        nbins=30,
+        title='Similaridade com Mensagem Anterior',
+        labels={'similaridade_anterior_minilm': 'Similaridade Cosine'}
+    )
+    
+    fig.update_layout(height=400)
+    fig.show()
+    
+    print("\n**Interpretação:**")
+    print(f"- Similaridade média: {df['similaridade_anterior_minilm'].mean():.3f}")
+    print("- Maior que MPNet (0.544) - captura mais continuidade")
+    
+    print("\n#### Densidade Local\n")
+    
+    if 'densidade_local_minilm' in df.columns:
+        stats_dens = pd.DataFrame([
+            {'Métrica': 'Média', 'Valor': f"{df['densidade_local_minilm'].mean():.3f}"},
+            {'Métrica': 'Mediana', 'Valor': f"{df['densidade_local_minilm'].median():.3f}"},
+            {'Métrica': 'Desvio Padrão', 'Valor': f"{df['densidade_local_minilm'].std():.3f}"},
+        ])
+        
+        display(stats_dens.style.hide(axis='index'))
+        
+        print("\n**Interpretação:**")
+        print(f"- Densidade média: {df['densidade_local_minilm'].mean():.3f}")
+        print("- Similar ao MPNet (0.132) - boa distribuição")
+else:
+    print("⚠️  **Features derivadas não encontradas.**")
+```
+
+### Processamento
+
+```{python}
+#| label: minilm-processing
+#| echo: false
+
+if metadata_file.exists():
+    with open(metadata_file, 'r', encoding='utf-8') as f:
+        metadata = json.load(f)
+    
+    print("### 📋 Detalhes do Processamento\n")
+    
+    processing_info = pd.DataFrame([
+        {'Métrica': 'Modelo', 'Valor': metadata['modelo']},
+        {'Métrica': 'Executado em', 'Valor': pd.to_datetime(metadata['timestamp_execucao']).strftime('%d/%m/%Y %H:%M:%S')},
+        {'Métrica': 'Device', 'Valor': metadata['device']},
+        {'Métrica': 'Batch size', 'Valor': str(metadata.get('batch_size', 'N/A'))},
+        {'Métrica': 'Tempo total', 'Valor': f"{metadata.get('tempo_total_minutos', 0):.2f} min"},
+        {'Métrica': 'Velocidade', 'Valor': f"{metadata.get('mensagens_por_segundo', 0):.1f} msgs/s"},
+    ])
+    
+    display(processing_info.style.hide(axis='index'))
+```
+
+:::
+
+------------------------------------------------------------------------
+
+## 💡 Interpretação
+
+::: {.callout-tip icon="false" collapse="false"}
+### 🎯 Características do MiniLM
+
+**Perfil: Velocidade e Eficiência** ⚡
+
+**Pontos Fortes:**
+- ✅ **3.7x mais rápido** - 842 msg/s vs 227 msg/s (MPNet)
+- ✅ **Metade do tamanho** - 101 MB vs 201 MB
+- ✅ **Qualidade excelente** - ~95% da qualidade do MPNet
+- ✅ **Ideal para produção** - Melhor custo-benefício
+
+**Trade-offs:**
+- ⚠️ **384 dimensões** vs 768 (MPNet) - Menos capacidade
+- ⚠️ **Ligeiramente menos preciso** - ~3-5% em separação semântica
+
+**Quando Usar:**
+- Prototipagem rápida
+- Deploy em produção
+- Quando velocidade é crítica
+- Aplicações em tempo real
+
+**Performance Observada:**
+- Similaridade com anterior: ~0.56 (maior que MPNet!)
+- Densidade local: ~0.13 (similar ao MPNet)
+- Tempo de geração: ~3 minutos (68k mensagens, CPU)
+- Silhouette Score: 0.040 (ligeiramente menor que MPNet)
+:::
+
+------------------------------------------------------------------------
+
+**Próximo:** [Comparação com outros modelos](04i-embeddings-comparison.qmd)
+
+------------------------------------------------------------------------

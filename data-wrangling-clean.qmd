@@ -1,0 +1,694 @@
+---
+title: "Data Wrangling"
+subtitle: "Parsing, classificação, mídia e enriquecimento"
+author: "Marlon L."
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import sys
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+import pandas as pd
+
+# Carrega .env e adiciona src ao path
+load_dotenv()
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+from wrangling import run_wrangling_pipeline, WRANGLING_STEPS, get_export_summary, COLUMNS_CORE, COLUMNS_FULL
+from utils import format_markdown_lists
+```
+
+📁 Projeto: `{python} PROJECT_ROOT.name`
+
+# Data Wrangling
+
+Com o arquivo limpo gerado no [Data Cleaning](01-data-cleaning.qmd), esta etapa transforma o TXT em um DataFrame estruturado, vincula arquivos de mídia, integra transcrições e exporta os dados enriquecidos.
+
+## Objetivo
+
+Transformar o arquivo TXT limpo em dados estruturados e enriquecidos:
+
+-   ✅ Parsing: TXT → DataFrame
+-   ✅ Classificação: Identificar tipos de mensagem
+-   ✅ Mídia: Vincular arquivos físicos
+-   ✅ Transcrição: Integrar transcrições existentes
+-   ✅ Enriquecimento: Substituir mídias por transcrições
+-   ✅ Exportação: CSV + TXTs de corpus
+
+------------------------------------------------------------------------
+
+## Configuração do Pipeline
+
+```{python}
+#| label: pipeline-config
+#| code-fold: false
+
+# =============================================================================
+# 🔧 CONFIGURAÇÃO DO PIPELINE
+#
+# Etapas disponíveis:
+#   - 'parse'          : TXT → DataFrame (agregar multilinha)
+#   - 'classify'       : Classificar tipo de mensagem
+#   - 'media'          : Vincular arquivos físicos de mídia
+#   - 'transcriptions' : Integrar transcrições existentes
+#   - 'enrich'         : Substituir mídias por transcrições
+#   - 'export'         : Gerar CSV + TXTs de corpus
+# =============================================================================
+
+PIPELINE_ORDER = [
+    'parse',
+    'classify',
+    'media',
+    'transcriptions',
+    'enrich',
+    'export',
+]
+
+# =============================================================================
+# 📁 CONFIGURAÇÃO DE PATHS
+# =============================================================================
+
+# Arquivo de entrada (saída do cleaning)
+INPUT_FILE = PATHS['interim'] / 'raw-data_cln7.txt'
+
+# Diretório de saída (já inclui DATA_FOLDER via config.py)
+OUTPUT_DIR = PATHS['processed']
+
+# Diretório com arquivos de mídia (já definido no config.py)
+MEDIA_DIR = PATHS['media']
+
+# Arquivo com transcrições existentes
+# Gerado por: python scripts/transcribe_media.py
+TRANSCRIPTION_FILE = OUTPUT_DIR / 'transcriptions.csv'
+```
+
+📄 Entrada: `{python} INPUT_FILE.name`
+
+📂 Saída: `{python} OUTPUT_DIR.name`
+
+🎬 Mídia: `{python} MEDIA_DIR.name`
+
+🎙️ Transcrições: `{python} TRANSCRIPTION_FILE.name`
+
+------------------------------------------------------------------------
+
+## Execução do Pipeline
+
+```{python}
+#| label: execute-pipeline
+
+# Executa o pipeline
+result = run_wrangling_pipeline(
+    order=PIPELINE_ORDER,
+    input_file=INPUT_FILE,
+    output_dir=OUTPUT_DIR,
+    media_dir=MEDIA_DIR,
+    transcription_file=TRANSCRIPTION_FILE,
+    show_progress=True
+)
+
+# Extrai resultados
+df = result['df']
+outputs = result['outputs']
+stats = result['stats']
+```
+
+------------------------------------------------------------------------
+
+## Pipeline de Transformação
+
+```{python}
+#| label: render-pipeline
+#| output: asis
+#| echo: false
+
+# Mapeamento de métricas por etapa → RETORNA DATAFRAMES
+def get_step_metrics_df(step_id, stats):
+    """Retorna DataFrame de métricas para cada etapa."""
+    
+    if step_id == 'parse':
+        data = [
+            {'Métrica': 'Linhas no TXT', 'Valor': f"{stats.get('total_linhas_txt', 0):,}"},
+            {'Métrica': 'Mensagens parseadas', 'Valor': f"{stats.get('total_mensagens', 0):,}"},
+        ]
+        return pd.DataFrame(data)
+    
+    elif step_id == 'classify':
+        # Mostra TODOS os tipos com categoria
+        tipos = stats.get('tipos_mensagem', {})
+        if tipos:
+            # Mapeamento tipo → categoria
+            categorias = {
+                'text_pure': 'Texto',
+                'text_with_emoji': 'Texto',
+                'text_with_link': 'Texto',
+                'audio_omitted': 'Mídia omitida',
+                'image_omitted': 'Mídia omitida',
+                'video_omitted': 'Mídia omitida',
+                'video_note_omitted': 'Mídia omitida',
+                'sticker_omitted': 'Mídia omitida',
+                'gif_omitted': 'Mídia omitida',
+                'document_omitted': 'Mídia omitida',
+                'audio_attached': 'Mídia anexada',
+                'image_attached': 'Mídia anexada',
+                'video_attached': 'Mídia anexada',
+                'sticker_attached': 'Mídia anexada',
+                'contact_attached': 'Mídia anexada',
+                'file_attached': 'Mídia anexada',
+                'message_deleted': 'Sistema',
+                'message_edited': 'Sistema',
+                'voice_call': 'Sistema',
+                'video_call': 'Sistema',
+                'missed_call': 'Sistema',
+                'system_message': 'Sistema',
+            }
+            
+            data = []
+            for tipo, count in sorted(tipos.items(), key=lambda x: x[1], reverse=True):
+                data.append({
+                    'Categoria': categorias.get(tipo, 'Outros'),
+                    'Tipo de Mensagem': f'`{tipo}`',
+                    'Contagem': f'{count:,}',
+                    '%': f'{(count / sum(tipos.values()) * 100):.1f}%'
+                })
+            return pd.DataFrame(data)
+        return None
+    
+    elif step_id == 'media':
+        data = [
+            {'Métrica': 'Mídias anexadas', 'Valor': f"{stats.get('midias_anexadas', 0):,}"},
+            {'Métrica': 'Arquivos encontrados', 'Valor': f"{stats.get('midias_existentes', 0):,}"},
+        ]
+        return pd.DataFrame(data)
+    
+    elif step_id == 'transcriptions':
+        data = [
+            {'Métrica': 'Mensagens com transcrição', 'Valor': f"{stats.get('com_transcricao', 0):,}"},
+        ]
+        return pd.DataFrame(data)
+    
+    elif step_id == 'enrich':
+        # Mostra distribuição de tags padronizadas
+        if 'grupo_mensagem' in df.columns:
+            grupos = df[df['grupo_mensagem'].notna()]['grupo_mensagem'].value_counts()
+            
+            data = []
+            for tag, count in grupos.items():
+                # Mapeia tag → tipos que ela agrupa
+                tipos_agrupados = df[df['grupo_mensagem'] == tag]['tipo_mensagem'].unique()
+                tipos_str = ', '.join([f'`{t}`' for t in sorted(tipos_agrupados)])
+                
+                data.append({
+                    'Tag': f'`{tag}`',
+                    'Contagem': f'{count:,}',
+                    'Tipos Agrupados': tipos_str
+                })
+            
+            return pd.DataFrame(data)
+        
+        # Fallback se não tiver grupo_mensagem
+        data = [
+            {'Métrica': 'Mensagens enriquecidas', 'Valor': f"{stats.get('mensagens_enriquecidas', 0):,}"},
+        ]
+        return pd.DataFrame(data)
+    
+    elif step_id == 'export':
+        # Etapa 6 tem tratamento especial (já implementado)
+        return None
+    
+    return None
+
+for i, step_id in enumerate(PIPELINE_ORDER):
+    step = WRANGLING_STEPS[step_id]
+    step_num = i + 1
+    
+    # Processa descrição
+    description_raw = step['description']
+    
+    # ADICIONA BACKTICKS em arquivos e tipos ANTES de processar
+    import re
+    
+    # Backticks em arquivos (.csv, .parquet, .txt, etc)
+    description_raw = re.sub(
+        r'\b([\w_-]+\.(csv|parquet|txt|opus|jpg|mp4|pdf|docx))\b',
+        r'`\1`',
+        description_raw
+    )
+    
+    # Backticks em tipos de mensagem (palavras específicas)
+    tipos_para_backticks = [
+        # Tipos compostos com underscore
+        'text_pure', 'text_with_emoji', 'text_with_link',
+        'audio_omitted', 'image_omitted', 'video_omitted', 'video_note_omitted',
+        'sticker_omitted', 'gif_omitted', 'document_omitted',
+        'audio_attached', 'image_attached', 'video_attached',
+        'sticker_attached', 'contact_attached', 'file_attached',
+        'message_deleted', 'message_edited',
+        'voice_call', 'video_call', 'missed_call', 'system_message',
+        
+        # Tipos com espaço
+        'audio omitted', 'image omitted', 'video omitted',
+        'sticker omitted', 'GIF omitted', 'document omitted',
+        
+        # Palavras simples (usadas nos subitens)
+        'audio', 'image', 'video', 'video_note', 'sticker', 
+        'gif', 'document', 'contact', 'file'
+    ]
+
+    # Ordena por tamanho decrescente (evita substituir 'audio' antes de 'audio_omitted')
+    tipos_para_backticks.sort(key=len, reverse=True)
+    
+    for tipo in tipos_para_backticks:
+        # Substitui só se não estiver entre backticks já
+        description_raw = re.sub(
+            rf'\b{re.escape(tipo)}\b(?!`)',
+            f'`{tipo}`',
+            description_raw
+        )
+    
+    # Detecta se tem listas
+    has_lists = (
+        '\n- ' in description_raw or 
+        description_raw.strip().startswith('- ') or
+        ('\n  -' in description_raw or '\n  •' in description_raw)
+    )
+    
+    if has_lists:
+        description = format_markdown_lists(description_raw, output_format='html')
+    else:
+        paragraphs = description_raw.strip().split('\n\n')
+        description = '\n'.join([f'<p>{p.strip()}</p>' for p in paragraphs if p.strip()])
+
+    # TRATAMENTO ESPECIAL: Etapa 6 (Export) - BOOTSTRAP TABS NATIVOS
+    if step_id == 'export' and 'export_summary' in stats:
+        export_summary = stats['export_summary']
+        
+        # ==========================================
+        # PREPARA DADOS DAS ABAS
+        # ==========================================
+        
+        # ABA 1: Datasets
+        principais_data = []
+        for key in ['csv_core', 'parquet']:
+            if key in export_summary:
+                info = export_summary[key]
+                filename = info.get('arquivo') or info.get('filename') or f"messages_{key}"
+                formato = info.get('formato', key).upper()
+                size_mb = info.get('size_mb', 0)
+                colunas = info.get('colunas', '—')
+                
+                uso = {
+                    'csv_core': 'Dataset principal para análise. Alternativa ao Parquet.',
+                    'parquet': '**Dataset principal.** Tipos otimizados, leitura rápida. Use este!'
+                }.get(key, '—')
+                
+                principais_data.append({
+                    'Arquivo': f"`{filename}`",
+                    'Formato': formato,
+                    'Tamanho': f"{size_mb:.2f} MB",
+                    'Colunas': colunas,
+                    'Uso': uso
+                })
+        
+        df_principais = pd.DataFrame(principais_data)
+        principais_html = df_principais.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        )
+        
+        # Colunas do dataset
+        colunas_dataset = [
+            ('`timestamp`', 'datetime', 'Data e hora da mensagem'),
+            ('`remetente`', 'category', 'Participante (P1 ou P2)'),
+            ('`tipo_mensagem`', 'category', 'Tipo específico (21 possíveis: `text_pure`, `audio_omitted`, etc.)'),
+            ('`grupo_mensagem`', 'category', 'Categoria: `TEXT`, `AUDIO`, `VID`, `IMG`, `STICKER`, `GIF`, `DOC`, `CONTACT`, `FILE`, `SYSTEM`, `CALL`'),
+            ('`conteudo`', 'text', 'Conteúdo enriquecido. **Renomeado de** `conteudo_enriquecido`'),
+            ('`arquivo`', 'text', 'Nome do arquivo de mídia (ex: `00001-AUDIO.opus`)'),
+            ('`transcricao`', 'bool', 'Tem transcrição? **Renomeado de** `tem_transcricao`'),
+            ('`date_match`', 'bool', 'É mensagem órfã? **Renomeado de** `is_synthetic`'),
+        ]
+        
+        df_colunas = pd.DataFrame(colunas_dataset, columns=['Coluna', 'Tipo', 'Descrição'])
+        colunas_html = df_colunas.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        )
+        
+        # ABA 2: Corpus
+        corpus_data = []
+        corpus_mapping = {
+            'chat_complete': 'Chat completo com timestamps. Formato: `DD/MM/YY HH:MM:SS Remetente: Conteúdo`',
+            'corpus_full': 'Corpus completo (só texto). Word clouds, vocabulário.',
+            'chat_p1': 'Chat P1 com timestamps.',
+            'chat_p2': 'Chat P2 com timestamps.',
+            'corpus_p1': 'Corpus P1 (só texto).',
+            'corpus_p2': 'Corpus P2 (só texto).',
+        }
+        
+        for key, desc in corpus_mapping.items():
+            if key in outputs and os.path.exists(outputs[key]):
+                file_path = outputs[key]
+                size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                try:
+                    num_lines = sum(1 for _ in open(file_path, 'r', encoding='utf-8'))
+                except:
+                    num_lines = '—'
+                
+                corpus_data.append({
+                    'Arquivo': f"`{file_path.name}`",
+                    'Tamanho': f"{size_mb:.2f} MB",
+                    'Linhas': f"{num_lines:,}" if isinstance(num_lines, int) else num_lines,
+                    'Descrição': desc
+                })
+        
+        df_corpus = pd.DataFrame(corpus_data)
+        corpus_html = df_corpus.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        )
+        
+        # ABA 3: Debug
+        debug_files = []
+        if 'csv_full' in export_summary:
+            info = export_summary['csv_full']
+            filename = info.get('arquivo') or 'messages_full.csv'
+            colunas = info.get('colunas', '—')
+            debug_files.append({
+                'Arquivo': f"`{filename}`",
+                'Colunas': colunas,
+                'Descrição': 'Todas as colunas (incluindo intermediárias)'
+            })
+        
+        df_debug = pd.DataFrame(debug_files) if debug_files else pd.DataFrame()
+        debug_html = df_debug.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        ) if not df_debug.empty else ""
+        
+        colunas_extras = [
+            ('`linha_original`', 'Referência ao TXT original'),
+            ('`data`', 'Redundante (já tem `timestamp`)'),
+            ('`hora`', 'Redundante (já tem `timestamp`)'),
+            ('`conteudo`', 'Conteúdo original (antes do enriquecimento)'),
+            ('`arquivo_existe`', 'Bool de verificação'),
+            ('`extensao`', "Derivável de `arquivo`"),
+            ('`tipo_arquivo`', "Derivável de `arquivo`"),
+            ('`arquivo_path`', 'Path completo'),
+            ('`transcricao`', 'Texto completo da transcrição'),
+            ('`transcription_status`', 'Status da API'),
+        ]
+        
+        df_colunas_extras = pd.DataFrame(colunas_extras, columns=['Coluna', 'Descrição'])
+        colunas_extras_html = df_colunas_extras.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        )
+        
+        # ABA 4: Entrada
+        entrada_data = []
+        if TRANSCRIPTION_FILE and TRANSCRIPTION_FILE.exists():
+            size_mb = os.path.getsize(TRANSCRIPTION_FILE) / (1024 * 1024)
+            try:
+                num_lines = sum(1 for _ in open(TRANSCRIPTION_FILE, 'r', encoding='utf-8')) - 1
+            except:
+                num_lines = '—'
+            
+            entrada_data.append({
+                'Arquivo': f"`{TRANSCRIPTION_FILE.name}`",
+                'Formato': 'CSV',
+                'Tamanho': f"{size_mb:.2f} MB",
+                'Linhas': f"{num_lines:,}" if isinstance(num_lines, int) else num_lines,
+                'Descrição': 'Transcrições de áudio/vídeo (input Etapa 4)'
+            })
+        
+        df_entrada = pd.DataFrame(entrada_data) if entrada_data else pd.DataFrame()
+        entrada_html = df_entrada.to_html(
+            index=False, classes='dataframe table table-sm table-striped',
+            border=0, escape=False
+        ) if not df_entrada.empty else "<p><em>Nenhum arquivo.</em></p>"
+        
+        # Total
+        total = len(principais_data) + len(corpus_data) + len(debug_files) + len(entrada_data)
+        
+        # ==========================================
+        # HTML COM BOOTSTRAP TABS + BOTÃO COPIAR
+        # ==========================================
+        
+        metrics_html = f"""
+<hr>
+<p><strong>Resultado:</strong></p>
+
+<p><strong>📦 Arquivos Gerados e Documentação ({total}):</strong></p>
+
+<!-- Nav Tabs -->
+<ul class="nav nav-tabs" role="tablist">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-principais">🎯 Arquivos Principais</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-corpus">📊 Corpus para NLP</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-debug">🔍 Debug/Auditoria</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-entrada">📥 Dados de Entrada</a></li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content" style="border: 1px solid #dee2e6; border-top: none; padding: 1rem;">
+
+<!-- TAB 1: Principais -->
+<div id="tab-principais" class="tab-pane fade show active">
+<p><strong>Datasets estruturados:</strong></p>
+{principais_html}
+
+<p><strong>Colunas do dataset principal (8):</strong></p>
+{colunas_html}
+
+<div class="callout callout-tip" style="margin-top: 1em;">
+<div class="callout-header">💡 Como usar</div>
+<div class="callout-body">
+<p><strong>Carregando o dataset:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python"># Recomendado: Parquet (rápido, tipos corretos)
+df = pd.read_parquet('data/processed/messages.parquet')
+
+# Alternativa: CSV
+df = pd.read_csv('data/processed/messages.csv')</code></pre>
+</div>
+
+<p><strong>Exemplos de filtros:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python"># Apenas mensagens de texto
+df_text = df[df['grupo_mensagem'] == 'TEXT']
+
+# Mensagens com transcrição
+df_transcribed = df[df['transcricao'] == True]
+
+# Mensagens de P1 em outubro
+df_p1_oct = df[(df['remetente'] == 'P1') & (df['timestamp'].dt.month == 10)]</code></pre>
+</div>
+</div>
+</div>
+</div>
+
+<!-- TAB 2: Corpus -->
+<div id="tab-corpus" class="tab-pane fade">
+<p><strong>Arquivos de texto puro:</strong></p>
+{corpus_html}
+
+<div class="callout callout-tip" style="margin-top: 1em;">
+<div class="callout-header">💡 Como usar</div>
+<div class="callout-body">
+<p><strong>Corpus completo:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python">with open('data/processed/corpus_full.txt', 'r', encoding='utf-8') as f:
+    texto = f.read()
+
+# Análise de vocabulário
+palavras = texto.split()
+vocab_size = len(set(palavras))</code></pre>
+</div>
+
+<p><strong>Por participante:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python">with open('data/processed/corpus_p1.txt', 'r', encoding='utf-8') as f:
+    texto_p1 = f.read()
+
+with open('data/processed/corpus_p2.txt', 'r', encoding='utf-8') as f:
+    texto_p2 = f.read()</code></pre>
+</div>
+
+<p><strong>Chat com timestamps:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python">with open('data/processed/chat_complete.txt', 'r', encoding='utf-8') as f:
+    chat_lines = f.readlines()
+
+import re
+pattern = r'^(\\d{{2}}/\\d{{2}}/\\d{{2}}) (\\d{{2}}:\\d{{2}}:\\d{{2}}) (.+?): (.*)$'
+for line in chat_lines:
+    match = re.match(pattern, line)
+    if match:
+        data, hora, remetente, conteudo = match.groups()</code></pre>
+</div>
+</div>
+</div>
+</div>
+
+<!-- TAB 3: Debug -->
+<div id="tab-debug" class="tab-pane fade">
+<p><strong>Arquivos completos:</strong></p>
+{debug_html}
+
+<p><strong>Colunas extras (debug):</strong></p>
+{colunas_extras_html}
+
+<div class="callout callout-note" style="margin-top: 1em;">
+<div class="callout-header">📋 Exportação Manual</div>
+<div class="callout-body">
+<p><strong>Re-exportar só texto:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python">from wrangling import export_corpus_files
+
+df_text = df[df['grupo_mensagem'] == 'TEXT']
+export_corpus_files(df_text, OUTPUT_DIR / 'text_only', use_enriched=False)</code></pre>
+</div>
+
+<p><strong>Exportar CSV customizado:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-python">from wrangling import export_to_csv
+
+cols = ['timestamp', 'remetente', 'conteudo', 'tipo_mensagem']
+export_to_csv(df, OUTPUT_DIR / 'messages_minimal.csv', columns=cols)</code></pre>
+</div>
+
+<p><strong>Pode deletar após verificar:</strong></p>
+<ul><li><code>messages_full.csv</code></li></ul>
+</div>
+</div>
+</div>
+
+<!-- TAB 4: Entrada -->
+<div id="tab-entrada" class="tab-pane fade">
+<p><strong>Arquivos de input:</strong></p>
+{entrada_html}
+
+<div class="callout callout-note" style="margin-top: 1em;">
+<div class="callout-header">ℹ️ Sobre este arquivo</div>
+<div class="callout-body">
+<p>Gerado por <code>scripts/transcribe_media.py</code>:</p>
+<ul>
+<li>Nome do arquivo de áudio/vídeo</li>
+<li>Transcrição do conteúdo</li>
+<li>Status da API</li>
+<li>Timestamp de processamento</li>
+</ul>
+
+<p><strong>Como regenerar:</strong></p>
+<div class="code-container">
+<button class="copy-btn" onclick="copyCode(this)">📋 Copiar</button>
+<pre><code class="language-bash">python scripts/transcribe_media.py</code></pre>
+</div>
+<p><em>Requer API Groq configurada no <code>.env</code></em></p>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- JavaScript para botão copiar -->
+<script>
+function copyCode(button) {{
+    const codeBlock = button.nextElementSibling.querySelector('code');
+    const text = codeBlock.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {{
+        const original = button.textContent;
+        button.textContent = '✅ Copiado!';
+        button.style.background = '#28a745';
+        setTimeout(() => {{
+            button.textContent = original;
+            button.style.background = '';
+        }}, 2000);
+    }});
+}}
+</script>
+
+<!-- CSS para botão copiar -->
+<style>
+.code-container {{
+    position: relative;
+    margin: 0.5em 0;
+}}
+.copy-btn {{
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    padding: 4px 8px;
+    font-size: 0.75em;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    z-index: 10;
+}}
+.copy-btn:hover {{
+    background: #5a6268;
+}}
+</style>
+"""
+    
+    # TRATAMENTO PADRÃO: Etapas 1-5 → SEMPRE TABELA DATAFRAME
+    else:
+        df_metrics = get_step_metrics_df(step_id, stats)
+        
+        if df_metrics is not None and len(df_metrics) > 0:
+            metrics_table_html = df_metrics.to_html(
+                index=False,
+                classes='dataframe table table-sm table-striped',
+                border=0,
+                escape=False
+            )
+            metrics_html = f"\n<hr>\n<p><strong>Resultado:</strong></p>\n{metrics_table_html}"
+        else:
+            metrics_html = ""
+
+    print(f'''<details open style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
+<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
+▸ Etapa {step_num}: {step['name']}
+</summary>
+
+<p><strong>Sobre esta transformação:</strong></p>
+
+{description}
+{metrics_html}
+</details>
+''')
+```
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com os dados estruturados, enriquecidos e documentados, o fluxo de análise segue:
+
+1.  [**04-eda.qmd**](04-eda.qmd) — Exploração visual e estatística aprofundada
+2.  [**03-feature-engineering.qmd**](03-feature-engineering.qmd) — Criação de variáveis derivadas
+3.  [**05-advanced-analysis.qmd**](05-advanced-analysis.qmd) — Clustering, PCA, análises avançadas
