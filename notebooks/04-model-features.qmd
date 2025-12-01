@@ -1,0 +1,425 @@
+---
+title: "Model-Based Features"
+subtitle: "Features derivadas de modelos de Machine Learning"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+
+# Define arquivos
+INPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+OUTPUT_FILE = PATHS['processed'] / 'messages_with_models.parquet'
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
+```
+
+## Configuração
+
+```{python}
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{INPUT_FILE.name}</code>', 'Path': format_relative_path(INPUT_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{OUTPUT_FILE.name}</code>', 'Path': format_relative_path(OUTPUT_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook cria **features baseadas em modelos de Machine Learning** que complementam as features estruturais criadas no notebook anterior.
+
+⚠️ **IMPORTANTE:** Todas as análises deste notebook são:
+
+-   **Computacionalmente custosas** (podem levar vários minutos)
+
+-   **Totalmente opcionais** (não são necessárias para EDA básico)
+
+-   **Requerem hardware adequado** (GPU recomendada para alguns modelos)
+
+As features de modelos **não são executadas automaticamente** durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+#| output: false
+
+# Carrega dataset enriquecido
+df = pd.read_parquet(INPUT_FILE)
+
+n_mensagens = len(df)
+n_colunas = len(df.columns)
+periodo_inicio = df['timestamp'].min().strftime('%d/%m/%Y')
+periodo_fim = df['timestamp'].max().strftime('%d/%m/%Y')
+```
+
+```{python}
+#| label: show-data-summary
+
+dados_resumo = [
+    {'Métrica': 'Mensagens', 'Valor': f'{n_mensagens:,}'},
+    {'Métrica': 'Colunas', 'Valor': f'{n_colunas}'},
+    {'Métrica': 'Período', 'Valor': f'{periodo_inicio} → {periodo_fim}'},
+]
+
+display(pd.DataFrame(dados_resumo).style.hide(axis='index'))
+```
+
+-   
+
+# 04-model-features.qmd (índice)
+
+# Model Features
+
+## Sentiment Analysis
+
+-   [Twitter-RoBERTa](04a-sentiment-roberta.qmd)
+-   [DistilBERT](04b-sentiment-distilbert.qmd)
+-   [RoBERTa Latest](04c-sentiment-deberta.qmd)
+-   [Comparação](04d-sentiment-comparison.qmd)
+-   [Ensemble](04e-sentiment-ensemble.qmd) (em breve)
+
+------------------------------------------------------------------------
+
+# Análise de Sentimento (BERT)
+
+Classificação de sentimento usando modelos BERT pré-treinados.
+
+**Modelos Disponíveis:**
+
+-   [Twitter-XLM-RoBERTa](04a-sentiment-roberta.qmd)(implementado ✅)
+-   [DistilBERT Multilingual](04b-sentiment-distilbert.qmd)(implementado ✅)
+-   [RoBERTa Latest](04c-sentiment-deberta.qmd)(implementado ✅)
+-   [Comparação](04d-sentiment-comparison.qmd)(implementado ✅)
+-   [Ensemble](04e-sentiment-ensemble.qmd)
+-   ⏸️ BERTimba (futuro)
+
+------------------------------------------------------------------------
+
+## Modelo 2: BERTimbau (Futuro)
+
+Modelo BERT treinado especificamente em português brasileiro.
+
+::: {.callout-warning icon="false"}
+### ⏸️ Em Desenvolvimento
+
+Este modelo ainda não foi implementado. A estrutura abaixo serve como placeholder para implementação futura.
+:::
+
+### Características
+
+-   **Treinamento:** Corpus brasileiro (brWaC)
+-   **Otimização:** Português do Brasil formal e informal
+-   **Classes:** 3 (positive, neutral, negative) - após fine-tuning
+-   **Especial:** Entende melhor gírias e expressões brasileiras
+
+**Script planejado:** `scripts/sentiment_bertimbau.py`
+
+### Features Criadas
+
+```{python}
+#| label: sentiment-bertimbau-features-plan
+#| eval: false
+
+# Features do modelo BERTimbau (quando implementado)
+features_sentimento_bertimbau = [
+    {
+        'Feature': '<code>sentimento_bertimbau_label</code>',
+        'Tipo': 'category',
+        'Definição': 'Classificação do sentimento em 3 classes (BERTimbau)',
+        'Valores': 'positive, neutral, negative',
+        'Uso': 'Comparação com Twitter-RoBERTa'
+    },
+    {
+        'Feature': '<code>sentimento_bertimbau_score</code>',
+        'Tipo': 'float',
+        'Definição': 'Score de confiança do BERTimbau (0-1)',
+        'Valores': '0.0 a 1.0',
+        'Uso': 'Análise de concordância entre modelos'
+    },
+]
+
+df_plan_sentimento_bertimbau = pd.DataFrame(features_sentimento_bertimbau)
+display(df_plan_sentimento_bertimbau.style.hide(axis='index'))
+```
+
+### Execução
+
+```{python}
+#| label: sentiment-bertimbau-execution
+#| echo: true
+#| eval: false
+#| code-fold: false
+
+# TODO: Implementar sentiment_bertimbau.py
+
+import subprocess
+
+print("🤖 Iniciando análise com BERTimbau...")
+print("📦 Modelo: BERTimbau")
+print("⏱️  Tempo estimado: 20-35 minutos (CPU) ou 6-12 minutos (GPU)\n")
+
+# Executa script (quando implementado)
+result = subprocess.run(['python', 'scripts/sentiment_bertimbau.py'])
+
+if result.returncode == 0:
+    print("\n✅ Análise concluída!")
+else:
+    print("\n❌ Erro na execução.")
+```
+
+------------------------------------------------------------------------
+
+# Text Embeddings (Futuro)
+
+Vetorização semântica das mensagens usando Sentence Transformers.
+
+⏸️ **Status:** Não implementado ainda.
+
+## Features Planejadas
+
+-   `embedding_vector` - Vetor de 384 dimensões representando o significado semântico
+-   `embedding_cluster` - Cluster semântico (após K-means nos embeddings)
+
+**Uso:** Busca semântica, agrupamento de mensagens similares, visualização t-SNE/UMAP.
+
+**Script futuro:** `scripts/embeddings_sentence_transformer.py`
+
+```{python}
+#| label: embeddings-placeholder
+#| eval: false
+#| echo: true
+
+# TODO: Implementar embeddings
+# from sentence_transformers import SentenceTransformer
+# model = SentenceTransformer('neuralmind/bert-base-portuguese-cased')
+# embeddings = model.encode(df['conteudo'].fillna('').tolist())
+```
+
+------------------------------------------------------------------------
+
+### Modelo 2: BERTimbau
+
+Modelo específico para português brasileiro.
+
+**Script:** `scripts/sentiment_bertimbau.py` (ainda não implementado)
+
+```{python}
+#| label: sentiment-comparison
+#| echo: true
+#| eval: false
+
+# TODO: Implementar comparação entre modelos
+# 
+# Após rodar múltiplos modelos:
+# - Calcular concordância entre modelos
+# - Identificar casos discordantes
+# - Análise de Cohen's Kappa
+```
+
+------------------------------------------------------------------------
+
+# Topic Modeling (Futuro)
+
+Identificação automática de tópicos nas conversas usando BERTopic.
+
+⏸️ **Status:** Não implementado ainda.
+
+## Features Planejadas
+
+-   `topic_id` - ID do tópico identificado
+-   `topic_name` - Nome/descrição do tópico
+-   `topic_probability` - Confiança na atribuição do tópico
+
+**Uso:** Descobrir temas recorrentes, evolução de assuntos ao longo do tempo.
+
+```{python}
+#| label: topics-placeholder
+#| eval: false
+#| echo: true
+
+# TODO: Implementar topic modeling
+# from bertopic import BERTopic
+# topic_model = BERTopic(language="portuguese")
+# topics, probs = topic_model.fit_transform(df['conteudo'].fillna(''))
+```
+
+------------------------------------------------------------------------
+
+# Named Entity Recognition (Futuro)
+
+Extração de entidades nomeadas (pessoas, lugares, organizações).
+
+⏸️ **Status:** Não implementado ainda.
+
+## Features Planejadas
+
+-   `tem_pessoa` - True se menciona pessoa
+-   `tem_lugar` - True se menciona lugar
+-   `tem_organizacao` - True se menciona organização
+-   `entidades_json` - JSON com todas entidades detectadas
+
+**Uso:** Análise de contexto, frequência de menções.
+
+```{python}
+#| label: ner-placeholder
+#| eval: false
+#| echo: true
+
+# TODO: Implementar NER
+# import spacy
+# nlp = spacy.load("pt_core_news_lg")
+# doc = nlp(texto)
+# entities = [(ent.text, ent.label_) for ent in doc.ents]
+```
+
+------------------------------------------------------------------------
+
+# Consolidação
+
+```{python}
+#| label: consolidate-check
+#| echo: false
+#| eval: false
+
+# Verifica features de modelos aplicadas
+if OUTPUT_FILE.exists():
+    df_models = pd.read_parquet(OUTPUT_FILE)
+    
+    colunas_modelos = [col for col in df_models.columns 
+                       if col.startswith(('sentimento_', 'embedding_', 'topic_', 'tem_'))]
+    
+    print(f"📊 Features de Modelos Aplicadas:")
+    print(f"   • Total de features: {len(colunas_modelos)}")
+    print(f"   • Colunas totais: {len(df_models.columns)}")
+    print(f"\n✅ Dataset com modelos disponível!")
+    
+    # Lista features por categoria
+    categorias = {}
+    for col in colunas_modelos:
+        categoria = col.split('_')[0]
+        if categoria not in categorias:
+            categorias[categoria] = []
+        categorias[categoria].append(col)
+    
+    print("\n📋 Features por Categoria:")
+    for cat, feats in categorias.items():
+        print(f"   • {cat.title()}: {len(feats)} features")
+else:
+    print("⚠️  Nenhuma feature de modelo foi aplicada ainda.")
+    print("   Execute os blocos acima para adicionar features baseadas em ML.")
+```
+
+------------------------------------------------------------------------
+
+# Exportação
+
+A exportação é feita automaticamente pelos scripts de cada modelo.
+
+```{python}
+#| label: export-info
+#| echo: false
+
+print("📁 Arquivos Gerados:")
+print(f"\n   Input:  {INPUT_FILE.name}")
+if OUTPUT_FILE.exists():
+    size_mb = OUTPUT_FILE.stat().st_size / 1024 / 1024
+    print(f"   Output: {OUTPUT_FILE.name} ({size_mb:.2f} MB)")
+else:
+    print(f"   Output: {OUTPUT_FILE.name} (ainda não gerado)")
+    
+print("\n💡 Dica: Use o arquivo com modelos no EDA para análises mais ricas!")
+```
+
+------------------------------------------------------------------------
+
+# Resumo das Features de Modelos
+
+```{python}
+#| label: summary-model-features
+#| echo: false
+
+# Resumo de todas as features baseadas em modelos (implementadas + planejadas)
+resumo_model_features = [
+    # SENTIMENTO (implementado) - ATUALIZADO!
+    {'Status': '✅ Implementado', 'Categoria': 'Sentimento', 'Feature': 'sentimento_label', 'Tipo': 'category', 'Descrição': 'Classificação (positive/neutral/negative)'},
+    {'Status': '✅ Implementado', 'Categoria': 'Sentimento', 'Feature': 'sentimento_score', 'Tipo': 'float', 'Descrição': 'Confiança do modelo (0-1)'},
+    
+    # EMBEDDINGS (futuro)
+    {'Status': '⏸️ Planejado', 'Categoria': 'Embeddings', 'Feature': 'embedding_vector', 'Tipo': 'array', 'Descrição': 'Vetor semântico (384d)'},
+    {'Status': '⏸️ Planejado', 'Categoria': 'Embeddings', 'Feature': 'embedding_cluster', 'Tipo': 'int', 'Descrição': 'Cluster semântico'},
+    
+    # TOPICS (futuro)
+    {'Status': '⏸️ Planejado', 'Categoria': 'Tópicos', 'Feature': 'topic_id', 'Tipo': 'int', 'Descrição': 'ID do tópico'},
+    {'Status': '⏸️ Planejado', 'Categoria': 'Tópicos', 'Feature': 'topic_name', 'Tipo': 'str', 'Descrição': 'Nome do tópico'},
+    {'Status': '⏸️ Planejado', 'Categoria': 'Tópicos', 'Feature': 'topic_probability', 'Tipo': 'float', 'Descrição': 'Confiança do tópico'},
+    
+    # NER (futuro)
+    {'Status': '⏸️ Planejado', 'Categoria': 'NER', 'Feature': 'tem_pessoa', 'Tipo': 'bool', 'Descrição': 'Menciona pessoa'},
+    {'Status': '⏸️ Planejado', 'Categoria': 'NER', 'Feature': 'tem_lugar', 'Tipo': 'bool', 'Descrição': 'Menciona lugar'},
+    {'Status': '⏸️ Planejado', 'Categoria': 'NER', 'Feature': 'tem_organizacao', 'Tipo': 'bool', 'Descrição': 'Menciona organização'},
+]
+
+df_resumo = pd.DataFrame(resumo_model_features)
+
+# Exibe tabela
+display(df_resumo.style.hide(axis='index'))
+
+# Estatísticas
+print("\n📊 Estatísticas:")
+stats = df_resumo.groupby(['Status', 'Categoria']).size().reset_index(name='Quantidade')
+display(stats.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com as features de modelos (opcionais) criadas, seguimos para:
+
+1.  [**Exploratory Data Analysis**](05-eda.qmd) — Análise exploratória
+    -   Use `messages_with_models.parquet` se disponível
+    -   Ou `messages_enriched.parquet` para análise sem modelos
+
+------------------------------------------------------------------------

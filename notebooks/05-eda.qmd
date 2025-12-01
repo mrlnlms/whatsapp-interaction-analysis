@@ -1,0 +1,276 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: "Análise exploratória do dataset de mensagens"
+author: "Marlon L."
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  echo: false
+---
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+from pathlib import Path
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, str(Path.cwd().parent / 'src'))
+
+from config import PATHS
+
+print("✅ Setup concluído")
+print(f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+```
+
+------------------------------------------------------------------------
+
+# Introdução
+
+Este notebook realiza a **análise exploratória** do dataset de mensagens processado pelo pipeline de wrangling.
+
+O objetivo é entender padrões, distribuições e características dos dados antes de avançar para feature engineering e análises avançadas.
+
+------------------------------------------------------------------------
+
+## Carregamento dos Dados
+
+```{python}
+#| label: load-data
+
+# Carrega dataset principal
+INPUT_FILE = PATHS['processed'] / 'messages.parquet'
+
+# Alternativa CSV se parquet não existir
+if not INPUT_FILE.exists():
+    INPUT_FILE = PATHS['processed'] / 'messages.csv'
+    df = pd.read_csv(INPUT_FILE)
+else:
+    df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Dataset carregado: {len(df):,} mensagens")
+print(f"📅 Período: {df['timestamp'].min()} → {df['timestamp'].max()}")
+print(f"📋 Colunas: {list(df.columns)}")
+```
+
+------------------------------------------------------------------------
+
+## 🔍 Preview dos Dados
+
+```{python}
+#| label: compute-preview-stats
+#| output: false
+
+# Estatísticas para o preview e insights
+total_msgs = len(df)
+
+# Período
+periodo_inicio = df['timestamp'].min()
+periodo_fim = df['timestamp'].max()
+dias_total = (periodo_fim - periodo_inicio).days
+msgs_por_dia = total_msgs / dias_total if dias_total > 0 else 0
+
+# Participantes
+participantes = None
+p1_count = 0
+p2_count = 0
+p1_pct = 0
+p2_pct = 0
+mais_ativo = 'N/A'
+mais_ativo_pct = 0
+
+if 'remetente' in df.columns:
+    participantes = df['remetente'].value_counts()
+    p1_count = participantes.iloc[0] if len(participantes) > 0 else 0
+    p2_count = participantes.iloc[1] if len(participantes) > 1 else 0
+    p1_name = participantes.index[0] if len(participantes) > 0 else 'P1'
+    p2_name = participantes.index[1] if len(participantes) > 1 else 'P2'
+    p1_pct = (p1_count / total_msgs * 100) if total_msgs > 0 else 0
+    p2_pct = (p2_count / total_msgs * 100) if total_msgs > 0 else 0
+    mais_ativo = p1_name if p1_count > p2_count else p2_name
+    mais_ativo_pct = max(p1_pct, p2_pct)
+
+# Tipo mais comum
+tipo_mais_comum = 0
+tipo_nome = 'N/A'
+tipo_pct = 0
+
+if 'tipo_mensagem' in df.columns:
+    tipo_mais_comum = df['tipo_mensagem'].value_counts().iloc[0]
+    tipo_nome = df['tipo_mensagem'].value_counts().index[0]
+    tipo_pct = (tipo_mais_comum / total_msgs * 100)
+
+# Transcrições
+com_transcricao = 0
+taxa_transcricao = 0
+if 'tem_transcricao' in df.columns:
+    com_transcricao = df['tem_transcricao'].sum()
+    taxa_transcricao = (com_transcricao / total_msgs * 100) if total_msgs > 0 else 0
+```
+
+**Resumo do dataset:**
+
+- 📊 Total: `{python} f"{total_msgs:,}"` mensagens
+- 📅 Período: `{python} periodo_inicio.strftime('%d/%m/%Y')` até `{python} periodo_fim.strftime('%d/%m/%Y')` (`{python} dias_total` dias)
+- 📋 Colunas: `{python} len(df.columns)`
+
+**Primeiras mensagens:**
+
+```{python}
+#| label: preview-data
+
+# Seleciona colunas para preview
+preview_cols = ['timestamp', 'remetente', 'tipo_mensagem']
+if 'conteudo_enriquecido' in df.columns:
+    preview_cols.append('conteudo_enriquecido')
+elif 'conteudo' in df.columns:
+    preview_cols.append('conteudo')
+
+df[preview_cols].head(10)
+```
+
+```{python}
+#| label: compute-transcribed
+#| output: false
+
+df_trans = None
+trans_count = 0
+if 'tem_transcricao' in df.columns:
+    df_trans = df[df['tem_transcricao'] == True]
+    trans_count = len(df_trans)
+```
+
+```{python}
+#| label: show-transcribed-header
+#| output: asis
+#| echo: false
+
+if trans_count > 0:
+    print(f"🎙️ Exemplos de mensagens transcritas ({trans_count} total):")
+```
+
+```{python}
+#| label: preview-transcribed
+#| echo: false
+
+if df_trans is not None and len(df_trans) > 0:
+    trans_preview_cols = ['timestamp', 'remetente']
+    if 'tipo_arquivo' in df_trans.columns:
+        trans_preview_cols.append('tipo_arquivo')
+    if 'conteudo_enriquecido' in df_trans.columns:
+        trans_preview_cols.append('conteudo_enriquecido')
+    display(df_trans[trans_preview_cols].head(5))
+```
+
+------------------------------------------------------------------------
+
+## 📊 Insights do Dataset
+
+### Análise Temporal
+
+📅 **Período de análise:** `{python} dias_total` dias (`{python} periodo_inicio.strftime('%b/%Y')` a `{python} periodo_fim.strftime('%b/%Y')`)
+
+📈 **Volume médio:** `{python} f"{msgs_por_dia:.1f}"` mensagens/dia
+
+### Composição do Dataset
+
+💬 **Tipo predominante:** `{python} tipo_nome` (`{python} f"{tipo_pct:.1f}"`% das mensagens)
+
+🎙️ **Taxa de transcrição:** `{python} f"{taxa_transcricao:.2f}"`% (`{python} f"{com_transcricao:,}"` de `{python} f"{total_msgs:,}"`)
+
+### Distribuição por Participante
+
+```{python}
+#| label: show-participant-insights
+#| echo: false
+
+if participantes is not None:
+    participantes_data = []
+    for rem, count in participantes.items():
+        pct = (count / total_msgs * 100)
+        participantes_data.append({
+            'Participante': rem,
+            'Mensagens': f"{count:,}",
+            '%': f"{pct:.1f}%"
+        })
+
+    df_part = pd.DataFrame(participantes_data)
+    display(df_part.style.hide(axis='index'))
+```
+
+👤 **Mais ativo:** `{python} mais_ativo` (`{python} f"{mais_ativo_pct:.1f}"`% das mensagens)
+
+------------------------------------------------------------------------
+
+## Distribuição de Tipos de Mensagem
+
+Esta seção analisa a distribuição dos diferentes tipos de mensagem no dataset.
+
+### Distribuição Geral
+
+📊 Distribuição por tipo de mensagem:
+
+```{python}
+#| label: show-message-types
+
+if 'tipo_mensagem' in df.columns:
+    type_counts = df['tipo_mensagem'].value_counts().reset_index()
+    type_counts.columns = ['Tipo', 'Contagem']
+    type_counts['%'] = (type_counts['Contagem'] / len(df) * 100).round(2)
+    display(type_counts.style.hide(axis='index'))
+else:
+    print("⚠️ Coluna 'tipo_mensagem' não encontrada")
+```
+
+### Distribuição por Participante
+
+📊 Distribuição por tipo e remetente:
+
+```{python}
+#| label: crosstab-type-sender
+
+if 'tipo_mensagem' in df.columns and 'remetente' in df.columns:
+    crosstab = pd.crosstab(df['tipo_mensagem'], df['remetente'], margins=True)
+    display(crosstab)
+else:
+    print("⚠️ Colunas necessárias não encontradas")
+```
+
+------------------------------------------------------------------------
+
+## Próximas Análises
+
+::: {.callout-note}
+## 📝 TODO
+
+Adicionar análises:
+
+- Distribuição temporal (mensagens por hora, dia, mês)
+- Análise de tamanho de mensagens
+- Padrões de comunicação
+- Análise de emoji usage
+- Word clouds
+:::
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com a exploração inicial completa, seguimos para:
+
+1.  [**Análise Avançada**](06-advanced-analysis.qmd) — Clustering, MCA, PCA

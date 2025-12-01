@@ -20,6 +20,7 @@ execute:
 
 import sys
 import os
+import pandas as pd
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -29,16 +30,14 @@ sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
 
 from config import PROJECT_ROOT, PATHS
 from cleaning import run_pipeline, CLEANING_STEPS
-from utils import format_audit_table, format_summary_table, generate_impact_analysis
+from utils import format_audit_table, format_summary_table, generate_impact_analysis, format_markdown_lists
 
 # Define arquivos
 RAW_FILE = PATHS['raw']
 INTERIM_DIR = PATHS['interim']
-
-print(f"📁 Projeto: {PROJECT_ROOT}")
-print(f"📄 Arquivo de entrada: {RAW_FILE.name}")
-print(f"📂 Diretório de saída: {INTERIM_DIR}")
 ```
+
+📁 Projeto: `{python} PROJECT_ROOT.name`
 
 # Data Cleaning
 
@@ -50,29 +49,36 @@ Transformar o arquivo bruto exportado do WhatsApp em um arquivo limpo e otimizad
 
 ------------------------------------------------------------------------
 
-## Configuração e Execução do Pipeline
+## Configuração do Pipeline
+
+```{python}
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-ds-analytics' in full_str:
+        idx = full_str.find('whatsapp-ds-analytics')
+        return '~/' + full_str[idx:]
+    return full_str
+
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{RAW_FILE.name}</code>', 'Path': format_relative_path(RAW_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{INTERIM_DIR.name}</code>', 'Path': format_relative_path(INTERIM_DIR)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+## Execução do Pipeline
 
 ```{python}
 #| label: pipeline-config
 #| code-fold: false
 
-# =============================================================================
-# 🔧 CONFIGURAÇÃO DO PIPELINE
-# 
-# Para mudar a ordem: reordene os itens da lista
-# Para remover etapa: remova o ID da lista
-# Para ver etapas disponíveis: print(list(CLEANING_STEPS.keys()))
-#
-# IDs disponíveis:
-#   - 'u200e'           : Remove caractere invisível U+200E
-#   - 'empty_timestamps': Remove timestamps vazios (múltiplas mídias)
-#   - 'empty_lines'     : Remove linhas vazias
-#   - 'whitespace'      : Normaliza espaços internos
-#   - 'anonymize'       : Anonimiza participantes (Marlon→P1, Lê 🖤→P2)
-#   - 'timestamps'      : Otimiza formato do timestamp
-#   - 'indentation'     : Remove indentação de linhas de continuação
-# =============================================================================
-
+# Etapas disponíveis: u200e, empty_timestamps, empty_lines, whitespace, anonymize, timestamps, indentation
 PIPELINE_ORDER = [
     'u200e',
     'anonymize',
@@ -86,6 +92,7 @@ PIPELINE_ORDER = [
 
 ```{python}
 #| label: execute-pipeline
+#| output: false
 
 # Executa o pipeline
 result = run_pipeline(
@@ -104,6 +111,48 @@ totals = result['totals']
 FINAL_OUTPUT = result['final_output']
 ```
 
+```{python}
+# Tabela de execução do pipeline
+etapas = []
+for i, step_id in enumerate(PIPELINE_ORDER):
+    step = CLEANING_STEPS[step_id]
+    step_metrics = metrics[step_id]
+
+    # Pega métrica principal de cada etapa (estrutura varia por etapa)
+    if 'caracteres_removidos' in step_metrics:
+        resultado = f"{step_metrics['caracteres_removidos']:,} caracteres"
+    elif 'linhas_removidas' in step_metrics:
+        resultado = f"{step_metrics['linhas_removidas']:,} linhas"
+    elif 'timestamps_otimizados' in step_metrics:
+        resultado = f"{step_metrics['timestamps_otimizados']:,} timestamps"
+    elif 'espacos_removidos' in step_metrics:
+        resultado = f"{step_metrics['espacos_removidos']:,} espaços"
+    elif 'bytes_economizados' in step_metrics:
+        resultado = f"{step_metrics['bytes_economizados']:,} bytes"
+    elif 'substituicoes' in step_metrics:
+        # substituicoes é um dict com contagens por participante
+        subs = step_metrics['substituicoes']
+        total_subs = sum(subs.values()) if isinstance(subs, dict) else subs
+        resultado = f"{total_subs:,} substituições"
+    else:
+        resultado = "✓"
+
+    etapas.append({
+        '#': str(i + 1),
+        'Etapa': step['name'],
+        'Resultado': resultado
+    })
+
+display(pd.DataFrame(etapas).style.hide(axis='index'))
+
+# Resumo final
+print()
+print("✅ Pipeline concluído!")
+print()
+print(f"📉 Redução: {totals['original_formatted']} → {totals['final_formatted']} ({totals['total_percent']:.1f}%)")
+print(f"📄 Arquivo: {FINAL_OUTPUT.name}")
+```
+
 ------------------------------------------------------------------------
 
 ## Pipeline de Transformação
@@ -113,47 +162,36 @@ FINAL_OUTPUT = result['final_output']
 #| output: asis
 #| echo: false
 
-# Renderiza cada etapa como um accordion
+# Renderiza cada etapa em Markdown puro (padrão Wrangling)
 for i, step_id in enumerate(PIPELINE_ORDER):
     step = CLEANING_STEPS[step_id]
     step_num = i + 1
     audit = audits[step_id]
     step_metrics = metrics[step_id]
-    
-    print(f'''<details style="margin: 0.5em 0; list-style: none; border: 1px solid #d4d4d4; border-radius: 5px; padding: 10px;">
-<summary style="font-size: 1.3em; font-weight: 600; color: #343a40; list-style: none;">
-▸ Etapa {step_num}: {step['name']}
-</summary>
 
-**Sobre esta transformação:**
+    # Header da etapa
+    print(f"### Etapa {step_num}: {step['name']}\n")
+    print(f"{step['description']}\n")
 
-{step['description']}
-
----
-
-**Resultado:**
-''')
-    
-    # Mostra métricas específicas
+    # Métricas como lista
+    print("**Resultado:**\n")
     for key, value in step_metrics.items():
         if isinstance(value, dict):
             for k, v in value.items():
                 print(f"- {k}: {v:,}")
         else:
-            print(f"- {key.replace('_', ' ').title()}: {value:,}")
-    
-    # Mostra auditoria resumida
-    print(f'''
-**Auditoria:**
+            label = key.replace('_', ' ').title()
+            print(f"- {label}: {value:,}")
+    print()
 
-| Métrica | Valor |
-|---------|-------|
-| Entrada | {audit['input']['size_formatted']} ({audit['input']['total_lines']:,} linhas) |
-| Saída | {audit['output']['size_formatted']} ({audit['output']['total_lines']:,} linhas) |
-| Redução | {audit['delta_bytes']:,} bytes ({audit['delta_percent']:.2f}%) |
-
-</details>
-''')
+    # Auditoria como tabela
+    print("**Auditoria:**\n")
+    print("| Métrica | Valor |")
+    print("|---------|-------|")
+    print(f"| Entrada | {audit['input']['size_formatted']} ({audit['input']['total_lines']:,} linhas) |")
+    print(f"| Saída | {audit['output']['size_formatted']} ({audit['output']['total_lines']:,} linhas) |")
+    print(f"| Redução | {audit['delta_bytes']:,} bytes ({audit['delta_percent']:.2f}%) |")
+    print()
 ```
 
 ------------------------------------------------------------------------
@@ -175,7 +213,7 @@ audit_list = [audits[step_id] for step_id in PIPELINE_ORDER]
 #| label: show-audit-table
 #| echo: false
 
-format_audit_table(df_audit, include_chars=True).style.hide(axis='index')
+display(format_audit_table(df_audit, include_chars=True).style.hide(axis='index'))
 ```
 
 ## Resumo por Etapa
@@ -184,58 +222,69 @@ format_audit_table(df_audit, include_chars=True).style.hide(axis='index')
 #| label: show-summary
 #| echo: false
 
-format_summary_table(audit_list).style.hide(axis='index')
+display(format_summary_table(audit_list).style.hide(axis='index'))
 ```
 :::
 
 ------------------------------------------------------------------------
 
-::: {.callout-tip icon="false" collapse="false"}
 ## 🎯 Resultado Final
 
 ```{python}
-#| echo: false
+#| label: prepare-final-summary
+#| output: false
 
-print(f"📁 Arquivo original: {totals['original_formatted']}")
-print(f"📁 Arquivo final: {totals['final_formatted']}")
-print(f"📦 Redução total: {totals['total_bytes']:,} bytes ({totals['total_percent']:.2f}%)")
-print(f"📉 Linhas removidas: {totals['total_lines']:,}")
-print(f"🔤 Caracteres removidos: {totals['total_chars']:,}")
-print(f"✅ Arquivo de saída: {FINAL_OUTPUT.name}")
+# Prepara dados para tabela consolidada
+summary_data = [
+    {'Métrica': 'Arquivo original', 'Valor': totals['original_formatted']},
+    {'Métrica': 'Arquivo final', 'Valor': totals['final_formatted']},
+    {'Métrica': 'Redução (bytes)', 'Valor': f"{totals['total_bytes']:,}"},
+    {'Métrica': 'Redução (%)', 'Valor': f"{totals['total_percent']:.2f}%"},
+    {'Métrica': 'Linhas removidas', 'Valor': f"{totals['total_lines']:,}"},
+    {'Métrica': 'Caracteres removidos', 'Valor': f"{totals['total_chars']:,}"},
+]
+
+df_final_summary = pd.DataFrame(summary_data)
 ```
 
+```{python}
+#| label: show-final-summary
+#| echo: false
+
+display(df_final_summary.style.hide(axis='index'))
+```
+
+✅ **Arquivo de saída:** `{python} FINAL_OUTPUT.name`
+
 O arquivo limpo está pronto para a próxima etapa: **parsing e estruturação em DataFrame**.
-:::
 
 ------------------------------------------------------------------------
 
-::: {.callout-note icon="false" collapse="false"}
-## 📊 Reflexão: Impacto no Dataset Enriquecido
+## 💡 Impacto da Limpeza
 
 ```{python}
 #| echo: false
 
 impact = generate_impact_analysis(totals, enrichment_factor=8.0)
 
-print(f"📁 Arquivo bruto:")
-print(f"   • Original: {impact['original_mb']:.2f} MB")
-print(f"   • Após limpeza: {impact['final_mb']:.2f} MB")
-print(f"   • Redução: {impact['reduction_pct']:.2f}%\n")
-
-print(f"📈 Projeção para dataset enriquecido (fator ~{impact['enrichment_factor']:.0f}x):")
-print(f"   • Sem otimização: ~{impact['projected_original_mb']:.1f} MB")
-print(f"   • Com otimização: ~{impact['projected_optimized_mb']:.1f} MB")
-print(f"   • Economia projetada: ~{impact['projected_savings_mb']:.1f} MB\n")
-
-print(f"💡 Cada caractere removido agora significa menos dados para:")
-print(f"   • Armazenar em disco e memória")
-print(f"   • Processar em operações de NLP")
-print(f"   • Transferir entre sistemas")
-print(f"   • Incluir em embeddings e modelos")
+print("**Redução no Arquivo Bruto:**")
+print()
+print(f"- Original: {impact['original_mb']:.2f} MB")
+print(f"- Após limpeza: {impact['final_mb']:.2f} MB")
+print(f"- Redução: {impact['reduction_pct']:.2f}%")
+print()
+print("**Projeção para Dataset Enriquecido (~8x):**")
+print()
+print(f"- Sem otimização: ~{impact['projected_original_mb']:.1f} MB")
+print(f"- Com otimização: ~{impact['projected_optimized_mb']:.1f} MB")
+print(f"- Economia projetada: ~{impact['projected_savings_mb']:.1f} MB")
 ```
 
-A limpeza realizada nesta etapa não apenas organiza os dados, mas **reduz significativamente o custo computacional** de todas as operações subsequentes.
-:::
+**Benefícios:**
+
+-   Menos dados para armazenar
+-   Processamento mais rápido
+-   Transferências mais eficientes
 
 ------------------------------------------------------------------------
 
@@ -271,4 +320,3 @@ message_pattern = r'^(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2}) (.+?): (.*)$'
 Com o arquivo limpo, seguimos para:
 
 1.  [**Data Wrangling**](02-data-wrangling.qmd) — Parsing, agregação de multilinha, vinculação de mídia
-2.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
