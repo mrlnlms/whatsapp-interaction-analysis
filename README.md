@@ -157,7 +157,7 @@ O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 ### Notebooks
 
 | \# | Notebook | Descrição |
-|------------------|--------------------------|-----------------------------|
+|------------------|--------------------------|----------------------------|
 | 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação do arquivo bruto |
 | 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, mídia, transcrição |
@@ -173,6 +173,8 @@ O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 -   **Transcrição automática** de áudios/vídeos via Groq API
 -   **Export otimizado** — CSV para compatibilidade, Parquet para performance
 -   **Sistema de auditoria** — métricas de cada transformação
+
+
 
 ## 🔒 Privacidade
 
