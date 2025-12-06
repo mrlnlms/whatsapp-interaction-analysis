@@ -1,0 +1,843 @@
+---
+title: "EDA - Data Wrangling"
+subtitle: "Análise exploratória dos dados básicos (pré-feature engineering)"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    df-print: paged
+    theme: cosmo
+    number-sections: true
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+Este notebook realiza a **análise exploratória inicial** dos dados que saíram do wrangling, **antes** da criação de features derivadas.
+
+O objetivo é entender os padrões presentes nos dados básicos para **justificar e guiar** a criação de features no próximo passo.
+
+---
+
+# Setup
+
+## Bibliotecas
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações de visualização
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+```
+
+## Caminhos
+
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada (gerado pelo wrangling)
+INPUT_FILE = DATA_DIR / 'messages.parquet'
+
+print(f"📁 Diretório de dados: {DATA_DIR}")
+print(f"📂 Arquivo de entrada: {INPUT_FILE.name}")
+print(f"✅ Arquivo existe: {INPUT_FILE.exists()}")
+```
+
+---
+
+# Carregamento dos Dados
+
+```{python}
+# Carrega dataset do wrangling
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Shape: {df.shape}")
+print(f"📅 Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"👥 Remetentes: {df['remetente'].unique().tolist()}")
+```
+
+## Estrutura do Dataset
+
+```{python}
+# Exibe informações sobre as colunas
+df.info()
+```
+
+## Amostra dos Dados
+
+```{python}
+# Primeiras linhas
+df.head(10)
+```
+
+## Estatísticas Descritivas
+
+```{python}
+# Resumo estatístico
+df.describe(include='all')
+```
+
+---
+
+# Visão Geral do Dataset
+
+## Volume de Mensagens
+
+```{python}
+# Total de mensagens
+total_msgs = len(df)
+print(f"📊 Total de mensagens: {total_msgs:,}")
+
+# Por remetente
+msgs_por_remetente = df['remetente'].value_counts()
+print(f"\n👥 Mensagens por remetente:")
+for remetente, count in msgs_por_remetente.items():
+    pct = (count / total_msgs) * 100
+    print(f"   {remetente}: {count:,} ({pct:.1f}%)")
+```
+
+```{python}
+#| label: fig-msgs-remetente
+#| fig-cap: "Distribuição de mensagens por remetente"
+
+# Visualização
+fig = px.bar(
+    x=msgs_por_remetente.index,
+    y=msgs_por_remetente.values,
+    labels={'x': 'Remetente', 'y': 'Quantidade de Mensagens'},
+    title='Volume de Mensagens por Remetente',
+    color=msgs_por_remetente.index,
+    text=msgs_por_remetente.values
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(showlegend=False, height=400)
+fig.show()
+```
+
+## Distribuição de Tipos de Mensagem
+
+### Por Tipo Específico
+
+```{python}
+# Contagem por tipo específico
+tipo_counts = df['tipo_mensagem'].value_counts()
+print(f"📋 Tipos de mensagem identificados: {len(tipo_counts)}")
+print(f"\nTop 10 tipos mais frequentes:")
+print(tipo_counts.head(10))
+```
+
+```{python}
+#| label: fig-tipos-especificos
+#| fig-cap: "Top 10 tipos de mensagem mais frequentes"
+
+# Visualização Top 10
+top_10_tipos = tipo_counts.head(10)
+
+fig = px.bar(
+    x=top_10_tipos.values,
+    y=top_10_tipos.index,
+    orientation='h',
+    labels={'x': 'Quantidade', 'y': 'Tipo de Mensagem'},
+    title='Top 10 Tipos de Mensagem',
+    text=top_10_tipos.values
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(height=500, yaxis={'categoryorder': 'total ascending'})
+fig.show()
+```
+
+### Por Grupo (Categoria)
+
+```{python}
+# Contagem por grupo
+grupo_counts = df['grupo_mensagem'].value_counts()
+print(f"📦 Grupos de mensagem: {len(grupo_counts)}")
+print(f"\nDistribuição por grupo:")
+for grupo, count in grupo_counts.items():
+    pct = (count / total_msgs) * 100
+    print(f"   {grupo}: {count:,} ({pct:.1f}%)")
+```
+
+```{python}
+#| label: fig-grupos-mensagem
+#| fig-cap: "Distribuição por grupo de mensagem"
+
+# Visualização
+fig = px.pie(
+    names=grupo_counts.index,
+    values=grupo_counts.values,
+    title='Distribuição por Grupo de Mensagem',
+    hole=0.4
+)
+
+fig.update_traces(
+    textposition='inside',
+    textinfo='label+percent',
+    hovertemplate='<b>%{label}</b><br>Quantidade: %{value:,}<br>Percentual: %{percent}<extra></extra>'
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+## Mensagens com Transcrição
+
+```{python}
+# Analisa presença de transcrições
+transcricao_counts = df['transcricao'].value_counts()
+total_transcricoes = transcricao_counts.get(True, 0)
+pct_transcricoes = (total_transcricoes / total_msgs) * 100
+
+print(f"🎤 Mensagens com transcrição: {total_transcricoes:,} ({pct_transcricoes:.1f}%)")
+print(f"📝 Mensagens sem transcrição: {transcricao_counts.get(False, 0):,}")
+
+# Transcrições por tipo de mensagem
+if total_transcricoes > 0:
+    print(f"\n📊 Transcrições por tipo de mensagem:")
+    transcricoes_por_tipo = df[df['transcricao'] == True]['grupo_mensagem'].value_counts()
+    print(transcricoes_por_tipo)
+```
+
+```{python}
+#| label: fig-transcricoes
+#| fig-cap: "Mensagens com transcrição por tipo"
+
+# Visualização se houver transcrições
+if total_transcricoes > 0:
+    fig = px.bar(
+        x=transcricoes_por_tipo.index,
+        y=transcricoes_por_tipo.values,
+        labels={'x': 'Tipo de Mensagem', 'y': 'Quantidade com Transcrição'},
+        title='Mensagens Transcritas por Tipo',
+        text=transcricoes_por_tipo.values
+    )
+    
+    fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+    fig.update_layout(height=400)
+    fig.show()
+```
+
+---
+
+# Análise de Tipos de Mensagem
+
+## Padrão por Remetente
+
+```{python}
+# Crosstab de remetente vs grupo de mensagem
+crosstab = pd.crosstab(
+    df['remetente'], 
+    df['grupo_mensagem'],
+    margins=True,
+    margins_name='Total'
+)
+
+print("📊 Distribuição de tipos de mensagem por remetente:")
+print(crosstab)
+```
+
+```{python}
+# Proporções (%)
+crosstab_pct = pd.crosstab(
+    df['remetente'], 
+    df['grupo_mensagem'],
+    normalize='index'
+) * 100
+
+print("\n📊 Proporções (%) por remetente:")
+print(crosstab_pct.round(1))
+```
+
+```{python}
+#| label: fig-tipos-por-remetente
+#| fig-cap: "Distribuição de tipos de mensagem por remetente"
+
+# Visualização
+fig = px.bar(
+    crosstab_pct.T,
+    barmode='group',
+    labels={'value': 'Percentual (%)', 'grupo_mensagem': 'Tipo de Mensagem'},
+    title='Distribuição de Tipos de Mensagem por Remetente (%)'
+)
+
+fig.update_layout(height=500, xaxis_tickangle=-45)
+fig.show()
+```
+
+## Insights sobre Tipos
+
+```{python}
+# Análise de preferências
+print("💡 INSIGHTS - Tipos de Mensagem:\n")
+
+for remetente in df['remetente'].unique():
+    df_rem = df[df['remetente'] == remetente]
+    top_tipo = df_rem['grupo_mensagem'].value_counts().head(1)
+    tipo_nome = top_tipo.index[0]
+    tipo_pct = (top_tipo.values[0] / len(df_rem)) * 100
+    
+    print(f"• {remetente}: {tipo_pct:.1f}% das mensagens são {tipo_nome}")
+
+# Comparação TEXT vs não-TEXT
+for remetente in df['remetente'].unique():
+    df_rem = df[df['remetente'] == remetente]
+    pct_text = (df_rem['grupo_mensagem'] == 'TEXT').sum() / len(df_rem) * 100
+    pct_media = (df_rem['grupo_mensagem'].isin(['AUDIO', 'VID', 'IMG'])).sum() / len(df_rem) * 100
+    print(f"• {remetente}: {pct_text:.1f}% texto | {pct_media:.1f}% mídia (áudio/vídeo/imagem)")
+```
+
+---
+
+# Padrões Temporais Básicos
+
+## Distribuição ao Longo do Tempo
+
+```{python}
+# Timeline de mensagens
+df['data'] = df['timestamp'].dt.date
+msgs_por_dia = df.groupby('data').size().reset_index(name='count')
+
+print(f"📅 Período analisado: {msgs_por_dia['data'].min()} a {msgs_por_dia['data'].max()}")
+print(f"📊 Dias com mensagens: {len(msgs_por_dia)}")
+print(f"📈 Média de mensagens/dia: {msgs_por_dia['count'].mean():.1f}")
+print(f"📊 Mediana: {msgs_por_dia['count'].median():.0f}")
+print(f"📈 Máximo em um dia: {msgs_por_dia['count'].max()}")
+```
+
+```{python}
+#| label: fig-timeline
+#| fig-cap: "Volume de mensagens ao longo do tempo"
+
+# Visualização
+fig = px.line(
+    msgs_por_dia,
+    x='data',
+    y='count',
+    title='Volume de Mensagens por Dia',
+    labels={'data': 'Data', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_traces(mode='lines+markers')
+fig.update_layout(height=400, hovermode='x unified')
+fig.show()
+```
+
+## Distribuição por Hora do Dia
+
+```{python}
+# Extrai hora
+df['hora'] = df['timestamp'].dt.hour
+
+# Contagem por hora
+msgs_por_hora = df.groupby('hora').size().reset_index(name='count')
+
+print(f"⏰ Horários de pico:")
+top_horas = msgs_por_hora.nlargest(5, 'count')
+for _, row in top_horas.iterrows():
+    print(f"   {row['hora']:02d}h: {row['count']:,} mensagens")
+```
+
+```{python}
+#| label: fig-horas
+#| fig-cap: "Distribuição de mensagens por hora do dia"
+
+# Visualização
+fig = px.bar(
+    msgs_por_hora,
+    x='hora',
+    y='count',
+    title='Distribuição de Mensagens por Hora do Dia',
+    labels={'hora': 'Hora do Dia', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_layout(height=400, xaxis=dict(tickmode='linear', tick0=0, dtick=1))
+fig.show()
+```
+
+## Distribuição por Dia da Semana
+
+```{python}
+# Extrai dia da semana
+dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana_num'] = df['timestamp'].dt.dayofweek
+df['dia_semana'] = df['dia_semana_num'].apply(lambda x: dias_semana[x])
+
+# Contagem por dia da semana
+msgs_por_dia_semana = df.groupby('dia_semana').size().reindex(dias_semana).reset_index(name='count')
+
+print(f"📅 Mensagens por dia da semana:")
+for _, row in msgs_por_dia_semana.iterrows():
+    print(f"   {row['dia_semana']}: {row['count']:,}")
+```
+
+```{python}
+#| label: fig-dias-semana
+#| fig-cap: "Distribuição de mensagens por dia da semana"
+
+# Visualização
+fig = px.bar(
+    msgs_por_dia_semana,
+    x='dia_semana',
+    y='count',
+    title='Distribuição de Mensagens por Dia da Semana',
+    labels={'dia_semana': 'Dia da Semana', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Heatmap: Hora × Dia da Semana
+
+```{python}
+#| label: fig-heatmap
+#| fig-cap: "Heatmap de mensagens por hora e dia da semana"
+
+# Cria matriz hora x dia da semana
+heatmap_data = df.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+heatmap_data.index = [dias_semana[i] for i in heatmap_data.index]
+
+# Visualização
+fig = px.imshow(
+    heatmap_data.T,
+    labels=dict(x="Dia da Semana", y="Hora do Dia", color="Mensagens"),
+    title='Heatmap: Distribuição de Mensagens por Hora e Dia da Semana',
+    aspect="auto",
+    color_continuous_scale='Blues'
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+## Insights Temporais
+
+```{python}
+print("💡 INSIGHTS - Padrões Temporais:\n")
+
+# Horário de pico
+hora_pico = msgs_por_hora.loc[msgs_por_hora['count'].idxmax(), 'hora']
+print(f"• Horário de pico: {hora_pico:02d}h")
+
+# Dia da semana mais ativo
+dia_pico = msgs_por_dia_semana.loc[msgs_por_dia_semana['count'].idxmax(), 'dia_semana']
+print(f"• Dia da semana mais ativo: {dia_pico}")
+
+# Comparação weekday vs weekend
+df['fim_de_semana'] = df['dia_semana_num'] >= 5
+msgs_weekday = df[~df['fim_de_semana']].shape[0]
+msgs_weekend = df[df['fim_de_semana']].shape[0]
+print(f"• Mensagens em dias úteis: {msgs_weekday:,} ({msgs_weekday/total_msgs*100:.1f}%)")
+print(f"• Mensagens em finais de semana: {msgs_weekend:,} ({msgs_weekend/total_msgs*100:.1f}%)")
+
+# Período do dia
+df['periodo_dia'] = df['hora'].apply(lambda h: 
+    'Madrugada' if 0 <= h <= 5 else
+    'Manhã' if 6 <= h <= 11 else
+    'Tarde' if 12 <= h <= 17 else
+    'Noite'
+)
+msgs_por_periodo = df['periodo_dia'].value_counts()
+periodo_pico = msgs_por_periodo.idxmax()
+print(f"• Período do dia mais ativo: {periodo_pico} ({msgs_por_periodo[periodo_pico]:,} mensagens)")
+```
+
+---
+
+# Análise de Conteúdo
+
+## Mensagens com Texto
+
+```{python}
+# Filtra mensagens de texto (não-nulas)
+df_texto = df[df['conteudo'].notna()].copy()
+
+print(f"📝 Mensagens com conteúdo textual: {len(df_texto):,} ({len(df_texto)/total_msgs*100:.1f}%)")
+```
+
+## Tamanho das Mensagens
+
+```{python}
+# Calcula tamanho em caracteres
+df_texto['tamanho_chars'] = df_texto['conteudo'].str.len()
+
+print(f"📊 Estatísticas de tamanho (caracteres):")
+print(df_texto['tamanho_chars'].describe())
+```
+
+```{python}
+#| label: fig-tamanho-chars
+#| fig-cap: "Distribuição do tamanho das mensagens (caracteres)"
+
+# Visualização (limitando outliers para melhor visualização)
+df_plot = df_texto[df_texto['tamanho_chars'] <= df_texto['tamanho_chars'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_chars',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens (até percentil 95)',
+    labels={'tamanho_chars': 'Caracteres', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+```{python}
+# Calcula tamanho em palavras
+df_texto['tamanho_palavras'] = df_texto['conteudo'].str.split().str.len()
+
+print(f"\n📊 Estatísticas de tamanho (palavras):")
+print(df_texto['tamanho_palavras'].describe())
+```
+
+```{python}
+#| label: fig-tamanho-palavras
+#| fig-cap: "Distribuição do tamanho das mensagens (palavras)"
+
+# Visualização (limitando outliers)
+df_plot = df_texto[df_texto['tamanho_palavras'] <= df_texto['tamanho_palavras'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_palavras',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens em Palavras (até percentil 95)',
+    labels={'tamanho_palavras': 'Palavras', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Comparação por Remetente
+
+```{python}
+#| label: fig-tamanho-remetente
+#| fig-cap: "Comparação de tamanho de mensagens por remetente"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+for remetente in df_texto['remetente'].unique():
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    
+    # Caracteres
+    fig.add_trace(
+        go.Box(y=df_rem['tamanho_chars'], name=remetente, showlegend=False),
+        row=1, col=1
+    )
+    
+    # Palavras
+    fig.add_trace(
+        go.Box(y=df_rem['tamanho_palavras'], name=remetente),
+        row=1, col=2
+    )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens por Remetente")
+fig.show()
+```
+
+```{python}
+print("\n💡 INSIGHTS - Tamanho de Mensagens:\n")
+
+for remetente in df_texto['remetente'].unique():
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    print(f"• {remetente}:")
+    print(f"  - Média: {df_rem['tamanho_chars'].mean():.1f} caracteres | {df_rem['tamanho_palavras'].mean():.1f} palavras")
+    print(f"  - Mediana: {df_rem['tamanho_chars'].median():.0f} caracteres | {df_rem['tamanho_palavras'].median():.0f} palavras")
+```
+
+---
+
+# Padrões de Interação
+
+## Tempo entre Mensagens
+
+```{python}
+# Calcula tempo entre mensagens consecutivas
+df_sorted = df.sort_values('timestamp').copy()
+df_sorted['tempo_desde_ultima'] = df_sorted['timestamp'].diff().dt.total_seconds()
+
+# Remove primeira mensagem (NaN)
+tempo_entre_msgs = df_sorted['tempo_desde_ultima'].dropna()
+
+print(f"⏱️ Tempo entre mensagens (segundos):")
+print(tempo_entre_msgs.describe())
+
+# Converte para minutos para interpretação
+print(f"\n⏱️ Em minutos:")
+print((tempo_entre_msgs / 60).describe())
+```
+
+```{python}
+#| label: fig-tempo-entre
+#| fig-cap: "Distribuição do tempo entre mensagens"
+
+# Visualização (limitando a 1 hora para melhor visualização)
+tempo_plot = tempo_entre_msgs[tempo_entre_msgs <= 3600]  # até 1 hora
+
+fig = px.histogram(
+    x=tempo_plot / 60,  # converte para minutos
+    nbins=50,
+    title='Distribuição do Tempo entre Mensagens (até 1 hora)',
+    labels={'x': 'Minutos', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Respostas Rápidas
+
+```{python}
+# Define threshold de resposta rápida (60 segundos)
+respostas_rapidas = (tempo_entre_msgs < 60).sum()
+pct_rapidas = (respostas_rapidas / len(tempo_entre_msgs)) * 100
+
+print(f"⚡ Respostas em < 60 segundos: {respostas_rapidas:,} ({pct_rapidas:.1f}%)")
+
+# Diferentes thresholds
+thresholds = [10, 30, 60, 120, 300]  # segundos
+print(f"\n⚡ Respostas por velocidade:")
+for threshold in thresholds:
+    count = (tempo_entre_msgs < threshold).sum()
+    pct = (count / len(tempo_entre_msgs)) * 100
+    print(f"   < {threshold}s: {count:,} ({pct:.1f}%)")
+```
+
+## Sequências de Mensagens
+
+```{python}
+# Identifica trocas de remetente
+df_sorted['mudou_remetente'] = df_sorted['remetente'] != df_sorted['remetente'].shift()
+
+# Conta mensagens consecutivas do mesmo remetente
+df_sorted['sequencia'] = df_sorted.groupby(
+    (df_sorted['mudou_remetente']).cumsum()
+).cumcount() + 1
+
+print(f"📊 Sequências de mensagens do mesmo remetente:")
+print(df_sorted['sequencia'].describe())
+print(f"\n📈 Maior sequência: {df_sorted['sequencia'].max()} mensagens consecutivas")
+
+# Distribuição de sequências
+seq_dist = df_sorted.groupby('sequencia').size().head(20)
+print(f"\n📊 Distribuição das 20 sequências mais comuns:")
+print(seq_dist)
+```
+
+```{python}
+#| label: fig-sequencias
+#| fig-cap: "Distribuição de sequências de mensagens"
+
+# Visualização
+fig = px.bar(
+    x=seq_dist.index[:15],  # Top 15
+    y=seq_dist.values[:15],
+    title='Top 15 Tamanhos de Sequências Mais Comuns',
+    labels={'x': 'Tamanho da Sequência', 'y': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Análise de Turnos
+
+```{python}
+# Identifica inícios de conversa (gap > 1 hora)
+THRESHOLD_INICIO = 3600  # 1 hora em segundos
+df_sorted['inicio_conversa'] = (df_sorted['tempo_desde_ultima'] > THRESHOLD_INICIO) | (df_sorted['tempo_desde_ultima'].isna())
+
+# Conta turnos
+total_turnos = df_sorted['inicio_conversa'].sum()
+msgs_por_turno = len(df) / total_turnos
+
+print(f"💬 Total de turnos de conversa: {total_turnos}")
+print(f"📊 Média de mensagens por turno: {msgs_por_turno:.1f}")
+
+# Distribução de tamanho dos turnos
+df_sorted['turno_id'] = df_sorted['inicio_conversa'].cumsum()
+turnos_tamanho = df_sorted.groupby('turno_id').size()
+
+print(f"\n📊 Estatísticas de tamanho dos turnos:")
+print(turnos_tamanho.describe())
+```
+
+---
+
+# Conclusões para Feature Engineering
+
+Com base nesta análise exploratória, identificamos os seguintes padrões que justificam a criação de features:
+
+## 🎯 Features Temporais Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features temporais:
+
+• Dia da semana (categórica ordenada)
+  → Padrão claro de variação entre dias
+  
+• Período do dia (Madrugada/Manhã/Tarde/Noite)
+  → Heatmap mostra concentração em períodos específicos
+  
+• Hora (numérica 0-23)
+  → Distribuição não-uniforme, horários de pico identificados
+  
+• Fim de semana (booleana)
+  → Diferença de comportamento identificada
+  
+❌ NÃO CRIAR features redundantes:
+• Ano (se dataset tem apenas 1 ano)
+• Data exata (muito granular, sem padrão)
+""")
+```
+
+## 💬 Features de Texto Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features de texto:
+
+• Tamanho em caracteres e palavras
+  → Distribuições assimétricas, diferenças entre remetentes
+  
+• Features de pontuação (?, !, ...)
+  → Pode indicar emoção/urgência
+  
+• Detecção de links/menções
+  → Compartilhamento de conteúdo externo
+  
+• Análise de emojis (presença, quantidade)
+  → Expressividade emocional
+""")
+```
+
+## 🔄 Features de Conversação Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features de conversação:
+
+• Tempo desde última mensagem
+  → Alta variabilidade, padrões de engajamento
+  
+• Resposta rápida (< 60s)
+  → {:.1f}% das mensagens são rápidas
+  
+• Sequência de mensagens do mesmo remetente
+  → Padrão de "rajadas" identificado
+  
+• Turno de conversa
+  → Delimita sessões de interação
+  
+• Tempo até resposta do outro remetente
+  → Reciprocidade de engajamento
+""".format(pct_rapidas))
+```
+
+## 📊 Features de Mídia Recomendadas
+
+```{python}
+# Análise de mídia
+pct_texto = (df['grupo_mensagem'] == 'TEXT').sum() / total_msgs * 100
+pct_audio = (df['grupo_mensagem'] == 'AUDIO').sum() / total_msgs * 100
+pct_video = (df['grupo_mensagem'] == 'VID').sum() / total_msgs * 100
+
+print(f"""
+✅ CRIAR features de mídia:
+
+• Tipo de mensagem (categórica)
+  → {len(df['grupo_mensagem'].unique())} tipos diferentes
+  → TEXT: {pct_texto:.1f}%
+  → AUDIO: {pct_audio:.1f}%
+  → VIDEO: {pct_video:.1f}%
+  
+• Presença de transcrição (booleana)
+  → {total_transcricoes:,} mensagens transcritas
+  → Enriquece conteúdo de áudio/vídeo
+""")
+```
+
+## 📝 Resumo Final
+
+```{python}
+print("""
+╔══════════════════════════════════════════════════════════════╗
+║           RESUMO - FEATURES A CRIAR                          ║
+╚══════════════════════════════════════════════════════════════╝
+
+🎯 TEMPORAIS (6-8 features):
+   • dia_semana, periodo_dia, hora, fim_de_semana
+   • mes, trimestre (se período > 3 meses)
+   
+💬 TEXTO (8-10 features):
+   • tamanho_caracteres, tamanho_palavras
+   • tem_emoji, qtd_emojis, tem_link, tem_mencao
+   • tem_interrogacao, tem_exclamacao, eh_caixa_alta
+   
+🔄 CONVERSAÇÃO (6-7 features):
+   • tempo_desde_ultima_msg
+   • tempo_desde_ultima_msg_mesmo_remetente
+   • eh_resposta_rapida, eh_inicio_conversa
+   • sequencia_mesmo_remetente, turno_conversa
+   • tempo_resposta_outro_remetente
+   
+📊 MÍDIA & CONTEXTO (3-5 features):
+   • Já temos: tipo_mensagem, grupo_mensagem, transcricao
+   • Adicionar se relevante: contexto externo (encontros, etc)
+
+Total estimado: 23-30 features
+""")
+```
+
+---
+
+# Próximos Passos
+
+1. **Feature Engineering** (`03-feature-engineering.qmd`)
+   - Criar features identificadas nesta análise
+   - Documentar motivação de cada feature
+   - Validar criação com estatísticas descritivas
+
+2. **Feature Selection** (`04-eda-features.qmd`)
+   - Analisar correlações entre features criadas
+   - Identificar redundâncias
+   - Selecionar conjunto final (10-15 features core)
+
+3. **Model Features** (opcional)
+   - Sentiment analysis (BERT)
+   - Embeddings semânticos
+   - Topic modeling
+
+4. **Advanced Analysis**
+   - Clustering com features selecionadas
+   - Análises temporais avançadas
+   - Visualizações finais
