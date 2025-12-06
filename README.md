@@ -16,13 +16,14 @@ O projeto foi desenvolvido para ser **reprodutível** — permite rodar o pipeli
 
 | Fase | Etapa | Descrição |
 |------------------|---------------------|---------------------------------|
-| **Preparation** | Data Profiling | Investigação da estrutura do arquivo bruto |
+| **Preparation** | Data Discovery | Exploração inicial do arquivo bruto |
+|  | Data Profiling | Investigação sistemática de padrões |
 |  | Data Cleaning | Remoção de caracteres invisíveis, normalização |
 |  | Data Wrangling | Parsing, vinculação de mídia, transcrição |
-|  | Feature Engineering | Criação de 35 variáveis derivadas |
-| **Analysis** | EDA | Análise exploratória |
-|  | Descritiva | Estatísticas e distribuições |
-|  | Avançada | Clustering, PCA, radar charts |
+|  | Feature Engineering | Criação de 35+ variáveis derivadas |
+|  | Model Features | Features de ML: sentimento, embeddings (opcional) |
+| **Analysis** | EDA | Análise exploratória e distribuições |
+|  | Advanced Analysis | Clustering, PCA, MCA, radar charts |
 
 ## 📁 Estrutura
 
@@ -50,12 +51,14 @@ whatsapp-ds-analytics/
 │   └── transcribe_media.py      # Transcrição via Groq/Whisper
 │
 ├── notebooks/                   # Documentos Quarto
+│   ├── 00-data-discovery.qmd
 │   ├── 00-data-profiling.qmd
 │   ├── 01-data-cleaning.qmd
 │   ├── 02-data-wrangling.qmd
 │   ├── 03-feature-engineering.qmd
-│   ├── 04-eda.qmd
-│   └── 05-advanced-analysis.qmd
+│   ├── 04-model-features.qmd
+│   ├── 05-eda.qmd
+│   └── 06-advanced-analysis.qmd
 │
 ├── data/                        # 🚫 Não versionado
 │   ├── raw/                     # Exports brutos por período
@@ -157,13 +160,15 @@ O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 ### Notebooks
 
 | \# | Notebook | Descrição |
-|------------------|--------------------------|----------------------------|
-| 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação do arquivo bruto |
+|-----|--------------------------|------------------------------|
+| 00 | [Data Discovery](notebooks/00-data-discovery.qmd) | Exploração inicial do arquivo |
+| 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação sistemática |
 | 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, mídia, transcrição |
-| 03 | [Feature Engineering](notebooks/03-feature-engineering.qmd) | Criação de variáveis |
-| 04 | [EDA](notebooks/04-eda.qmd) | Análise exploratória |
-| 05 | [Advanced Analysis](notebooks/05-advanced-analysis.qmd) | Clustering, MCA, PCA |
+| 03 | [Feature Engineering](notebooks/03-feature-engineering.qmd) | Criação de 35+ variáveis |
+| 04 | [Model Features](notebooks/04-model-features.qmd) | Features de ML (opcional) |
+| 05 | [EDA](notebooks/05-eda.qmd) | Análise exploratória |
+| 06 | [Advanced Analysis](notebooks/06-advanced-analysis.qmd) | Clustering, MCA, PCA |
 
 ## 📌 Highlights
 
@@ -173,8 +178,6 @@ O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
 -   **Transcrição automática** de áudios/vídeos via Groq API
 -   **Export otimizado** — CSV para compatibilidade, Parquet para performance
 -   **Sistema de auditoria** — métricas de cada transformação
-
-
 
 ## 🔒 Privacidade
 
