@@ -1,0 +1,1780 @@
+---
+title: "EDA - Data Wrangling"
+subtitle: "Análise exploratória dos dados básicos (pré-feature engineering)"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    df-print: paged
+    theme: cosmo
+    number-sections: true
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+Este notebook apresenta a **visão geral do dataset** com contexto externo integrado.
+
+O dataset foi enriquecido com informações de encontros presenciais, permitindo análises que consideram a diferença entre comunicação quando **juntos** vs **separados**.
+
+**Objetivo:** Visão panorâmica descritiva do dataset completo.
+
+**Estrutura:**
+- Estatísticas gerais
+- Volume diário (com contexto)
+- Distribuição por remetente
+- Tipos de mensagem
+
+------------------------------------------------------------------------
+
+# Setup
+
+## Bibliotecas
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações de visualização
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+```
+
+## Caminhos
+
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada (gerado pelo wrangling)
+INPUT_FILE = DATA_DIR / 'messages.parquet'
+
+print(f"📁 Diretório de dados: {DATA_DIR}")
+print(f"📂 Arquivo de entrada: {INPUT_FILE.name}")
+print(f"✅ Arquivo existe: {INPUT_FILE.exists()}")
+```
+
+------------------------------------------------------------------------
+
+# Carregamento dos Dados
+
+```{python}
+# Carrega dataset do wrangling
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Shape: {df.shape}")
+print(f"📅 Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"👥 Remetentes: {df['remetente'].unique().tolist()}")
+```
+
+## Estrutura do Dataset
+
+```{python}
+# Exibe informações sobre as colunas
+df.info()
+```
+
+## Amostra dos Dados
+
+```{python}
+# Primeiras linhas
+df.head(10)
+```
+
+## Estatísticas Descritivas
+
+```{python}
+# Resumo estatístico
+df.describe(include='all')
+```
+
+::: {.callout-warning}
+### 💡 Observação
+68.686 mensagens têm conteúdo textual (74.7%), o resto são mídias sem transcrição. Isso indica que análises de texto serão aplicáveis à maioria dos dados.
+:::
+
+------------------------------------------------------------------------
+
+# Visão Geral do Dataset
+
+## Volume de Mensagens
+
+```{python}
+# Total de mensagens
+total_msgs = len(df)
+print(f"📊 Total de mensagens: {total_msgs:,}")
+
+# Por remetente
+msgs_por_remetente = df['remetente'].value_counts()
+print(f"\n👥 Mensagens por remetente:")
+for remetente, count in msgs_por_remetente.items():
+    pct = (count / total_msgs) * 100
+    print(f"   {remetente}: {count:,} ({pct:.1f}%)")
+```
+
+```{python}
+#| label: fig-msgs-remetente
+#| fig-cap: "Distribuição de mensagens por remetente"
+
+# Visualização
+fig = px.bar(
+    x=msgs_por_remetente.index,
+    y=msgs_por_remetente.values,
+    labels={'x': 'Remetente', 'y': 'Quantidade de Mensagens'},
+    title='Volume de Mensagens por Remetente',
+    color=msgs_por_remetente.index,
+    text=msgs_por_remetente.values
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(showlegend=False, height=400)
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight
+Distribuição equilibrada entre P1 (51.1%) e P2 (48.9%), indicando participação ativa de ambos na conversa. Essa proporção similar sugere que features comparativas entre remetentes terão **poder discriminatório moderado.**
+:::
+
+## Distribuição de Tipos de Mensagem
+
+### Por Tipo Específico
+
+```{python}
+# Contagem por tipo específico
+tipo_counts = df['tipo_mensagem'].value_counts()
+print(f"📋 Tipos de mensagem identificados: {len(tipo_counts)}")
+print(f"\nTop 10 tipos mais frequentes:")
+print(tipo_counts)
+```
+
+```{python}
+#| label: fig-tipos-especificos
+#| fig-cap: "Tipos de mensagem mais frequentes"
+
+# Visualização Tipos de mensagem
+top_10_tipos = tipo_counts
+
+fig = px.bar(
+    x=top_10_tipos.values,
+    y=top_10_tipos.index,
+    orientation='h',
+    labels={'x': 'Quantidade', 'y': 'Tipo de Mensagem'},
+    title='Top 10 Tipos de Mensagem',
+    text=top_10_tipos.values
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(height=800, yaxis={'categoryorder': 'total ascending'})
+fig.show()
+```
+
+::: {.callout-warning}
+#### 💡 Insight - Granularidade de Tipos
+Predominância massiva de **text_pure** (68.4%), seguido por mídias omitidas (vídeo/áudio).
+
+**Problema:** 21 tipos específicos com distribuição muito desigual:
+- Top 3 (text_pure, video_note_omitted, audio_omitted) = 87.1% dos dados
+- Bottom 10 tipos têm < 100 mensagens cada (ruído estatístico)
+
+**Solução:** Trabalhar com `grupo_mensagem` (11 categorias) em vez de `tipo_mensagem` (21 tipos):
+- Tipos raros já estão agrupados: missed_call + voice_call → **CALL**
+- file_attached → **FILE**  
+- message_deleted + message_edited → **SYSTEM**
+
+**Para Feature Engineering:** Usar `grupo_mensagem` como feature categórica principal. Considerar `tipo_mensagem` apenas se análise específica justificar (ex: diferenciar audio_omitted vs audio_attached).
+:::
+
+
+### Por Grupo (Categoria)
+
+```{python}
+# Contagem por grupo
+grupo_counts = df['grupo_mensagem'].value_counts()
+print(f"📦 Grupos de mensagem: {len(grupo_counts)}")
+print(f"\nDistribuição por grupo:")
+for grupo, count in grupo_counts.items():
+    pct = (count / total_msgs) * 100
+    print(f"   {grupo}: {count:,} ({pct:.1f}%)")
+```
+
+```{python}
+#| label: fig-grupos-mensagem
+#| fig-cap: "Distribuição por grupo de mensagem"
+
+# Visualização
+fig = px.pie(
+    names=grupo_counts.index,
+    values=grupo_counts.values,
+    title='Distribuição por Grupo de Mensagem',
+    hole=0.4
+)
+
+fig.update_traces(
+    textposition='inside',
+    textinfo='label+percent',
+    hovertemplate='<b>%{label}</b><br>Quantidade: %{value:,}<br>Percentual: %{percent}<extra></extra>'
+)
+
+fig.update_layout(height=1000)
+fig.show()
+```
+
+::: {.callout-warning}
+#### 💡 Insight 1 - Grupos de Mensagem
+**Distribuição extremamente concentrada:**
+- TEXT (73.2%) domina completamente
+- VID (10.4%) + AUDIO (9.3%) = 19.7% (mídia)
+- Demais grupos (IMG, STICKER, SYSTEM, etc.) = 7.1%
+
+**Implicação:** Features de análise **textual** (tamanho, emojis, pontuação) terão maior poder estatístico que features de mídia. 
+
+**Grupos DOC, GIF, CALL, CONTACT, FILE (< 0.1% cada):** Volume insuficiente para análises robustas - considerar agrupar em categoria "OUTROS" ou ignorar.
+:::
+
+
+```{python}
+# Analisa presença de transcrições
+transcricao_counts = df['transcricao'].value_counts()
+total_transcricoes = transcricao_counts.get(True, 0)
+pct_transcricoes = (total_transcricoes / total_msgs) * 100
+
+print(f"🎤 Mensagens com transcrição: {total_transcricoes:,} ({pct_transcricoes:.1f}%)")
+print(f"📝 Mensagens sem transcrição: {transcricao_counts.get(False, 0):,}")
+
+# Transcrições por tipo de mensagem
+if total_transcricoes > 0:
+    print(f"\n📊 Transcrições por tipo de mensagem:")
+    transcricoes_por_tipo = df[df['transcricao'] == True]['grupo_mensagem'].value_counts()
+    print(transcricoes_por_tipo)
+```
+
+```{python}
+#| label: fig-transcricoes
+#| fig-cap: "Mensagens com transcrição por tipo"
+
+# Visualização se houver transcrições
+if total_transcricoes > 0:
+    fig = px.bar(
+        x=transcricoes_por_tipo.index,
+        y=transcricoes_por_tipo.values,
+        labels={'x': 'Tipo de Mensagem', 'y': 'Quantidade com Transcrição'},
+        title='Mensagens Transcritas por Tipo',
+        text=transcricoes_por_tipo.values
+    )
+    
+    fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+    fig.update_layout(height=400)
+    fig.show()
+```
+
+
+
+
+## Mensagens com Transcrição
+
+As transcrições representam mensagens enviadas por **áudio ou vídeo** (em vez de digitadas). 
+Esse comportamento indica um **estilo de comunicação diferente** - usar funcionalidades 
+de mídia do WhatsApp em vez de texto puro.
+
+Vamos analisar:
+1. Proporção geral de TEXTO vs MÍDIA
+2. Das mídias transcritíveis (AUDIO + VID), quantas foram processadas
+
+```{python}
+# Agrupa em TEXT vs MÍDIA
+df['tipo_comunicacao'] = df['grupo_mensagem'].apply(
+    lambda x: 'TEXTO' if x == 'TEXT' else 'MÍDIA'
+)
+
+comunicacao_counts = df['tipo_comunicacao'].value_counts()
+
+# Visualização
+fig = px.bar(
+    x=comunicacao_counts.index,
+    y=comunicacao_counts.values,
+    title='Distribuição: Texto vs Mídia',
+    labels={'x': 'Tipo de Comunicação', 'y': 'Quantidade'},
+    text=comunicacao_counts.values,
+    color=comunicacao_counts.index
+)
+
+fig.update_traces(texttemplate='%{text:,}<br>(%{y:.1%})', textposition='outside')
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+
+print(f"📝 TEXTO: {comunicacao_counts['TEXTO']:,} ({comunicacao_counts['TEXTO']/len(df)*100:.1f}%)")
+print(f"📱 MÍDIA: {comunicacao_counts['MÍDIA']:,} ({comunicacao_counts['MÍDIA']/len(df)*100:.1f}%)")
+```
+
+**Gráfico 2: Mídias Transcritíveis (barras empilhadas)**
+
+```{python}
+# Foca em AUDIO e VID
+midias_transcritiveis = df[df['grupo_mensagem'].isin(['AUDIO', 'VID'])].copy()
+
+# Cria categorias
+midias_transcritiveis['status'] = midias_transcritiveis['transcricao'].apply(
+    lambda x: 'Transcrita' if x else 'Não Transcrita'
+)
+
+# Crosstab
+transcricao_por_tipo = pd.crosstab(
+    midias_transcritiveis['grupo_mensagem'],
+    midias_transcritiveis['status']
+)
+
+# Visualização (barras empilhadas 100%)
+fig = px.bar(
+    transcricao_por_tipo,
+    barmode='stack',
+    title='Status de Transcrição: Áudios e Vídeos',
+    labels={'value': 'Quantidade', 'grupo_mensagem': 'Tipo'},
+    color_discrete_map={'Transcrita': '#2ecc71', 'Não Transcrita': '#e74c3c'}
+)
+
+fig.update_layout(height=400, legend_title_text='Status')
+fig.show()
+
+# Estatísticas
+total_transcritiveis = len(midias_transcritiveis)
+total_transcritas = midias_transcritiveis['transcricao'].sum()
+pct_transcritas = (total_transcritas / total_transcritiveis) * 100
+
+print(f"\n📊 Mídias transcritíveis (AUDIO + VID): {total_transcritiveis:,}")
+print(f"✅ Transcritas: {total_transcritas:,} ({pct_transcritas:.1f}%)")
+print(f"❌ Não transcritas: {total_transcritiveis - total_transcritas:,} ({100-pct_transcritas:.1f}%)")
+
+print(f"\nDetalhamento:")
+for tipo in ['AUDIO', 'VID']:
+    df_tipo = midias_transcritiveis[midias_transcritiveis['grupo_mensagem'] == tipo]
+    transcritas = df_tipo['transcricao'].sum()
+    total = len(df_tipo)
+    print(f"  {tipo}: {transcritas}/{total} transcritas ({transcritas/total*100:.1f}%)")
+```
+
+::: {.callout-warning}
+### 💡 Insight - Estilo de Comunicação & Análises Possíveis
+
+**Preferência por texto vs mídia:**
+- **73.2%** das mensagens são TEXTO (digitadas)
+- **26.8%** são MÍDIA (áudio, vídeo, imagens, stickers, etc.)
+
+**Transcrições de áudio/vídeo:**
+- Das **18.154** mídias transcritíveis (AUDIO+VID), **3.8%** foram processadas
+  - AUDIO: 510 transcrições (6.0% dos áudios)
+  - VID: 185 transcrições (1.9% dos vídeos)
+
+**Implicação para FE:**
+
+✅ **Feature `grupo_mensagem`** (TEXT/AUDIO/VID)
+- Captura diferença de estilo de comunicação
+- Permite análise: "P1 usa mais áudio que P2?"
+
+✅ **Feature `transcricao`** (booleana)
+- Subset de 695 mensagens com conteúdo transcrito
+- Permite enriquecer corpus textual total
+
+📊 **Análises de Conteúdo Viáveis:**
+
+**Com amostra atual (510 áudios / 185 vídeos):**
+- ✅ Comparação de tamanho médio por tipo (texto vs áudio vs vídeo)
+- ✅ Sentiment geral por tipo (áudios são mais emotivos?)
+- ✅ Vocabulário específico (word clouds, n-grams)
+- ✅ Análises qualitativas (tópicos, espontaneidade)
+- ⚠️ Topic modeling aprofundado (amostra marginal para vídeos)
+
+**Limitação:** Comparar 67k textos vs 510 áudios vs 185 vídeos tem desbalanceamento. 
+Análises devem ser **proporcionais** (%, médias) não **absolutas** (contagens).
+
+**Se coletar mais dados (+1.5 mês):**
+- Estimativa: +200-300 transcrições
+- Total: ~900-1000 transcrições → Topic modeling mais robusto
+:::
+
+------------------------------------------------------------------------
+
+# Análise de Tipos de Mensagem
+
+## Padrão por Remetente
+
+```{python}
+# Crosstab de remetente vs grupo de mensagem
+crosstab = pd.crosstab(
+    df['remetente'], 
+    df['grupo_mensagem'],
+    margins=True,
+    margins_name='Total'
+)
+
+print("📊 Distribuição de tipos de mensagem por remetente:")
+print(crosstab)
+```
+
+```{python}
+# Proporções (%)
+crosstab_pct = pd.crosstab(
+    df['remetente'], 
+    df['grupo_mensagem'],
+    normalize='index'
+) * 100
+
+print("\n📊 Proporções (%) por remetente:")
+print(crosstab_pct.round(1))
+```
+
+```{python}
+#| label: fig-tipos-por-remetente
+#| fig-cap: "Distribuição de tipos de mensagem por remetente"
+
+# Visualização
+fig = px.bar(
+    crosstab_pct.T,
+    barmode='group',
+    labels={'value': 'Percentual (%)', 'grupo_mensagem': 'Tipo de Mensagem'},
+    title='Distribuição de Tipos de Mensagem por Remetente (%)'
+)
+
+fig.update_layout(height=500, xaxis_tickangle=-45)
+fig.show()
+```
+
+
+::: {.callout-warning}
+### 💡 Insight - Preferências por Remetente
+
+**Diferenças significativas identificadas:**
+
+**P1:**
+- Usa **58% mais áudio** que P2 (11.4% vs 7.2%)
+- Menos texto proporcionalmente (70.8% vs 75.8%)
+- Ligeiramente mais imagens (4.2% vs 3.6%)
+
+**P2:**
+- Preferência maior por **texto digitado** (75.8% vs 70.8%)
+- Menos dependente de áudio para comunicação
+
+**Semelhanças:**
+- Uso de vídeo praticamente idêntico (~10.5%)
+- Stickers e demais tipos: diferenças marginais (<0.5%)
+
+**Implicação:** A feature `grupo_mensagem` combinada com `remetente` tem **poder discriminatório** - P1 e P2 têm estilos de comunicação distintos (P1 = mais áudio, P2 = mais texto).
+
+---
+
+**Proporções gerais:**
+- **P1:** 70.8% texto | 26.1% mídia (áudio/vídeo/imagem)
+- **P2:** 75.8% texto | 21.1% mídia (áudio/vídeo/imagem)
+
+**Diferenças-chave identificadas:**
+
+**Áudio:**
+- P1 usa **58% mais áudio** que P2 (11.4% vs 7.2%)
+- Maior dependência de comunicação por voz
+
+**Texto:**
+- P2 prefere mais **texto digitado** (+5 pontos percentuais)
+- Comunicação mais escrita
+
+**Vídeo e outras mídias:**
+- Uso praticamente idêntico: VID ~10.5%, IMG ~4%, STICKER ~2%
+
+**Implicação para FE:** 
+Feature `grupo_mensagem` + `remetente` tem **poder discriminatório** - estilos de comunicação distintos. Vale investigar se essa diferença:
+- É constante ao longo do tempo?
+- Muda em contextos específicos (encontros, períodos do dia)?
+
+**Próxima análise:** Investigar se essa diferença é temporal (mudou ao longo do tempo?) ou contextual (muda durante encontros?).
+:::
+
+
+### Insights sobre Tipos
+
+```{python}
+# Análise de preferências
+print("💡 INSIGHTS - Tipos de Mensagem:\n")
+
+for remetente in df['remetente'].unique():
+    df_rem = df[df['remetente'] == remetente]
+    top_tipo = df_rem['grupo_mensagem'].value_counts().head(1)
+    tipo_nome = top_tipo.index[0]
+    tipo_pct = (top_tipo.values[0] / len(df_rem)) * 100
+    
+    print(f"• {remetente}: {tipo_pct:.1f}% das mensagens são {tipo_nome}")
+
+# Comparação TEXT vs não-TEXT
+for remetente in df['remetente'].unique():
+    df_rem = df[df['remetente'] == remetente]
+    pct_text = (df_rem['grupo_mensagem'] == 'TEXT').sum() / len(df_rem) * 100
+    pct_media = (df_rem['grupo_mensagem'].isin(['AUDIO', 'VID', 'IMG'])).sum() / len(df_rem) * 100
+    print(f"• {remetente}: {pct_text:.1f}% texto | {pct_media:.1f}% mídia (áudio/vídeo/imagem)")
+```
+
+------------------------------------------------------------------------
+
+# Padrões Temporais Básicos
+
+## Distribuição ao Longo do Tempo
+
+```{python}
+# Timeline de mensagens
+df['data'] = df['timestamp'].dt.date
+msgs_por_dia = df.groupby('data').size().reset_index(name='count')
+
+print(f"📅 Período analisado: {msgs_por_dia['data'].min()} a {msgs_por_dia['data'].max()}")
+print(f"📊 Dias com mensagens: {len(msgs_por_dia)}")
+print(f"📈 Média de mensagens/dia: {msgs_por_dia['count'].mean():.1f}")
+print(f"📊 Mediana: {msgs_por_dia['count'].median():.0f}")
+print(f"📈 Máximo em um dia: {msgs_por_dia['count'].max()}")
+```
+
+```{python}
+#| label: fig-timeline
+#| fig-cap: "Volume de mensagens ao longo do tempo"
+
+# Visualização
+fig = px.line(
+    msgs_por_dia,
+    x='data',
+    y='count',
+    title='Volume de Mensagens por Dia',
+    labels={'data': 'Data', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_traces(mode='lines+markers')
+fig.update_layout(height=900, hovermode='x unified')
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Evolução Temporal
+
+**Volume e variabilidade:**
+- Média: 283 msgs/dia | Mediana: 216 msgs/dia  
+- Máximo: **1.288 mensagens** (jun/2025) - pico de 4.5x a média
+- Oscilação: 0 a 1.288 msgs/dia (variabilidade extrema)
+
+**Evolução em 4 fases:**
+
+1. **Out-Dez/2024:** Crescimento inicial (~100-300 msgs/dia)
+2. **Jan-Mai/2025:** Estabilização (~200-500 msgs/dia)  
+3. **Jun-Jul/2025:** **PICO** (600-1.200 msgs/dia) - evento desconhecido
+4. **Ago-Out/2025:** Normalização (~200-400 msgs/dia)
+
+**Gaps e contexto externo (CRÍTICO):**
+- Diversos dias com volume ~0 ao longo do período
+- **Hipótese principal:** Gaps coincidem com encontros presenciais ("temporadas juntos")
+- Relacionamento à distância com encontros regulares (SP ↔ BSB)
+- **Implicação:** Volume de mensagens é proxy de "distância física" (conversam menos quando juntos)
+
+**Pico Jun-Jul/2025:**
+- Período mais intenso pode indicar separação após encontro prolongado
+- Ou preparação/saudade pré-encontro
+- **Validação necessária:** Cruzar timeline com datas de viagens/encontros
+
+**Implicações para FE:**
+- ✅ Features temporais (mês, trimestre) capturam mudanças de fase
+- ✅ Feature "volume diário" pode medir intensidade da relação  
+- 🔍 Contexto externo (encontros) provavelmente influencia comunicação fortemente
+
+:::
+
+
+## Distribuição por Hora do Dia
+
+```{python}
+# Extrai hora
+df['hora'] = df['timestamp'].dt.hour
+
+# Contagem por hora
+msgs_por_hora = df.groupby('hora').size().reset_index(name='count')
+
+print(f"⏰ Horários de pico:")
+top_horas = msgs_por_hora.nlargest(5, 'count')
+for _, row in top_horas.iterrows():
+    print(f"   {row['hora']:02d}h: {row['count']:,} mensagens")
+```
+
+```{python}
+#| label: fig-horas
+#| fig-cap: "Distribuição de mensagens por hora do dia"
+
+# Visualização
+fig = px.bar(
+    msgs_por_hora,
+    x='hora',
+    y='count',
+    title='Distribuição de Mensagens por Hora do Dia',
+    labels={'hora': 'Hora do Dia', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_layout(height=400, xaxis=dict(tickmode='linear', tick0=0, dtick=1))
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Padrões Intradiários
+
+**Concentração noturna extrema:**
+- **Pico às 19h:** 9.377 mensagens (10.2% do total)
+- **Janela 18h-21h:** 38% de toda comunicação
+- **Crescimento:** 8h → 19h (gradual ao longo do dia)
+- **Queda:** Abrupta após 21h
+
+**Períodos de baixa atividade:**
+- Madrugada (0h-6h): ~5% do total
+- Manhã (7h-11h): atividade moderada
+
+**Interpretação:** Padrão típico de relacionamento à distância - comunicação concentrada no pós-trabalho quando ambos estão livres.
+
+**Para FE:** 
+- `periodo_dia` (Manhã/Tarde/Noite) **essencial**
+- `horario_comercial` captura diferença trabalho vs lazer
+- `hora` para nuances específicas
+:::
+
+### Comparação por Remetente (Hora do Dia)
+```{python}
+#| label: fig-hora-remetente
+#| fig-cap: "Comparação de padrões horários entre P1 e P2"
+
+# Agrupa por hora e remetente
+msgs_hora_remetente = df.groupby(['hora', 'remetente']).size().reset_index(name='count')
+
+# Calcula proporção por remetente
+total_p1 = df[df['remetente'] == 'P1'].shape[0]
+total_p2 = df[df['remetente'] == 'P2'].shape[0]
+
+msgs_hora_remetente['proporcao'] = msgs_hora_remetente.apply(
+    lambda row: (row['count'] / total_p1 * 100) if row['remetente'] == 'P1' else (row['count'] / total_p2 * 100),
+    axis=1
+)
+
+# Visualização
+fig = px.line(
+    msgs_hora_remetente,
+    x='hora',
+    y='proporcao',
+    color='remetente',
+    title='Padrão Horário por Remetente (%)',
+    labels={'hora': 'Hora do Dia', 'proporcao': 'Proporção de Mensagens (%)', 'remetente': 'Remetente'},
+    markers=True
+)
+
+fig.update_layout(height=400, xaxis=dict(tickmode='linear', tick0=0, dtick=1))
+fig.show()
+
+# Estatísticas
+print("\n📊 Comparação de horários de pico por remetente:\n")
+for remetente in ['P1', 'P2']:
+    df_rem = msgs_hora_remetente[msgs_hora_remetente['remetente'] == remetente]
+    hora_pico = df_rem.loc[df_rem['count'].idxmax(), 'hora']
+    count_pico = df_rem.loc[df_rem['count'].idxmax(), 'count']
+    prop_pico = df_rem.loc[df_rem['count'].idxmax(), 'proporcao']
+    print(f"{remetente}: Pico às {hora_pico:02d}h ({count_pico:,} msgs | {prop_pico:.1f}% do total de {remetente})")
+
+# Teste estatístico - há diferença entre os padrões horários?
+from scipy.stats import chi2_contingency
+
+contingency_table = pd.crosstab(df['hora'], df['remetente'])
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\n📊 Teste Chi-square (padrão horário P1 vs P2):")
+print(f"   p-value: {p_value:.4f}")
+if p_value < 0.05:
+    print(f"   ✅ Padrões horários SÃO diferentes entre P1 e P2")
+else:
+    print(f"   ❌ Padrões horários SÃO similares entre P1 e P2")
+```
+
+::: {.callout-warning}
+#### 💡 Insight - Padrões Horários por Remetente
+
+**Sobreposição quase perfeita:**
+- As curvas de P1 e P2 são **praticamente idênticas**
+- Ambos têm pico às **19h** (~10% das mensagens)
+- Crescimento gradual similar: 8h → 19h
+- Queda similar: após 21h
+- Madrugada igualmente vazia (0h-6h)
+
+**Validação estatística:**
+- Chi-square: p = [valor do teste] 
+- [Se p > 0.05]: Padrões horários SÃO estatisticamente similares
+- [Se p < 0.05]: Apesar de diferença estatística, efeito prático é mínimo (curvas sobrepostas)
+
+**Interpretação:**
+- **Ambos seguem a mesma rotina diária** (provavelmente sincronizada)
+- Horários de sono similares (madrugada vazia)
+- Horários de trabalho similares (baixa atividade 8h-17h)
+- Horários de conversa similares (pico noturno pós-trabalho)
+
+**Implicação para FE:**
+- ❌ Feature `hora` × `remetente` **NÃO é necessária** - comportamento idêntico
+- ✅ Feature `hora` sozinha já captura o padrão (universal para ambos)
+- 🎯 Relacionamento sincronizado - conversam nos mesmos horários
+
+---
+**Paradoxo estatístico:**
+- Chi-square: **p < 0.001** → Estatisticamente diferente
+- **MAS** efeito prático é **mínimo** (curvas visualmente sobrepostas)
+- Com N=91.924, até diferenças de 0.5% tornam-se significativas
+
+**Interpretação:**
+- **Ambos seguem a mesma rotina diária** (sincronizada)
+- Qualquer diferença detectada é ruído, não padrão sistemático
+- Relacionamento à distância com horários de conversa alinhados
+
+**Implicação para FE:**
+- ❌ Feature `hora × remetente` **desnecessária** - efeito prático irrelevante
+- ✅ Feature `hora` sozinha já captura padrão (universal para ambos)
+- 📚 **Lição:** Com datasets grandes, sempre validar significância estatística COM análise visual
+
+:::
+
+
+## Distribuição por Dia da Semana
+
+```{python}
+# Extrai dia da semana
+dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana_num'] = df['timestamp'].dt.dayofweek
+df['dia_semana'] = df['dia_semana_num'].apply(lambda x: dias_semana[x])
+
+# Contagem por dia da semana
+msgs_por_dia_semana = df.groupby('dia_semana').size().reindex(dias_semana).reset_index(name='count')
+
+print(f"📅 Mensagens por dia da semana:")
+for _, row in msgs_por_dia_semana.iterrows():
+    print(f"   {row['dia_semana']}: {row['count']:,}")
+```
+
+```{python}
+#| label: fig-dias-semana
+#| fig-cap: "Distribuição de mensagens por dia da semana"
+
+# Visualização
+fig = px.bar(
+    msgs_por_dia_semana,
+    x='dia_semana',
+    y='count',
+    title='Distribuição de Mensagens por Dia da Semana',
+    labels={'dia_semana': 'Dia da Semana', 'count': 'Quantidade de Mensagens'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Padrões Semanais (ou a falta deles)
+
+**Distribuição:** Terça (14.558) > Domingo (13.792) > Quarta (14.181) > Quinta (12.883) > Segunda (12.848) > Sexta (12.477) > Sábado (11.185)
+
+**Validação estatística:**
+- ✅ Chi-square (p<0.001): Dias TÊM diferenças
+- ❌ T-test weekday vs weekend (p=0.96): **SEM diferença útil/FDS**
+  - Weekday: 282.5 msgs/dia
+  - Weekend: 283.8 msgs/dia
+
+**Achado surpreendente:** Relacionamentos à distância geralmente têm pico em FDS. Aqui a distribuição é uniforme.
+
+
+**Hipóteses:**
+1. Comunicação durante expediente (não só tempo livre)
+2. **Encontros presenciais em dias variados** (não concentrados em FDS) ← REFORÇAR ESSA
+  - **Temporadas juntos** (semanas inteiras de encontro) diluem padrão semanal
+3. Rotina muito estável independente do dia
+
+
+**Para FE:** 
+- ⚠️ `dia_semana` (7 níveis): manter por completude
+- ❌ `fim_de_semana` (booleana): **baixíssimo poder** (desconsiderar)
+
+---
+
+**Uniformidade visual total:**
+- P1 e P2: ~12-15% em todos os dias (barras alinhadas)
+- Não há "dia preferencial" para nenhum dos dois
+- Distribuição equilibrada ao longo da semana
+
+**Paradoxo estatístico:**
+- Chi-square: **p = 0.027** → Estatisticamente diferente
+- **MAS** efeito prático é **mínimo** (barras praticamente iguais)
+- Diferenças detectadas são marginais (~1-2 pontos percentuais)
+
+**Interpretação:**
+- Ambos conversam de forma igualmente distribuída na semana
+- Não há padrão tipo "P1 prefere FDS, P2 prefere dias úteis"
+- Reforça hipótese de encontros presenciais em dias variados (afeta ambos)
+
+**Implicação para FE:**
+- ❌ Feature `dia_semana × remetente` **desnecessária** - efeito irrelevante
+- ❌ Feature `fim_de_semana × remetente` também desnecessária
+- 🎯 Dupla confirmação: dia da semana é feature fraca E igual para ambos
+
+:::
+
+### Comparação por Remetente (Dia da Semana)
+```{python}
+#| label: fig-dia-remetente
+#| fig-cap: "Comparação de padrões semanais entre P1 e P2"
+
+# Agrupa por dia e remetente
+msgs_dia_remetente = df.groupby(['dia_semana', 'remetente']).size().reset_index(name='count')
+
+# Reordena dias da semana
+msgs_dia_remetente['dia_semana'] = pd.Categorical(
+    msgs_dia_remetente['dia_semana'],
+    categories=dias_semana,
+    ordered=True
+)
+msgs_dia_remetente = msgs_dia_remetente.sort_values('dia_semana')
+
+# Calcula proporção
+msgs_dia_remetente['proporcao'] = msgs_dia_remetente.apply(
+    lambda row: (row['count'] / total_p1 * 100) if row['remetente'] == 'P1' else (row['count'] / total_p2 * 100),
+    axis=1
+)
+
+# Visualização
+fig = px.bar(
+    msgs_dia_remetente,
+    x='dia_semana',
+    y='proporcao',
+    color='remetente',
+    barmode='group',
+    title='Padrão Semanal por Remetente (%)',
+    labels={'dia_semana': 'Dia da Semana', 'proporcao': 'Proporção de Mensagens (%)', 'remetente': 'Remetente'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+
+# Teste estatístico
+contingency_table_dia = pd.crosstab(df['dia_semana'], df['remetente'])
+chi2_dia, p_value_dia, dof_dia, expected_dia = chi2_contingency(contingency_table_dia)
+
+print(f"\n📊 Teste Chi-square (padrão semanal P1 vs P2):")
+print(f"   p-value: {p_value_dia:.4f}")
+if p_value_dia < 0.05:
+    print(f"   ✅ Padrões semanais SÃO diferentes entre P1 e P2")
+else:
+    print(f"   ❌ Padrões semanais SÃO similares entre P1 e P2")
+```
+
+::: {.callout-warning}
+#### 💡 Insight - Padrões Semanais por Remetente
+
+**Uniformidade total:**
+- P1 e P2 têm distribuição **praticamente idêntica** em todos os dias
+- Variação: ~12-15% em todos os dias (para ambos)
+- Não há "dia preferencial" para nenhum dos dois
+- Barras azuis e vermelhas alinhadas em todos os dias
+
+**Validação estatística:**
+- Chi-square: p = [valor do teste]
+- [Interpretar conforme resultado]
+
+**Interpretação:**
+- **Comunicação igualmente distribuída** ao longo da semana para ambos
+- Não há padrão tipo "P1 conversa mais em FDS, P2 mais em dias úteis"
+- Reforça hipótese de encontros presenciais em dias variados (afeta ambos igualmente)
+
+**Implicação para FE:**
+- ❌ Feature `dia_semana` × `remetente` **NÃO é necessária** - comportamento idêntico
+- ❌ Feature `fim_de_semana` × `remetente` também desnecessária
+- 🎯 Padrões semanais são fracos E iguais para ambos (dupla confirmação de baixa utilidade)
+:::
+
+
+### Heatmap: Hora × Dia da Semana
+```{python}
+#| label: fig-heatmap
+#| fig-cap: "Heatmap de mensagens por hora e dia da semana"
+
+# Cria matriz hora x dia da semana
+heatmap_data = df.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+heatmap_data.index = [dias_semana[i] for i in heatmap_data.index]
+
+# Visualização
+fig = px.imshow(
+    heatmap_data.T,
+    labels=dict(x="Dia da Semana", y="Hora do Dia", color="Mensagens"),
+    title='Heatmap: Distribuição de Mensagens por Hora e Dia da Semana',
+    aspect="auto",
+    color_continuous_scale='Blues'
+)
+
+fig.update_layout(height=500)
+fig.show()
+```
+
+### Validação Estatística
+
+Os gráficos anteriores sugerem padrões visuais, mas precisamos **confirmar estatisticamente** se as diferenças observadas são reais ou apenas variação aleatória.
+
+**Testes aplicados:**
+1. **Chi-square:** Verifica se a distribuição entre os 7 dias da semana é uniforme
+2. **T-test (Weekday vs Weekend):** Testa diferença entre dias úteis e finais de semana
+3. **Padrão alternado:** Valida se existe padrão visual de dias alternados
+
+**Critério de decisão:** p-value < 0.05 indica diferença estatisticamente significativa.
+```{python}
+# Testes estatísticos
+from scipy.stats import chisquare, ttest_ind
+
+# 1. Chi-square: Distribuição uniforme entre dias da semana?
+obs = msgs_por_dia_semana['count'].values
+stat_chi, p_chi = chisquare(obs)
+
+print(f"📊 Teste Chi-square (distribuição uniforme):")
+print(f"   p-value: {p_chi:.4f}")
+if p_chi > 0.05:
+    print(f"   ✅ Distribuição uniforme (p > 0.05) - dias da semana SEM diferença significativa")
+else:
+    print(f"   ❌ Distribuição não-uniforme (p < 0.05) - dias da semana COM diferença significativa")
+
+# 2. T-test: Dias úteis vs Fim de semana
+df['eh_fds'] = df['dia_semana_num'] >= 5
+
+weekday_days = df[~df['eh_fds']].groupby('data').size()
+weekend_days = df[df['eh_fds']].groupby('data').size()
+
+weekday_avg = weekday_days.mean()
+weekend_avg = weekend_days.mean()
+
+stat_t, p_t = ttest_ind(weekday_days, weekend_days)
+
+print(f"\n📊 T-test (Dias úteis vs Fim de semana):")
+print(f"   Média weekday: {weekday_avg:.1f} msgs/dia")
+print(f"   Média weekend: {weekend_avg:.1f} msgs/dia")
+print(f"   Diferença: {((weekday_avg - weekend_avg) / weekend_avg * 100):.1f}%")
+print(f"   p-value: {p_t:.4f}")
+if p_t > 0.05:
+    print(f"   ✅ SEM diferença significativa (p > 0.05)")
+else:
+    print(f"   ❌ COM diferença significativa (p < 0.05)")
+
+# 3. Validação: Dias alternados (Seg/Qua/Sex/Dom vs Ter/Qui/Sáb)
+print("\n📊 Testando padrão de dias alternados:\n")
+
+grupo_a = ['Segunda', 'Quarta', 'Sexta', 'Domingo']
+grupo_b = ['Terça', 'Quinta', 'Sábado']
+
+msgs_grupo_a = msgs_por_dia_semana[msgs_por_dia_semana['dia_semana'].isin(grupo_a)]['count'].sum()
+msgs_grupo_b = msgs_por_dia_semana[msgs_por_dia_semana['dia_semana'].isin(grupo_b)]['count'].sum()
+
+media_a = msgs_grupo_a / 4
+media_b = msgs_grupo_b / 3
+
+print(f"Grupo A (Seg/Qua/Sex/Dom): {msgs_grupo_a:,} msgs | Média: {media_a:.1f} msgs/dia")
+print(f"Grupo B (Ter/Qui/Sáb): {msgs_grupo_b:,} msgs | Média: {media_b:.1f} msgs/dia")
+print(f"Diferença: {((media_a - media_b) / media_b * 100):.1f}%")
+
+df['grupo_alternado'] = df['dia_semana'].isin(grupo_a)
+grupo_a_days = df[df['grupo_alternado']].groupby('data').size()
+grupo_b_days = df[~df['grupo_alternado']].groupby('data').size()
+
+stat_t_alt, p_t_alt = ttest_ind(grupo_a_days, grupo_b_days)
+print(f"T-test p-value: {p_t_alt:.4f}")
+if p_t_alt < 0.05:
+    print(f"✅ Padrão alternado É estatisticamente significativo!")
+else:
+    print(f"❌ Padrão alternado NÃO é estatisticamente significativo")
+
+# Teste comunicação matinal
+manha_grupo_a = df[(df['grupo_alternado']) & (df['hora'].between(6, 11))].shape[0]
+manha_grupo_b = df[(~df['grupo_alternado']) & (df['hora'].between(6, 11))].shape[0]
+
+prop_manha_a = manha_grupo_a / msgs_grupo_a * 100
+prop_manha_b = manha_grupo_b / msgs_grupo_b * 100
+
+print(f"\n📊 Comunicação por período:")
+print(f"Grupo A - Manhã (6h-11h): {prop_manha_a:.1f}%")
+print(f"Grupo B - Manhã (6h-11h): {prop_manha_b:.1f}%")
+print(f"Diferença: {(prop_manha_a - prop_manha_b):.1f}pp")
+
+noite_grupo_a = df[(df['grupo_alternado']) & (df['hora'].between(18, 22))].shape[0]
+noite_grupo_b = df[(~df['grupo_alternado']) & (df['hora'].between(18, 22))].shape[0]
+
+prop_noite_a = noite_grupo_a / msgs_grupo_a * 100
+prop_noite_b = noite_grupo_b / msgs_grupo_b * 100
+
+print(f"Grupo A - Noite (18h-22h): {prop_noite_a:.1f}%")
+print(f"Grupo B - Noite (18h-22h): {prop_noite_b:.1f}%")
+print(f"Diferença: {(prop_noite_a - prop_noite_b):.1f}pp")
+```
+
+::: {.callout-warning}
+#### 💡 Insight - Cruzamento Hora × Dia
+
+**Padrão visual vs realidade estatística:**
+
+O heatmap sugere visualmente um "padrão alternado" (Seg/Qua/Sex/Dom mais intensos), mas os testes mostram:
+- Diferença de volume: apenas **3.5%** (p = 0.75) → **NÃO significativo**
+- Comunicação matinal: diferença de **2.3pp** → marginal
+- Comunicação noturna: diferença de **2.8pp** → marginal
+
+**Conclusão:** A variação entre dias é **ruído aleatório**, não padrão sistemático.
+
+**Padrões REAIS identificados:**
+
+✅ **Concentração noturna universal:**
+- **18h-22h concentra ~38% de toda comunicação** (todos os dias)
+- **19h-20h é pico absoluto** (faixa azul escuro consistente)
+
+✅ **Madrugada vazia:**
+- **0h-6h praticamente sem atividade** (azul clarinho uniforme)
+
+✅ **Crescimento gradual:**
+- Atividade aumenta de 8h até 19h
+- Queda abrupta após 21h
+
+**Implicações para FE:**
+- ✅ Feature `periodo_dia` (Manhã/Tarde/Noite) **essencial** - diferença clara
+- ✅ Feature `hora` captura nuances (pico 19h)
+- ❌ Feature `dia_semana` específico: **poder limitado** (variação não-sistemática)
+- ❌ Feature `fim_de_semana`: **desconsiderar** (já provamos p = 0.96)
+
+**Lição importante:** Nem tudo que "parece padrão" no heatmap é estatisticamente real. Sempre validar com testes! 📊
+:::
+
+## Insights Temporais
+```{python}
+print("💡 INSIGHTS - Padrões Temporais:\n")
+
+# Horário de pico
+hora_pico = msgs_por_hora.loc[msgs_por_hora['count'].idxmax(), 'hora']
+print(f"• Horário de pico: {hora_pico:02d}h")
+
+# Dia da semana mais ativo
+dia_pico = msgs_por_dia_semana.loc[msgs_por_dia_semana['count'].idxmax(), 'dia_semana']
+print(f"• Dia da semana mais ativo: {dia_pico}")
+
+# Comparação weekday vs weekend
+df['fim_de_semana'] = df['dia_semana_num'] >= 5
+msgs_weekday = df[~df['fim_de_semana']].shape[0]
+msgs_weekend = df[df['fim_de_semana']].shape[0]
+print(f"• Mensagens em dias úteis: {msgs_weekday:,} ({msgs_weekday/total_msgs*100:.1f}%)")
+print(f"• Mensagens em finais de semana: {msgs_weekend:,} ({msgs_weekend/total_msgs*100:.1f}%)")
+
+# Período do dia
+df['periodo_dia'] = df['hora'].apply(lambda h: 
+    'Madrugada' if 0 <= h <= 5 else
+    'Manhã' if 6 <= h <= 11 else
+    'Tarde' if 12 <= h <= 17 else
+    'Noite'
+)
+msgs_por_periodo = df['periodo_dia'].value_counts()
+periodo_pico = msgs_por_periodo.idxmax()
+print(f"• Período do dia mais ativo: {periodo_pico} ({msgs_por_periodo[periodo_pico]:,} mensagens)")
+```
+
+::: {.callout-note}
+### 📊 Síntese - Padrões Temporais
+
+**Volume e distribuição temporal:**
+- Período: 1 ano (out/2024 - out/2025), 325 dias ativos
+- Média: 283 msgs/dia | Pico: 1.288 msgs (jun/2025)
+- Evolução em 4 fases distintas identificadas
+
+**Padrões intradiários (FORTE poder discriminatório):**
+- ✅ **Hora:** Pico às 19h (9.377 msgs) vs madrugada (~5%)
+- ✅ **Período:** Noite (18h-23h) = 38% de toda comunicação
+- 📈 Crescimento gradual 8h→19h | Queda abrupta pós-21h
+
+**Padrões semanais (FRACO poder discriminatório):**
+- ⚠️ **Dia da semana:** Variação existe (Ter=14.558 vs Sáb=11.185), mas não sistemática
+- ❌ **Fim de semana:** SEM diferença estatística (p=0.96)
+  - Weekday: 282.5 msgs/dia | Weekend: 283.8 msgs/dia
+
+**Interação Hora × Dia:**
+- 🎯 **Não há interação relevante** - padrão horário (pico 18h-21h) é universal para todos os dias
+- Features `hora` e `dia_semana` são **independentes**
+- Não há necessidade de criar features de interação
+
+**Validação estatística:**
+- Chi-square dias da semana: p<0.001 (há diferenças)
+- T-test weekday vs weekend: p=0.96 (sem diferença)
+- Conclusão: Variação entre dias existe, mas não segue lógica útil/FDS
+
+**Diferenças por remetente:**
+- ⚠️ **Padrões horários:** Estatisticamente diferentes (p<0.001) mas **praticamente idênticos** (pico 19h para ambos, curvas sobrepostas)
+- ⚠️ **Padrões semanais:** Estatisticamente diferentes (p=0.027) mas **praticamente idênticos** (12-15% em todos os dias)
+- 🎯 **Conclusão:** P1 e P2 têm rotinas temporais **sincronizadas** - diferenças estatísticas são artefato de N grande
+- **Implicação:** Features de interação `hora × remetente` ou `dia × remetente` são **desnecessárias** (efeito prático irrelevante)
+- 📚 **Lição:** Significância estatística ≠ Relevância prática (sempre validar com visualização)
+
+**Implicações para Feature Engineering:**
+
+*Criar:*
+- ✅ `hora` (0-23) - padrão muito claro
+- ✅ `periodo_dia` (Madrugada/Manhã/Tarde/Noite) - essencial
+- ✅ `mes` / `trimestre` - captura evolução temporal
+
+*Evitar:*
+- ❌ `fim_de_semana` - poder discriminatório zero (p=0.96)
+- ❌ `hora × remetente` - efeito prático irrelevante
+- ❌ `dia_semana × remetente` - efeito prático irrelevante
+- ❌ `hora × dia_semana` - não há interação
+- ⚠️ `dia_semana` - manter por completude, mas expectativa baixa
+
+**Contexto externo é CRÍTICO:**
+
+*Evidências:*
+- Gaps no timeline sugerem "temporadas juntos" (SP ↔ BSB)
+- Uniformidade semanal atípica (encontros em dias variados, não só FDS)
+- Pico Jun-Jul/2025 pode relacionar-se a período específico de separação/encontro
+- Variabilidade extrema: 0 a 1.288 msgs/dia
+
+*Variável crítica: Presença física vs distância*
+- Quando juntos: Volume ≈ 0 msgs/dia
+- Quando separados: Volume ≈ 200-500 msgs/dia  
+- Picos: Saudade pré-encontro ou ansiedade pós-separação
+
+*Próximos passos:*
+- ✅ Integrar dados de encontros presenciais como features externas
+- ✅ Criar `em_encontro` (booleana)
+- ✅ Criar `dias_desde_ultimo_encontro` / `dias_ate_proximo_encontro`
+- 🔍 Validar se gaps coincidem com datas de encontros
+:::
+
+---
+
+::: {.callout-important}
+### 🔍 Nota Importante - Limitação da Análise Atual
+
+Esta análise exploratória identificou **padrões temporais fortes** (hora do dia) e **padrões fracos** (dia da semana), mas há uma **variável crítica faltando**: **dados de encontros presenciais**.
+
+**Evidências de que encontros são fundamentais:**
+- Gaps inexplicados no timeline
+- Uniformidade semanal atípica (não segue padrão FDS)
+- Variabilidade extrema de volume (0 a 1.288 msgs/dia)
+- Picos e vales não explicados apenas por padrões temporais
+
+**Impacto na interpretação:**
+- Muitas das "anomalias" temporais provavelmente se explicam por contexto externo
+- Features temporais puras têm poder limitado sem considerar presença física
+- Análises de conteúdo e interação também serão afetadas por esse contexto
+
+**Solução:** A seção de "Features de Contexto Externo" no Feature Engineering integrará dados de encontros, permitindo análises mais robustas.
+:::
+
+# A
+
+## Adicionar dados de encontros.
+
+------------------------------------------------------------------------
+
+
+---
+
+# Resumo Executivo - EDA Data Wrangling
+
+## Visão Geral
+
+Este notebook realizou análise exploratória dos dados **pós-wrangling**, antes da criação de features derivadas. O objetivo foi identificar padrões nos dados básicos para **justificar** quais features criar no Feature Engineering.
+
+**Dataset analisado:**
+- **91.924 mensagens** ao longo de 1 ano (out/2024 - out/2025)
+- **8 colunas básicas:** timestamp, remetente, tipo_mensagem, grupo_mensagem, conteudo, arquivo, transcricao, date_match
+- **2 remetentes:** P1 (51.1%) e P2 (48.9%) - distribuição equilibrada
+
+---
+
+## Tabela Resumo - Análises Realizadas
+
+| **Análise** | **Resultado Principal** | **Validação Estatística** | **Acionável para FE** |
+|------------|------------------------|--------------------------|---------------------|
+| **Volume de Mensagens** | P1: 46.948 (51%) \| P2: 44.976 (49%) | - | ✅ Distribuição equilibrada → features comparativas terão poder moderado |
+| **Tipos de Mensagem** | TEXT domina (73.2%) \| VID (10.4%) \| AUDIO (9.3%) | - | ✅ Criar: `grupo_mensagem` (11 grupos) <br> ❌ Evitar: `tipo_mensagem` (21 tipos - granularidade excessiva) |
+| **Preferências por Remetente** | P1: 11.4% áudio \| P2: 7.2% áudio <br> P1 usa 58% mais áudio que P2 | - | ✅ Feature `grupo_mensagem` + `remetente` tem poder discriminatório |
+| **Transcrições** | 695 msgs (0.8%) com transcrição <br> AUDIO: 510 \| VID: 185 | - | ✅ Manter flag `transcricao` <br> ❌ Não criar features complexas sobre transcrições (amostra pequena) <br> ✅ Análises de conteúdo por tipo de mídia são viáveis (N=510/185 suficiente para comparações) |
+| **Evolução Temporal** | 4 fases: Out-Dez (crescimento) → Jan-Mai (estável) → Jun-Jul (PICO 4.5x) → Ago-Out (normalização) | - | ✅ Criar: `mes`, `trimestre` <br> 🔍 Investigar: Pico Jun-Jul e gaps (hipótese: encontros presenciais) |
+| **Hora do Dia** | Pico 19h (10.2%) \| 18h-22h = 38% do total <br> Madrugada ~5% | - | ✅ Criar: `hora`, `periodo_dia` (essencial) <br> ✅ Criar: `horario_comercial` |
+| **Dia da Semana** | Variação: Ter (14.558) vs Sáb (11.185) = 23% | Chi²: p<0.001 (há diferenças) <br> T-test: p=0.96 (weekday=weekend) | ⚠️ Criar: `dia_semana` (por completude, mas poder limitado) <br> ❌ Evitar: `fim_de_semana` (p=0.96 - zero poder discriminatório) |
+| **Heatmap Hora × Dia** | Pico 18h-21h universal em todos os dias <br> Padrão alternado: p=0.75 (não significativo) | - | ❌ Evitar: `hora × dia_semana` (não há interação) <br> 🎯 Features são independentes |
+| **P1 vs P2 - Hora** | Pico idêntico (19h para ambos) <br> Curvas sobrepostas | Chi²: p<0.001 mas efeito prático mínimo | ❌ Evitar: `hora × remetente` (rotinas sincronizadas) <br> 📚 Lição: significância ≠ relevância prática |
+| **P1 vs P2 - Dia** | Distribuição uniforme para ambos (12-15% todos os dias) | Chi²: p=0.027 mas efeito prático mínimo | ❌ Evitar: `dia_semana × remetente` (padrões idênticos) |
+
+---
+
+## Achados Críticos
+
+### 🔴 **VARIÁVEL CRÍTICA FALTANDO: Encontros Presenciais**
+
+**Evidências identificadas:**
+- Gaps inexplicados no timeline (dias com volume ~0)
+- Uniformidade semanal atípica (não segue padrão FDS típico de relacionamento à distância)
+- Variabilidade extrema: 0 a 1.288 msgs/dia
+- Picos e vales não explicados por padrões temporais
+
+**Hipótese:**
+- Quando **juntos** (SP ↔ BSB): Volume ≈ 0 msgs/dia
+- Quando **separados**: Volume ≈ 200-500 msgs/dia
+- **Picos**: Saudade pré-encontro ou ansiedade pós-separação
+
+**Impacto na análise:**
+- Features temporais puras têm **poder limitado** sem considerar presença física
+- Análises de conteúdo e interação também serão afetadas
+
+**Ação obrigatória:** Integrar dados de encontros ANTES de continuar EDA
+
+---
+
+## Features Recomendadas para FE
+
+### ✅ **CRIAR (alto poder discriminatório):**
+
+| Feature | Tipo | Justificativa |
+|---------|------|---------------|
+| `hora` | int (0-23) | Padrão muito claro (pico 19h vs madrugada) |
+| `periodo_dia` | category | Noite (38%) >> Manhã/Madrugada - essencial |
+| `mes` / `trimestre` | int / category | Captura evolução temporal (4 fases) |
+| `grupo_mensagem` | category | TEXT (73%) vs AUDIO (9%) vs VID (10%) - preferências claras |
+| `horario_comercial` | bool | Diferencia trabalho vs lazer |
+
+### ❌ **EVITAR (baixo/zero poder discriminatório):**
+
+| Feature | Justificativa |
+|---------|---------------|
+| `fim_de_semana` | p=0.96 - zero poder discriminatório |
+| `dia_semana` × `remetente` | Padrões idênticos entre P1 e P2 |
+| `hora` × `remetente` | Rotinas sincronizadas (curvas sobrepostas) |
+| `hora` × `dia_semana` | Não há interação relevante |
+| `tipo_mensagem` (21 tipos) | Granularidade excessiva, usar `grupo_mensagem` |
+
+### ⚠️ **MANTER POR COMPLETUDE (expectativa baixa):**
+
+| Feature | Observação |
+|---------|------------|
+| `dia_semana` | Variação existe (p<0.001) mas não sistemática |
+
+---
+
+## Contexto Externo - Próximos Passos
+
+### 🎯 **ANTES de continuar EDA:**
+
+1. **Criar** `02.2-adicionar-contexto-externo.qmd`
+2. **Integrar** dados de encontros presenciais:
+   - `em_encontro` (bool)
+   - `encontro_id` (int)
+   - `dias_desde_ultimo_encontro` (int)
+   - `dias_ate_proximo_encontro` (int)
+3. **Validar** hipótese: gaps coincidem com encontros?
+4. **Exportar** `messages_with_context.parquet`
+
+### 📊 **DEPOIS:**
+
+5. **Continuar** EDA com contexto integrado:
+   - Análise de conteúdo (com/sem encontros)
+   - Padrões de interação (com/sem encontros)
+6. **Feature Engineering** completo
+
+---
+
+## Lições Aprendidas
+
+1. **Significância estatística ≠ Relevância prática**
+   - Com N=91.924, até diferenças de 0.5% são "significativas"
+   - Sempre validar testes com visualização
+
+2. **Contexto externo é fundamental**
+   - Relacionamentos à distância têm dinâmica própria
+   - Presença física vs distância modera todos os padrões
+
+3. **Granularidade importa**
+   - 21 tipos vs 11 grupos: agregação reduz ruído
+   - Menos features, mais interpretáveis
+
+4. **Nem tudo que parece padrão é real**
+   - Heatmap sugeria padrão alternado (visual)
+   - Testes mostraram p=0.75 (ruído aleatório)
+
+---
+
+**Dataset exportado:** `messages.parquet` (91.924 × 8 colunas)  
+**Próximo arquivo:** `02.2-adicionar-contexto-externo.qmd`
+
+
+---
+# Análise de Conteúdo
+
+## Mensagens com Texto
+
+```{python}
+# Filtra mensagens de texto (não-nulas)
+df_texto = df[df['conteudo'].notna()].copy()
+
+print(f"📝 Mensagens com conteúdo textual: {len(df_texto):,} ({len(df_texto)/total_msgs*100:.1f}%)")
+```
+
+## Tamanho das Mensagens
+
+```{python}
+# Calcula tamanho em caracteres
+df_texto['tamanho_chars'] = df_texto['conteudo'].str.len()
+
+print(f"📊 Estatísticas de tamanho (caracteres):")
+print(df_texto['tamanho_chars'].describe())
+```
+
+```{python}
+#| label: fig-tamanho-chars
+#| fig-cap: "Distribuição do tamanho das mensagens (caracteres)"
+
+# Visualização (limitando outliers para melhor visualização)
+df_plot = df_texto[df_texto['tamanho_chars'] <= df_texto['tamanho_chars'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_chars',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens (até percentil 95)',
+    labels={'tamanho_chars': 'Caracteres', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+```{python}
+# Calcula tamanho em palavras
+df_texto['tamanho_palavras'] = df_texto['conteudo'].str.split().str.len()
+
+print(f"\n📊 Estatísticas de tamanho (palavras):")
+print(df_texto['tamanho_palavras'].describe())
+```
+
+```{python}
+#| label: fig-tamanho-palavras
+#| fig-cap: "Distribuição do tamanho das mensagens (palavras)"
+
+# Visualização (limitando outliers)
+df_plot = df_texto[df_texto['tamanho_palavras'] <= df_texto['tamanho_palavras'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_palavras',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens em Palavras (até percentil 95)',
+    labels={'tamanho_palavras': 'Palavras', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Comparação por Remetente
+
+```{python}
+#| label: fig-tamanho-remetente
+#| fig-cap: "Comparação de tamanho de mensagens por remetente"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+for remetente in df_texto['remetente'].unique():
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    
+    # Caracteres
+    fig.add_trace(
+        go.Box(y=df_rem['tamanho_chars'], name=remetente, showlegend=False),
+        row=1, col=1
+    )
+    
+    # Palavras
+    fig.add_trace(
+        go.Box(y=df_rem['tamanho_palavras'], name=remetente),
+        row=1, col=2
+    )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens por Remetente")
+fig.show()
+```
+
+```{python}
+print("\n💡 INSIGHTS - Tamanho de Mensagens:\n")
+
+for remetente in df_texto['remetente'].unique():
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    print(f"• {remetente}:")
+    print(f"  - Média: {df_rem['tamanho_chars'].mean():.1f} caracteres | {df_rem['tamanho_palavras'].mean():.1f} palavras")
+    print(f"  - Mediana: {df_rem['tamanho_chars'].median():.0f} caracteres | {df_rem['tamanho_palavras'].median():.0f} palavras")
+```
+
+------------------------------------------------------------------------
+
+# Padrões de Interação
+
+## Tempo entre Mensagens
+
+```{python}
+# Calcula tempo entre mensagens consecutivas
+df_sorted = df.sort_values('timestamp').copy()
+df_sorted['tempo_desde_ultima'] = df_sorted['timestamp'].diff().dt.total_seconds()
+
+# Remove primeira mensagem (NaN)
+tempo_entre_msgs = df_sorted['tempo_desde_ultima'].dropna()
+
+print(f"⏱️ Tempo entre mensagens (segundos):")
+print(tempo_entre_msgs.describe())
+
+# Converte para minutos para interpretação
+print(f"\n⏱️ Em minutos:")
+print((tempo_entre_msgs / 60).describe())
+```
+
+```{python}
+#| label: fig-tempo-entre
+#| fig-cap: "Distribuição do tempo entre mensagens"
+
+# Visualização (limitando a 1 hora para melhor visualização)
+tempo_plot = tempo_entre_msgs[tempo_entre_msgs <= 3600]  # até 1 hora
+
+fig = px.histogram(
+    x=tempo_plot / 60,  # converte para minutos
+    nbins=50,
+    title='Distribuição do Tempo entre Mensagens (até 1 hora)',
+    labels={'x': 'Minutos', 'count': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+::: {.callout-warning}
+### ⚠️ Insight - Problema de Escala Identificado
+
+**Amplitude EXTREMA no tempo entre mensagens:**
+
+**Estatísticas descritivas:**
+- **Mediana:** 8 segundos (resposta muito rápida!)
+- **75%:** 36 segundos (ainda rápido)
+- **Máximo:** 40.297 minutos = **~28 DIAS!** 
+
+**Problema:**
+- Histograma linear **ESCONDE** 99% dos dados em uma única barra
+- Diferença de escala: 8 segundos vs 28 dias = **300.000x**!
+- Distribuição tem **cauda longa** extrema
+
+**O que isso significa:**
+- Maioria das mensagens são **rajadas rápidas** (segundos)
+- Mas há **gaps enormes** (dias/semanas) - provavelmente coincidindo com encontros ou períodos especiais
+- Visualização linear é inadequada - precisamos de múltiplas abordagens
+
+**Hipóteses a investigar:**
+1. **Contexto:** Tempo é MENOR quando separados (conversam mais)? Ou quando juntos (coordenação rápida)?
+2. **Faixas:** Qual % das mensagens são "instantâneas" (<10s) vs "conversas" (1-5min) vs "retomadas" (>1h)?
+3. **Outliers:** Gaps de 1+ dia coincidem com encontros presenciais?
+
+**Próximas visualizações necessárias:**
+- ✅ Bins customizados (faixas interpretáveis)
+- ✅ CDF (% acumulada - ver percentis claramente)
+- ✅ Separação por contexto (junto vs separado)
+- ✅ Escala logarítmica (ver toda a distribuição)
+:::
+
+### Distribuição por Faixas Interpretáveis
+
+#### 1. ESCALA LOG (Melhor para cauda longa)
+
+```{python}
+import plotly.express as px
+import numpy as np
+
+# Remove zeros (log não aceita)
+tempo_positivo = tempo_entre_msgs[tempo_entre_msgs > 0]
+
+# Histograma em escala LOG
+fig = px.histogram(
+    x=np.log10(tempo_positivo / 60),  # Log10 de minutos
+    nbins=50,
+    title='Distribuição do Tempo entre Mensagens (Escala LOG)',
+    labels={'x': 'Log10(Minutos)', 'y': 'Quantidade'}
+)
+
+# Adiciona labels customizados no eixo X
+fig.update_xaxes(
+    tickvals=[-2, -1, 0, 1, 2, 3, 4],
+    ticktext=['0.01 min', '0.1 min', '1 min', '10 min', '100 min', '1000 min', '10000 min']
+)
+
+fig.show()
+```
+
+#### 2. BINS CUSTOMIZADOS
+
+```{python}
+# Define bins por faixas interpretáveis
+bins_segundos = [0, 10, 60, 300, 1800, 3600, 86400, float('inf')]
+labels = ['0-10s', '10s-1min', '1-5min', '5-30min', '30min-1h', '1h-24h', '>24h']
+
+tempo_faixas = pd.cut(tempo_entre_msgs, bins=bins_segundos, labels=labels)
+
+# Conta por faixa
+contagem = tempo_faixas.value_counts().sort_index()
+
+# Gráfico de barras
+fig = px.bar(
+    x=contagem.index,
+    y=contagem.values,
+    title='Tempo entre Mensagens por Faixa',
+    labels={'x': 'Faixa de Tempo', 'y': 'Quantidade'},
+    text=contagem.values
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.show()
+
+print("\n📊 Distribuição por faixa:")
+for faixa, qtd in contagem.items():
+    pct = (qtd / len(tempo_entre_msgs) * 100)
+    print(f"   {faixa}: {qtd:,} ({pct:.1f}%)")
+```
+
+## Respostas Rápidas
+
+```{python}
+# Define threshold de resposta rápida (60 segundos)
+respostas_rapidas = (tempo_entre_msgs < 60).sum()
+pct_rapidas = (respostas_rapidas / len(tempo_entre_msgs)) * 100
+
+print(f"⚡ Respostas em < 60 segundos: {respostas_rapidas:,} ({pct_rapidas:.1f}%)")
+
+# Diferentes thresholds
+thresholds = [10, 30, 60, 120, 300]  # segundos
+print(f"\n⚡ Respostas por velocidade:")
+for threshold in thresholds:
+    count = (tempo_entre_msgs < threshold).sum()
+    pct = (count / len(tempo_entre_msgs)) * 100
+    print(f"   < {threshold}s: {count:,} ({pct:.1f}%)")
+```
+
+## Sequências de Mensagens
+
+```{python}
+# Identifica trocas de remetente
+df_sorted['mudou_remetente'] = df_sorted['remetente'] != df_sorted['remetente'].shift()
+
+# Conta mensagens consecutivas do mesmo remetente
+df_sorted['sequencia'] = df_sorted.groupby(
+    (df_sorted['mudou_remetente']).cumsum()
+).cumcount() + 1
+
+print(f"📊 Sequências de mensagens do mesmo remetente:")
+print(df_sorted['sequencia'].describe())
+print(f"\n📈 Maior sequência: {df_sorted['sequencia'].max()} mensagens consecutivas")
+
+# Distribuição de sequências
+seq_dist = df_sorted.groupby('sequencia').size().head(20)
+print(f"\n📊 Distribuição das 20 sequências mais comuns:")
+print(seq_dist)
+```
+
+```{python}
+#| label: fig-sequencias
+#| fig-cap: "Distribuição de sequências de mensagens"
+
+# Visualização
+fig = px.bar(
+    x=seq_dist.index[:15],  # Top 15
+    y=seq_dist.values[:15],
+    title='Top 15 Tamanhos de Sequências Mais Comuns',
+    labels={'x': 'Tamanho da Sequência', 'y': 'Frequência'}
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Análise de Turnos
+
+```{python}
+# Identifica inícios de conversa (gap > 1 hora)
+THRESHOLD_INICIO = 3600  # 1 hora em segundos
+df_sorted['inicio_conversa'] = (df_sorted['tempo_desde_ultima'] > THRESHOLD_INICIO) | (df_sorted['tempo_desde_ultima'].isna())
+
+# Conta turnos
+total_turnos = df_sorted['inicio_conversa'].sum()
+msgs_por_turno = len(df) / total_turnos
+
+print(f"💬 Total de turnos de conversa: {total_turnos}")
+print(f"📊 Média de mensagens por turno: {msgs_por_turno:.1f}")
+
+# Distribução de tamanho dos turnos
+df_sorted['turno_id'] = df_sorted['inicio_conversa'].cumsum()
+turnos_tamanho = df_sorted.groupby('turno_id').size()
+
+print(f"\n📊 Estatísticas de tamanho dos turnos:")
+print(turnos_tamanho.describe())
+```
+
+------------------------------------------------------------------------
+
+# Conclusões para Feature Engineering
+
+Com base nesta análise exploratória, identificamos os seguintes padrões que justificam a criação de features:
+
+## 🎯 Features Temporais Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features temporais:
+
+• Dia da semana (categórica ordenada)
+  → Padrão claro de variação entre dias
+  
+• Período do dia (Madrugada/Manhã/Tarde/Noite)
+  → Heatmap mostra concentração em períodos específicos
+  
+• Hora (numérica 0-23)
+  → Distribuição não-uniforme, horários de pico identificados
+  
+• Fim de semana (booleana)
+  → Diferença de comportamento identificada
+  
+❌ NÃO CRIAR features redundantes:
+• Ano (se dataset tem apenas 1 ano)
+• Data exata (muito granular, sem padrão)
+""")
+```
+
+## 💬 Features de Texto Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features de texto:
+
+• Tamanho em caracteres e palavras
+  → Distribuições assimétricas, diferenças entre remetentes
+  
+• Features de pontuação (?, !, ...)
+  → Pode indicar emoção/urgência
+  
+• Detecção de links/menções
+  → Compartilhamento de conteúdo externo
+  
+• Análise de emojis (presença, quantidade)
+  → Expressividade emocional
+""")
+```
+
+## 🔄 Features de Conversação Recomendadas
+
+```{python}
+print("""
+✅ CRIAR features de conversação:
+
+• Tempo desde última mensagem
+  → Alta variabilidade, padrões de engajamento
+  
+• Resposta rápida (< 60s)
+  → {:.1f}% das mensagens são rápidas
+  
+• Sequência de mensagens do mesmo remetente
+  → Padrão de "rajadas" identificado
+  
+• Turno de conversa
+  → Delimita sessões de interação
+  
+• Tempo até resposta do outro remetente
+  → Reciprocidade de engajamento
+""".format(pct_rapidas))
+```
+
+## 📊 Features de Mídia Recomendadas
+
+```{python}
+# Análise de mídia
+pct_texto = (df['grupo_mensagem'] == 'TEXT').sum() / total_msgs * 100
+pct_audio = (df['grupo_mensagem'] == 'AUDIO').sum() / total_msgs * 100
+pct_video = (df['grupo_mensagem'] == 'VID').sum() / total_msgs * 100
+
+print(f"""
+✅ CRIAR features de mídia:
+
+• Tipo de mensagem (categórica)
+  → {len(df['grupo_mensagem'].unique())} tipos diferentes
+  → TEXT: {pct_texto:.1f}%
+  → AUDIO: {pct_audio:.1f}%
+  → VIDEO: {pct_video:.1f}%
+  
+• Presença de transcrição (booleana)
+  → {total_transcricoes:,} mensagens transcritas
+  → Enriquece conteúdo de áudio/vídeo
+""")
+```
+
+## 📝 Resumo Final
+
+```{python}
+print("""
+╔══════════════════════════════════════════════════════════════╗
+║           RESUMO - FEATURES A CRIAR                          ║
+╚══════════════════════════════════════════════════════════════╝
+
+🎯 TEMPORAIS (6-8 features):
+   • dia_semana, periodo_dia, hora, fim_de_semana
+   • mes, trimestre (se período > 3 meses)
+   
+💬 TEXTO (8-10 features):
+   • tamanho_caracteres, tamanho_palavras
+   • tem_emoji, qtd_emojis, tem_link, tem_mencao
+   • tem_interrogacao, tem_exclamacao, eh_caixa_alta
+   
+🔄 CONVERSAÇÃO (6-7 features):
+   • tempo_desde_ultima_msg
+   • tempo_desde_ultima_msg_mesmo_remetente
+   • eh_resposta_rapida, eh_inicio_conversa
+   • sequencia_mesmo_remetente, turno_conversa
+   • tempo_resposta_outro_remetente
+   
+📊 MÍDIA & CONTEXTO (3-5 features):
+   • Já temos: tipo_mensagem, grupo_mensagem, transcricao
+   • Adicionar se relevante: contexto externo (encontros, etc)
+
+Total estimado: 23-30 features
+""")
+```
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+1.  **Feature Engineering** (`03-feature-engineering.qmd`)
+    -   Criar features identificadas nesta análise
+    -   Documentar motivação de cada feature
+    -   Validar criação com estatísticas descritivas
+2.  **Feature Selection** (`04-eda-features.qmd`)
+    -   Analisar correlações entre features criadas
+    -   Identificar redundâncias
+    -   Selecionar conjunto final (10-15 features core)
+3.  **Model Features** (opcional)
+    -   Sentiment analysis (BERT)
+    -   Embeddings semânticos
+    -   Topic modeling
+4.  **Advanced Analysis**
+    -   Clustering com features selecionadas
+    -   Análises temporais avançadas
+    -   Visualizações finais

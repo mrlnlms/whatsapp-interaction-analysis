@@ -1238,14 +1238,10 @@ Com o dataset enriquecido, seguimos para:
     -   Análise de sentimento (BERT)
     -   Embeddings semânticos
     -   Topic modeling
-
-2.  [**EDA**](05-eda.qmd) — Análise exploratória das features criadas
+2.  [**Exploratory Data Analysis**](05-eda.qmd) — Análise exploratória das features criadas
     -   Distribuições univariadas
     -   Análises bivariadas (features vs remetente, tempo, contexto)
     -   Correlações entre features
     -   Visualizações temporais e padrões
-
-3.  [**Análise Avançada**](06-advanced-analysis.qmd) — Técnicas avançadas
-    -   Clustering de padrões de conversa
-    -   MCA, PCA
-    -   Modelagem preditiva
+    -   Use `messages_with_models.parquet` se disponível
+    -   Ou `messages_enriched.parquet` para análise sem modelos
