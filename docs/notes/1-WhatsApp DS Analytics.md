@@ -1,0 +1,126 @@
+# WhatsApp DS Analytics
+
+Pipeline de Data Science para análise de conversas
+## Introdução
+
+Conversas do WhatsApp são um tesouro de dados sobre nossas interações humanas. Porém, quando exportadas, chegam em um formato que mistura estrutura com caos: timestamps irregulares, caracteres invisíveis, mensagens quebradas em múltiplas linhas, mídias omitidas ou anexadas.
+
+## Contexto
+
+Como estudante de ciência de dados e interessado em análises qualitativas e aprendizado de novas ferramentas, fazer um projeto de data-wrangling com Python nestes dados, incluindo transcrição de mídias e enriquecimento da base, ou seja, dos dados brutos, documentando todo processo usando Quarto (.qmd) parece uma abordagem desafiadora e profissional.
+
+Do ponto de vista técnico, a escolha de trabalhar com este formato semi-estruturado apresentam *edge-cases* bem especificos como caracteres especiais e emojis, tags ou textos de marcação para certos tipos de interação (envio de mensagem de áudio, vídeo, arquivos etc), mensagens fragmentadas, formatos inconsistentes entre outras coisas que iremos explorar tratar neste projeto.
+
+## Objetivo
+
+Transformar um export bruto do WhatsApp (`_chat.txt`) em um dataset estruturado para realizar analises de forma reprodutível, passando por todas as fase de preparação, agregação e enriquecimento dos dados até às suas análises e visualizações. Neste relatório, documentarei cada etapa do processo da pipeline de dados criado exclusivamente para este cenário.
+
+![](http://localhost:7860/assets/images/ds-pipeline-to-insight.png)
+
+Pipeline de dados completo demonstra práticas de Data Engineering e Data Science, desde a investigação inicial do arquivo bruto até análises avançadas.
+
+Note Estudo de caso
+
+Como estudo de caso vou utilizar o histórico de ~14 meses de mensagens entre minha namorada e eu (~92K mensagens, ~5MB). Para além do aprendizado em ciência de dados e *analytics*, essa escolha se deu por conta de uma ideia que tive de fazer análises textuais sobre nosso primeiro ano de namoro, extraindo visualizações e insights para criar um “ *presente digital analítico* ” do nosso 1º ano de namoro 😍 🥰. Após preparar os dados iremos vincular as datas de quando estivemos juntos durante este um ano (~10 viagens em 2025) às mensagens daquele período.
+
+Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riqueza, como a transcrição automatizada de áudios e vídeos, padronizando toda mídia possível em formato texto.
+
+---
+
+## Arquitetura
+
+O projeto segue uma arquitetura modular que separa **lógica** de **apresentação**:
+
+```
+src/                          # Lógica (módulos Python)
+├── cleaning.py               # Pipeline de limpeza (7 etapas)
+├── wrangling.py              # Pipeline de wrangling (6 etapas)
+├── features.py               # Feature engineering
+└── utils/audit.py            # Sistema de auditoria
+
+notebooks/                    # Apresentação (Quarto)
+├── 01-data-cleaning.qmd      # Configura e executa cleaning
+├── 02-data-wrangling.qmd     # Configura e executa wrangling
+└── ...
+
+scripts/                      # Executáveis standalone
+└── transcribe_media.py       # Roda fora do pipeline (~40 min)
+```
+
+## Vantagens
+
+- **Testável**: Funções isoladas e importáveis
+- **Reutilizável**: Módulos funcionam independente dos notebooks
+- **Configurável**: Ordem das etapas via lista simples
+- **Auditável**: Métricas de cada transformação
+
+---
+
+## Estrutura do Projeto
+
+```
+whatsapp-ds-analytics/
+├── index.qmd                 # Este documento
+├── .env                      # Configuração local (não versionado)
+│
+├── src/                      # Módulos Python
+│   ├── config.py             # Paths e configurações
+│   ├── cleaning.py           # Pipeline de limpeza
+│   ├── wrangling.py          # Pipeline de wrangling
+│   ├── features.py           # Feature engineering
+│   └── utils/
+│       └── audit.py          # Auditoria de transformações
+│
+├── scripts/                  # Scripts standalone
+│   └── transcribe_media.py   # Transcrição de mídias
+│
+├── notebooks/                # Documentos Quarto
+│   ├── 00-data-profiling.qmd
+│   ├── 01-data-cleaning.qmd
+│   ├── 02-data-wrangling.qmd
+│   ├── 03-feature-engineering.qmd
+│   ├── 04-eda.qmd
+│   └── 05-advanced-analysis.qmd
+│
+├── data/                     # Dados (não versionado)
+│   ├── raw/                  # Exports brutos
+│   ├── interim/              # Intermediários
+│   └── processed/            # Datasets finais
+│
+├── analysis/                 # Gráficos (não versionado)
+│
+└── docs/                     # Documentação
+    ├── SETUP-GUIDE.md
+    └── data-dictionary.md
+```
+
+---
+
+## Outputs
+
+O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
+
+| `messages.csv` | Dataset principal (8 colunas) | **Use este para análises** |
+| --- | --- | --- |
+| `messages.parquet` | Mesmo conteúdo, ~3x menor | Performance |
+| `messages_full.csv` | Versão completa (17 colunas) | Debug/auditoria |
+| `chat_complete.txt` | Chat formatado com transcrições | Leitura |
+| `corpus_*.txt` | Textos puros | NLP, word clouds |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Configure o ambiente
+cp .env.example .env
+# Edite .env com seus paths
+
+# 2. (Opcional) Transcreva áudios/vídeos
+python scripts/transcribe_media.py
+
+# 3. Rode o pipeline
+quarto preview
+```
+
+Para mais detalhes, veja o [Guia de Setup](http://localhost:7860/docs/SETUP-GUIDE.html).
