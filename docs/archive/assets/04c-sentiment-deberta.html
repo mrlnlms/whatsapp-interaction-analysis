@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.26">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Marlon">
+<meta name="dcterms.date" content="2025-12-05">
+
+<title>Sentiment mDeBERTa v3 – WhatsApp DS Analytics</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-7b83a071aaebf916838b2ad328344383.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+
+</head>
+
+<body class="nav-sidebar docked nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">WhatsApp DS Analytics</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-notebooks" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Notebooks</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-notebooks">    
+        <li>
+    <a class="dropdown-item" href="../notebooks/00-data-discovery.html">
+ <span class="dropdown-text">00 - Data Discovery</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/00-data-profiling.html">
+ <span class="dropdown-text">00 - Data Profiling</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/01-data-cleaning.html">
+ <span class="dropdown-text">01 - Data Cleaning</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/02-data-wrangling.html">
+ <span class="dropdown-text">02 - Data Wrangling</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/03-feature-engineering.html">
+ <span class="dropdown-text">03 - Feature Engineering</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/04-model-features.html">
+ <span class="dropdown-text">04 - Model Features</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/05-eda.html">
+ <span class="dropdown-text">05 - EDA</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../notebooks/06-advanced-analysis.html">
+ <span class="dropdown-text">06 - Advanced Analysis</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="../docs/data-dictionary.html"> 
+<span class="menu-text">Dicionário de Dados</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+    <a href="https://github.com/mrlnlms/whatsapp-ds-analytics" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-github"></i></a>
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">Sentiment mDeBERTa v3</li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Projeto</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">WhatsApp DS Analytics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../docs/data-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Dicionário de Dados</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Data Preparation</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/00-data-discovery.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Data Discovery</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/00-data-profiling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Data Profiling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/01-data-cleaning.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Data Cleaning</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/02-data-wrangling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Data Wrangling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/03-feature-engineering.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Feature Engineering</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Data Analysis</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/04-model-features.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Model-Based Features</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/05-eda.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exploratory Data Analysis</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/06-advanced-analysis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Clustering Analysis</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#configuração" id="toc-configuração" class="nav-link active" data-scroll-target="#configuração">Configuração</a></li>
+  <li><a href="#introdução" id="toc-introdução" class="nav-link" data-scroll-target="#introdução">Introdução</a>
+  <ul class="collapse">
+  <li><a href="#carregamento-dos-dados" id="toc-carregamento-dos-dados" class="nav-link" data-scroll-target="#carregamento-dos-dados">Carregamento dos Dados</a></li>
+  <li><a href="#modelo-3-mdeberta-v3" id="toc-modelo-3-mdeberta-v3" class="nav-link" data-scroll-target="#modelo-3-mdeberta-v3">Modelo 3: mDeBERTa v3</a>
+  <ul class="collapse">
+  <li><a href="#características" id="toc-características" class="nav-link" data-scroll-target="#características">Características</a></li>
+  <li><a href="#features-criadas" id="toc-features-criadas" class="nav-link" data-scroll-target="#features-criadas">Features Criadas</a></li>
+  <li><a href="#execução" id="toc-execução" class="nav-link" data-scroll-target="#execução">Execução</a></li>
+  <li><a href="#resultados" id="toc-resultados" class="nav-link" data-scroll-target="#resultados">Resultados</a></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Sentiment mDeBERTa v3</h1><button type="button" class="btn code-tools-button" id="quarto-code-tools-source"><i class="bi"></i> Code</button></div></div>
+<p class="subtitle lead">Model-Based Features</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Marlon </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">December 5, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="configuração" class="level2">
+<h2 class="anchored" data-anchor-id="configuração">Configuração</h2>
+<div id="b96c06c8" class="cell" data-execution_count="2">
+<div class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_1394b" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_1394b_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Parâmetro</th>
+<th id="T_1394b_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Valor</th>
+<th id="T_1394b_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Path</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_1394b_row0_col0" class="data row0 col0">Entrada</td>
+<td id="T_1394b_row0_col1" class="data row0 col1"><code>messages_enriched.parquet</code></td>
+<td id="T_1394b_row0_col2" class="data row0 col2">~/whatsapp-ds-analytics/data/processed/export_2024-10_2025-10</td>
+</tr>
+<tr class="even">
+<td id="T_1394b_row1_col0" class="data row1 col0">Saída</td>
+<td id="T_1394b_row1_col1" class="data row1 col1"><code>messages_with_models.parquet</code></td>
+<td id="T_1394b_row1_col2" class="data row1 col2">~/whatsapp-ds-analytics/data/processed/export_2024-10_2025-10</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<hr>
+</section>
+<section id="introdução" class="level1">
+<h1>Introdução</h1>
+<p>Este notebook cria <strong>features baseadas em modelos de Machine Learning</strong> que complementam as features estruturais criadas no notebook anterior.</p>
+<p>⚠️ <strong>IMPORTANTE:</strong> Todas as análises deste notebook são:</p>
+<ul>
+<li><p><strong>Computacionalmente custosas</strong> (podem levar vários minutos)</p></li>
+<li><p><strong>Totalmente opcionais</strong> (não são necessárias para EDA básico)</p></li>
+<li><p><strong>Requerem hardware adequado</strong> (GPU recomendada para alguns modelos)</p></li>
+</ul>
+<p>As features de modelos <strong>não são executadas automaticamente</strong> durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.</p>
+<hr>
+<section id="carregamento-dos-dados" class="level2">
+<h2 class="anchored" data-anchor-id="carregamento-dos-dados">Carregamento dos Dados</h2>
+<div id="cell-show-data-summary" class="cell" data-execution_count="4">
+<div id="show-data-summary" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_b268a" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_b268a_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Métrica</th>
+<th id="T_b268a_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_b268a_row0_col0" class="data row0 col0">Mensagens</td>
+<td id="T_b268a_row0_col1" class="data row0 col1">91,924</td>
+</tr>
+<tr class="even">
+<td id="T_b268a_row1_col0" class="data row1 col0">Colunas</td>
+<td id="T_b268a_row1_col1" class="data row1 col1">43</td>
+</tr>
+<tr class="odd">
+<td id="T_b268a_row2_col0" class="data row2 col0">Período</td>
+<td id="T_b268a_row2_col1" class="data row2 col1">19/10/2024 → 20/10/2025</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<hr>
+</section>
+<section id="modelo-3-mdeberta-v3" class="level2">
+<h2 class="anchored" data-anchor-id="modelo-3-mdeberta-v3">Modelo 3: mDeBERTa v3</h2>
+<p>Arquitetura DeBERTa (Decoding-enhanced BERT) da Microsoft, estado da arte em compreensão de linguagem natural.</p>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>📝 Nota sobre o Modelo
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Por limitações de disponibilidade de modelos DeBERTa multilingual específicos para análise de sentimento, utilizamos <code>cardiffnlp/twitter-roberta-base-sentiment-latest</code> - uma versão mais recente e otimizada do RoBERTa.</p>
+<p>Este modelo serve como <strong>terceira opinião independente</strong> para validação cruzada e ensemble, mantendo arquitetura robusta e performance comparável a DeBERTa para a tarefa de sentiment analysis.</p>
+</div>
+</div>
+<section id="características" class="level3">
+<h3 class="anchored" data-anchor-id="características">Características</h3>
+<ul>
+<li><strong>Treinamento:</strong> Arquitetura DeBERTa v3 com disentangled attention</li>
+<li><strong>Otimização:</strong> Melhor contexto e relações entre palavras</li>
+<li><strong>Classes:</strong> 3 (positive, neutral, negative)</li>
+<li><strong>Especial:</strong> Attention mechanism aprimorado, melhor em textos ambíguos</li>
+</ul>
+<p><strong>Script:</strong> <code>scripts/sentiment_deberta.py</code></p>
+</section>
+<section id="features-criadas" class="level3">
+<h3 class="anchored" data-anchor-id="features-criadas">Features Criadas</h3>
+<div id="cell-sentiment-deberta-features-plan" class="cell" data-execution_count="5">
+<div id="sentiment-deberta-features-plan" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_28e54" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_28e54_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Feature</th>
+<th id="T_28e54_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Tipo</th>
+<th id="T_28e54_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Definição</th>
+<th id="T_28e54_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">Valores</th>
+<th id="T_28e54_level0_col4" class="col_heading level0 col4" data-quarto-table-cell-role="th">Uso</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_28e54_row0_col0" class="data row0 col0"><code>sentimento_deberta_label</code></td>
+<td id="T_28e54_row0_col1" class="data row0 col1">category</td>
+<td id="T_28e54_row0_col2" class="data row0 col2">Classificação do sentimento em 3 classes (mDeBERTa)</td>
+<td id="T_28e54_row0_col3" class="data row0 col3">positive, neutral, negative</td>
+<td id="T_28e54_row0_col4" class="data row0 col4">Terceira opinião para ensemble e análise robusta</td>
+</tr>
+<tr class="even">
+<td id="T_28e54_row1_col0" class="data row1 col0"><code>sentimento_deberta_score</code></td>
+<td id="T_28e54_row1_col1" class="data row1 col1">float</td>
+<td id="T_28e54_row1_col2" class="data row1 col2">Score de confiança do mDeBERTa (0-1)</td>
+<td id="T_28e54_row1_col3" class="data row1 col3">0.0 a 1.0</td>
+<td id="T_28e54_row1_col4" class="data row1 col4">Ponderação em ensemble e validação cruzada</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>📝 Sobre DeBERTa (Decoding-enhanced BERT)
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>DeBERTa usa <strong>disentangled attention</strong> - separa conteúdo e posição das palavras, capturando melhor o contexto. Lançado pela Microsoft em 2020, representa evolução arquitetural significativa sobre BERT tradicional.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="execução" class="level3">
+<h3 class="anchored" data-anchor-id="execução">Execução</h3>
+<p><strong>Script:</strong> <code>scripts/sentiment_deberta.py</code></p>
+<p>Para executar a análise de sentimento com mDeBERTa:</p>
+<div id="sentiment-deberta-execution" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> subprocess</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"🤖 Iniciando análise de sentimento..."</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"📦 Modelo: mDeBERTa v3"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"⏱️  Tempo estimado: 15-25 minutos (CPU) ou 5-8 minutos (GPU)"</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"🧠 Arquitetura mais avançada que BERT/RoBERTa</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Executa script específico</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> subprocess.run([<span class="st">'python'</span>, <span class="st">'scripts/sentiment_deberta.py'</span>])</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> result.returncode <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">✅ Análise concluída com sucesso!"</span>)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"📁 Arquivo atualizado: </span><span class="sc">{</span>OUTPUT_FILE<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">❌ Erro na execução. Verifique os logs acima."</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p><strong>Ou via terminal:</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/sentiment_deberta.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="resultados" class="level3">
+<h3 class="anchored" data-anchor-id="resultados">Resultados</h3>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true" href="">Análise de Sentimento</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-2-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-2" role="tab" aria-controls="tabset-2-2" aria-selected="false" href="">Processamento</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-2-3-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-3" role="tab" aria-controls="tabset-2-3" aria-selected="false" href="">Código de Validação</a></li></ul>
+<div class="tab-content">
+<div id="tabset-2-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-2-1-tab">
+<p>Resultados da classificação de sentimento aplicada às mensagens.</p>
+<section id="distribuição-de-sentimentos" class="level5">
+<h5 class="anchored" data-anchor-id="distribuição-de-sentimentos">📊 Distribuição de Sentimentos</h5>
+<div id="cell-sentiment-deberta-distribution" class="cell" data-execution_count="7">
+<div id="sentiment-deberta-distribution" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_075b3" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_075b3_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Sentimento</th>
+<th id="T_075b3_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Quantidade</th>
+<th id="T_075b3_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Percentual</th>
+<th id="T_075b3_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">Confiança Média</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_075b3_row0_col0" class="data row0 col0">😐 Neutral</td>
+<td id="T_075b3_row0_col1" class="data row0 col1">57,644</td>
+<td id="T_075b3_row0_col2" class="data row0 col2">93.8%</td>
+<td id="T_075b3_row0_col3" class="data row0 col3">0.779</td>
+</tr>
+<tr class="even">
+<td id="T_075b3_row1_col0" class="data row1 col0">😊 Positive</td>
+<td id="T_075b3_row1_col1" class="data row1 col1">3,337</td>
+<td id="T_075b3_row1_col2" class="data row1 col2">5.4%</td>
+<td id="T_075b3_row1_col3" class="data row1 col3">0.737</td>
+</tr>
+<tr class="odd">
+<td id="T_075b3_row2_col0" class="data row2 col0">😢 Negative</td>
+<td id="T_075b3_row2_col1" class="data row2 col1">501</td>
+<td id="T_075b3_row2_col2" class="data row2 col2">0.8%</td>
+<td id="T_075b3_row2_col3" class="data row2 col3">0.616</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="exemplos-por-sentimento" class="level5">
+<h5 class="anchored" data-anchor-id="exemplos-por-sentimento">🔍 Exemplos por Sentimento</h5>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">😊 Positive</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false" href="">😐 Neutral</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-3-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-3" role="tab" aria-controls="tabset-1-3" aria-selected="false" href="">😢 Negative</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<div id="cell-exemplos-deberta-positive" class="cell" data-execution_count="8">
+<div id="exemplos-deberta-positive" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_3ca9f" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_3ca9f_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Mensagem</th>
+<th id="T_3ca9f_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Confiança</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_3ca9f_row0_col0" class="data row0 col0">hahaah</td>
+<td id="T_3ca9f_row0_col1" class="data row0 col1">0.618</td>
+</tr>
+<tr class="even">
+<td id="T_3ca9f_row1_col0" class="data row1 col0">Hahaha</td>
+<td id="T_3ca9f_row1_col1" class="data row1 col1">0.610</td>
+</tr>
+<tr class="odd">
+<td id="T_3ca9f_row2_col0" class="data row2 col0">hahhahahahaahahhahaha</td>
+<td id="T_3ca9f_row2_col1" class="data row2 col1">0.722</td>
+</tr>
+<tr class="even">
+<td id="T_3ca9f_row3_col0" class="data row3 col0">HAHAHAH</td>
+<td id="T_3ca9f_row3_col1" class="data row3 col1">0.521</td>
+</tr>
+<tr class="odd">
+<td id="T_3ca9f_row4_col0" class="data row4 col0">entendii.. que bom né!!! hahah</td>
+<td id="T_3ca9f_row4_col1" class="data row4 col1">0.593</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<div id="cell-exemplos-deberta-neutral" class="cell" data-execution_count="9">
+<div id="exemplos-deberta-neutral" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_08fa2" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_08fa2_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Mensagem</th>
+<th id="T_08fa2_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Confiança</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_08fa2_row0_col0" class="data row0 col0">https://www.localiza.com/brasil/pt-br/reservas/passo-2</td>
+<td id="T_08fa2_row0_col1" class="data row0 col1">0.908</td>
+</tr>
+<tr class="even">
+<td id="T_08fa2_row1_col0" class="data row1 col0">Arrasou</td>
+<td id="T_08fa2_row1_col1" class="data row1 col1">0.693</td>
+</tr>
+<tr class="odd">
+<td id="T_08fa2_row2_col0" class="data row2 col0">confortável</td>
+<td id="T_08fa2_row2_col1" class="data row2 col1">0.714</td>
+</tr>
+<tr class="even">
+<td id="T_08fa2_row3_col0" class="data row3 col0">esse vai de boas</td>
+<td id="T_08fa2_row3_col1" class="data row3 col1">0.821</td>
+</tr>
+<tr class="odd">
+<td id="T_08fa2_row4_col0" class="data row4 col0">Tem um outro lá tbm mas mesmo preco</td>
+<td id="T_08fa2_row4_col1" class="data row4 col1">0.862</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="tabset-1-3" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-3-tab">
+<div id="cell-exemplos-deberta-negative" class="cell" data-execution_count="10">
+<div id="exemplos-deberta-negative" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_2bcc7" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_2bcc7_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Mensagem</th>
+<th id="T_2bcc7_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Confiança</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_2bcc7_row0_col0" class="data row0 col0">Afffff</td>
+<td id="T_2bcc7_row0_col1" class="data row0 col1">0.445</td>
+</tr>
+<tr class="even">
+<td id="T_2bcc7_row1_col0" class="data row1 col0">Sorry, lesadakkkkkk</td>
+<td id="T_2bcc7_row1_col1" class="data row1 col1">0.501</td>
+</tr>
+<tr class="odd">
+<td id="T_2bcc7_row2_col0" class="data row2 col0">E da pra trocar tbm 💩</td>
+<td id="T_2bcc7_row2_col1" class="data row2 col1">0.765</td>
+</tr>
+<tr class="even">
+<td id="T_2bcc7_row3_col0" class="data row3 col0">Trash ne</td>
+<td id="T_2bcc7_row3_col1" class="data row3 col1">0.534</td>
+</tr>
+<tr class="odd">
+<td id="T_2bcc7_row4_col0" class="data row4 col0">The madness</td>
+<td id="T_2bcc7_row4_col1" class="data row4 col1">0.495</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip no-icon callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="true" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>💡 Interpretação dos Resultados
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse show">
+<div class="callout-body-container callout-body">
+<p>Resultados serão exibidos aqui após execução.</p>
+<p><strong>Características esperadas do mDeBERTa:</strong></p>
+<ul>
+<li>Arquitetura mais moderna pode capturar nuances sutis</li>
+<li>Attention mechanism melhorado para contexto</li>
+<li>Potencial para maior confiança em casos ambíguos</li>
+<li>Terceira “opinião” para validação cruzada</li>
+</ul>
+<p><em>Comparação será feita na seção “Comparação entre Modelos”.</em></p>
+<p><strong>Tom Geral: ULTRA CONSERVADOR E NEUTRO</strong> 🗿</p>
+<ul>
+<li><strong>Positivo (5%)</strong> 🟢 → Raramente identifica positividade</li>
+<li><strong>Neutro (94%)</strong> ⚪ → Praticamente tudo é neutro</li>
+<li><strong>Negativo (1%)</strong> 🔴 → Quase nunca identifica negatividade</li>
+</ul>
+<p><strong>Características do RoBERTa Latest:</strong></p>
+<ul>
+<li>🗿 Modelo extremamente conservador - default é sempre “neutral”</li>
+<li>🎯 Alta confiança (77.9%) - mas classifica quase tudo como neutro</li>
+<li>📊 Distribuição extremamente desbalanceada (94% em uma classe)</li>
+<li>🔒 Threshold alto para positive/negative - precisa ter MUITA certeza</li>
+</ul>
+<p><strong>🎯 Insights Principais:</strong></p>
+<ul>
+<li>Modelo funcionou em 27 minutos (similar ao primeiro RoBERTa)</li>
+<li>Confiança muito alta (78%) - mais alta dos 3 modelos!</li>
+<li>Mas distribui 94% em uma única classe</li>
+<li>Exemplos reveladores:
+<ul>
+<li>“hahahaha” → positive (0.72) ✅ Risadas são raras positivas</li>
+<li>URLs → neutral (0.90) ✅ Altíssima confiança em URLs</li>
+<li>“Afffff” → negative (0.45) ⚠️ Baixa confiança mesmo em frustração</li>
+</ul></li>
+</ul>
+<p><strong>⚖️ Filosofia do Modelo:</strong></p>
+<ul>
+<li>“Se não tenho CERTEZA ABSOLUTA, é neutro”</li>
+<li>Abordagem científica: evita falsos positivos/negativos</li>
+<li>Útil para identificar casos INEQUIVOCAMENTE positivos/negativos</li>
+</ul>
+<p><strong>📌 Observação Importante:</strong></p>
+<p>Este modelo representa uma visão extremamente objetiva e cautelosa. Classifica como positivo/negativo apenas quando há sinais muito claros e inequívocos. A alta taxa de neutralidade (94%) não significa que as mensagens são “sem emoção” - significa que o modelo prefere não arriscar classificações quando há qualquer ambiguidade.</p>
+<p><strong>🔍 Casos Interessantes:</strong></p>
+<ul>
+<li><strong>Risadas como positive:</strong> O modelo captura que múltiplas risadas (“hahahaha”) são expressão clara de positividade</li>
+<li><strong>URLs como neutral:</strong> Alta confiança (0.90) que links são informativos/neutros</li>
+<li><strong>Negativos raros:</strong> Apenas 0.8% - identifica negatividade só em casos extremos</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div id="tabset-2-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-2-2-tab">
+<p>Informações técnicas sobre a execução da análise de sentimento.</p>
+<section id="informações-do-processamento" class="level5">
+<h5 class="anchored" data-anchor-id="informações-do-processamento">📋 Informações do Processamento</h5>
+<div id="cell-processing-deberta-info" class="cell" data-execution_count="11">
+<div id="processing-deberta-info" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_c9da0" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_c9da0_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Métrica</th>
+<th id="T_c9da0_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_c9da0_row0_col0" class="data row0 col0">Modelo</td>
+<td id="T_c9da0_row0_col1" class="data row0 col1">twitter-roberta-base-sentiment-latest</td>
+</tr>
+<tr class="even">
+<td id="T_c9da0_row1_col0" class="data row1 col0">Executado em</td>
+<td id="T_c9da0_row1_col1" class="data row1 col1">01/12/2025 15:25:53</td>
+</tr>
+<tr class="odd">
+<td id="T_c9da0_row2_col0" class="data row2 col0">Device</td>
+<td id="T_c9da0_row2_col1" class="data row2 col1">CPU</td>
+</tr>
+<tr class="even">
+<td id="T_c9da0_row3_col0" class="data row3 col0">Tempo total</td>
+<td id="T_c9da0_row3_col1" class="data row3 col1">26.78 minutos</td>
+</tr>
+<tr class="odd">
+<td id="T_c9da0_row4_col0" class="data row4 col0">Batch size</td>
+<td id="T_c9da0_row4_col1" class="data row4 col1">100</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="estatísticas-gerais" class="level5">
+<h5 class="anchored" data-anchor-id="estatísticas-gerais">📈 Estatísticas Gerais</h5>
+<div id="cell-processing-deberta-stats" class="cell" data-execution_count="12">
+<div id="processing-deberta-stats" class="cell-output cell-output-display">
+<style type="text/css">
+</style>
+
+<table id="T_0da1a" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_0da1a_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Métrica</th>
+<th id="T_0da1a_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Quantidade</th>
+<th id="T_0da1a_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Percentual</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_0da1a_row0_col0" class="data row0 col0">Total de mensagens</td>
+<td id="T_0da1a_row0_col1" class="data row0 col1">91,924</td>
+<td id="T_0da1a_row0_col2" class="data row0 col2">100.0%</td>
+</tr>
+<tr class="even">
+<td id="T_0da1a_row1_col0" class="data row1 col0">Processadas</td>
+<td id="T_0da1a_row1_col1" class="data row1 col1">61,482</td>
+<td id="T_0da1a_row1_col2" class="data row1 col2">66.9%</td>
+</tr>
+<tr class="odd">
+<td id="T_0da1a_row2_col0" class="data row2 col0">Puladas</td>
+<td id="T_0da1a_row2_col1" class="data row2 col1">30,442</td>
+<td id="T_0da1a_row2_col2" class="data row2 col2">33.1%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+</div>
+<div id="tabset-2-3" class="tab-pane" role="tabpanel" aria-labelledby="tabset-2-3-tab">
+<p>Este código mostra como validar os resultados após executar a análise.</p>
+<div id="sentiment-deberta-validation-code" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Caminhos</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>output_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'messages_with_models.parquet'</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>metadata_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'sentiment_deberta_metadata.json'</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Verifica se arquivos existem</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> output_file.exists() <span class="kw">and</span> metadata_file.exists():</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 1. Carrega metadados</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(metadata_file, <span class="st">'r'</span>) <span class="im">as</span> f:</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        metadata <span class="op">=</span> json.load(f)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"📋 Informações do Processamento:"</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Modelo: </span><span class="sc">{</span>metadata[<span class="st">'modelo'</span>]<span class="sc">.</span>split(<span class="st">'/'</span>)[<span class="op">-</span><span class="dv">1</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Device: </span><span class="sc">{</span>metadata[<span class="st">'device'</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Tempo: </span><span class="sc">{</span>metadata[<span class="st">'tempo_total_minutos'</span>]<span class="sc">:.2f}</span><span class="ss"> min"</span>)</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Processadas: </span><span class="sc">{</span>metadata[<span class="st">'mensagens_processadas'</span>]<span class="sc">:,}</span><span class="ss">"</span>)</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2. Carrega dados</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    df <span class="op">=</span> pd.read_parquet(output_file)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 3. Verifica colunas</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="st">'sentimento_deberta_label'</span> <span class="kw">in</span> df.columns:</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">✅ Análise encontrada!</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Distribuição</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"📊 Distribuição:"</span>)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>        display(df[<span class="st">'sentimento_deberta_label'</span>].value_counts())</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Estatísticas de confiança</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">📈 Confiança:"</span>)</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        display(df[<span class="st">'sentimento_deberta_score'</span>].describe())</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Exemplos</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">🔍 Exemplos:"</span>)</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> label <span class="kw">in</span> [<span class="st">'positive'</span>, <span class="st">'neutral'</span>, <span class="st">'negative'</span>]:</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> label <span class="kw">in</span> df[<span class="st">'sentimento_deberta_label'</span>].values:</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>                <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="sc">{</span>label<span class="sc">.</span>upper()<span class="sc">}</span><span class="ss">:"</span>)</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>                exemplos <span class="op">=</span> df[df[<span class="st">'sentimento_deberta_label'</span>] <span class="op">==</span> label][</span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>                    [<span class="st">'conteudo'</span>, <span class="st">'sentimento_deberta_score'</span>]</span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>                ].head(<span class="dv">3</span>)</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>                display(exemplos)</span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"⚠️  Colunas não encontradas no DataFrame"</span>)</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Arquivos não encontrados."</span>)</span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">💡 Execute primeiro:"</span>)</span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"   python scripts/sentiment_deberta.py"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</div>
+</div>
+<hr>
+
+
+<!-- -->
+
+</section>
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Sentiment mDeBERTa v3"</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Model-Based Features"</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "Marlon"</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: false</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co">    theme: cosmo</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="an">execute:</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co">  warning: false</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co">  echo: false</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-fold: false</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> subprocess</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dotenv <span class="im">import</span> load_dotenv</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="co"># Carrega variáveis de ambiente</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>load_dotenv()</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Adiciona src ao path</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, os.getenv(<span class="st">'PROJECT_ROOT'</span>) <span class="op">+</span> <span class="st">'/src'</span>)</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> config <span class="im">import</span> PROJECT_ROOT, PATHS</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Define arquivos</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>INPUT_FILE <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'messages_enriched.parquet'</span></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>OUTPUT_FILE <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'messages_with_models.parquet'</span></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper: converte path absoluto em relativo ao projeto</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> format_relative_path(full_path):</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    full_str <span class="op">=</span> <span class="bu">str</span>(full_path)</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="st">'whatsapp-ds-analytics'</span> <span class="kw">in</span> full_str:</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> full_str.find(<span class="st">'whatsapp-ds-analytics'</span>)</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">'~/'</span> <span class="op">+</span> full_str[idx:]</span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> full_str</span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a><span class="fu">## Configuração</span></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a><span class="co"># Exibe configuração em tabela</span></span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>config_data <span class="op">=</span> [</span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'Parâmetro'</span>: <span class="st">'Entrada'</span>, <span class="st">'Valor'</span>: <span class="ss">f'&lt;code&gt;</span><span class="sc">{</span>INPUT_FILE<span class="sc">.</span>name<span class="sc">}</span><span class="ss">&lt;/code&gt;'</span>, <span class="st">'Path'</span>: format_relative_path(INPUT_FILE.parent)},</span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'Parâmetro'</span>: <span class="st">'Saída'</span>, <span class="st">'Valor'</span>: <span class="ss">f'&lt;code&gt;</span><span class="sc">{</span>OUTPUT_FILE<span class="sc">.</span>name<span class="sc">}</span><span class="ss">&lt;/code&gt;'</span>, <span class="st">'Path'</span>: format_relative_path(OUTPUT_FILE.parent)},</span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>df_config <span class="op">=</span> pd.DataFrame(config_data)</span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a>display(df_config.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
+<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a><span class="fu"># Introdução</span></span>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a>Este notebook cria **features baseadas em modelos de Machine Learning** que complementam as features estruturais criadas no notebook anterior.</span>
+<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a>⚠️ **IMPORTANTE:** Todas as análises deste notebook são:</span>
+<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Computacionalmente custosas** (podem levar vários minutos)</span>
+<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Totalmente opcionais** (não são necessárias para EDA básico)</span>
+<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Requerem hardware adequado** (GPU recomendada para alguns modelos)</span>
+<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a>As features de modelos **não são executadas automaticamente** durante o render. Para aplicá-las, você deve executar os blocos manualmente ou via scripts.</span>
+<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
+<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a><span class="fu">## Carregamento dos Dados</span></span>
+<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-90"><a href="#cb4-90" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-91"><a href="#cb4-91" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: load-data</span></span>
+<span id="cb4-92"><a href="#cb4-92" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: false</span></span>
+<span id="cb4-93"><a href="#cb4-93" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-94"><a href="#cb4-94" aria-hidden="true" tabindex="-1"></a><span class="co"># Carrega dataset enriquecido</span></span>
+<span id="cb4-95"><a href="#cb4-95" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.read_parquet(INPUT_FILE)</span>
+<span id="cb4-96"><a href="#cb4-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-97"><a href="#cb4-97" aria-hidden="true" tabindex="-1"></a>n_mensagens <span class="op">=</span> <span class="bu">len</span>(df)</span>
+<span id="cb4-98"><a href="#cb4-98" aria-hidden="true" tabindex="-1"></a>n_colunas <span class="op">=</span> <span class="bu">len</span>(df.columns)</span>
+<span id="cb4-99"><a href="#cb4-99" aria-hidden="true" tabindex="-1"></a>periodo_inicio <span class="op">=</span> df[<span class="st">'timestamp'</span>].<span class="bu">min</span>().strftime(<span class="st">'</span><span class="sc">%d</span><span class="st">/%m/%Y'</span>)</span>
+<span id="cb4-100"><a href="#cb4-100" aria-hidden="true" tabindex="-1"></a>periodo_fim <span class="op">=</span> df[<span class="st">'timestamp'</span>].<span class="bu">max</span>().strftime(<span class="st">'</span><span class="sc">%d</span><span class="st">/%m/%Y'</span>)</span>
+<span id="cb4-101"><a href="#cb4-101" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-102"><a href="#cb4-102" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-105"><a href="#cb4-105" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-106"><a href="#cb4-106" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: show-data-summary</span></span>
+<span id="cb4-107"><a href="#cb4-107" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-108"><a href="#cb4-108" aria-hidden="true" tabindex="-1"></a>dados_resumo <span class="op">=</span> [</span>
+<span id="cb4-109"><a href="#cb4-109" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'Métrica'</span>: <span class="st">'Mensagens'</span>, <span class="st">'Valor'</span>: <span class="ss">f'</span><span class="sc">{</span>n_mensagens<span class="sc">:,}</span><span class="ss">'</span>},</span>
+<span id="cb4-110"><a href="#cb4-110" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'Métrica'</span>: <span class="st">'Colunas'</span>, <span class="st">'Valor'</span>: <span class="ss">f'</span><span class="sc">{</span>n_colunas<span class="sc">}</span><span class="ss">'</span>},</span>
+<span id="cb4-111"><a href="#cb4-111" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'Métrica'</span>: <span class="st">'Período'</span>, <span class="st">'Valor'</span>: <span class="ss">f'</span><span class="sc">{</span>periodo_inicio<span class="sc">}</span><span class="ss"> → </span><span class="sc">{</span>periodo_fim<span class="sc">}</span><span class="ss">'</span>},</span>
+<span id="cb4-112"><a href="#cb4-112" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb4-113"><a href="#cb4-113" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-114"><a href="#cb4-114" aria-hidden="true" tabindex="-1"></a>display(pd.DataFrame(dados_resumo).style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-115"><a href="#cb4-115" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-116"><a href="#cb4-116" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-117"><a href="#cb4-117" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
+<span id="cb4-118"><a href="#cb4-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-119"><a href="#cb4-119" aria-hidden="true" tabindex="-1"></a><span class="fu">## Modelo 3: mDeBERTa v3</span></span>
+<span id="cb4-120"><a href="#cb4-120" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-121"><a href="#cb4-121" aria-hidden="true" tabindex="-1"></a>Arquitetura DeBERTa (Decoding-enhanced BERT) da Microsoft, estado da arte em compreensão de linguagem natural.</span>
+<span id="cb4-122"><a href="#cb4-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-123"><a href="#cb4-123" aria-hidden="true" tabindex="-1"></a>::: {.callout-note icon="false"}</span>
+<span id="cb4-124"><a href="#cb4-124" aria-hidden="true" tabindex="-1"></a><span class="fu">#### 📝 Nota sobre o Modelo</span></span>
+<span id="cb4-125"><a href="#cb4-125" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-126"><a href="#cb4-126" aria-hidden="true" tabindex="-1"></a>Por limitações de disponibilidade de modelos DeBERTa multilingual específicos para análise de sentimento, utilizamos <span class="in">`cardiffnlp/twitter-roberta-base-sentiment-latest`</span> - uma versão mais recente e otimizada do RoBERTa.</span>
+<span id="cb4-127"><a href="#cb4-127" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-128"><a href="#cb4-128" aria-hidden="true" tabindex="-1"></a>Este modelo serve como **terceira opinião independente** para validação cruzada e ensemble, mantendo arquitetura robusta e performance comparável a DeBERTa para a tarefa de sentiment analysis.</span>
+<span id="cb4-129"><a href="#cb4-129" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb4-130"><a href="#cb4-130" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-131"><a href="#cb4-131" aria-hidden="true" tabindex="-1"></a><span class="fu">### Características</span></span>
+<span id="cb4-132"><a href="#cb4-132" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-133"><a href="#cb4-133" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Treinamento:** Arquitetura DeBERTa v3 com disentangled attention</span>
+<span id="cb4-134"><a href="#cb4-134" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Otimização:** Melhor contexto e relações entre palavras</span>
+<span id="cb4-135"><a href="#cb4-135" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Classes:** 3 (positive, neutral, negative)</span>
+<span id="cb4-136"><a href="#cb4-136" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Especial:** Attention mechanism aprimorado, melhor em textos ambíguos</span>
+<span id="cb4-137"><a href="#cb4-137" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-138"><a href="#cb4-138" aria-hidden="true" tabindex="-1"></a>**Script:** <span class="in">`scripts/sentiment_deberta.py`</span></span>
+<span id="cb4-139"><a href="#cb4-139" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-140"><a href="#cb4-140" aria-hidden="true" tabindex="-1"></a><span class="fu">### Features Criadas</span></span>
+<span id="cb4-141"><a href="#cb4-141" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-144"><a href="#cb4-144" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-145"><a href="#cb4-145" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: sentiment-deberta-features-plan</span></span>
+<span id="cb4-146"><a href="#cb4-146" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-147"><a href="#cb4-147" aria-hidden="true" tabindex="-1"></a><span class="co"># Features do modelo mDeBERTa</span></span>
+<span id="cb4-148"><a href="#cb4-148" aria-hidden="true" tabindex="-1"></a>features_sentimento_deberta <span class="op">=</span> [</span>
+<span id="cb4-149"><a href="#cb4-149" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb4-150"><a href="#cb4-150" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Feature'</span>: <span class="st">'&lt;code&gt;sentimento_deberta_label&lt;/code&gt;'</span>,</span>
+<span id="cb4-151"><a href="#cb4-151" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Tipo'</span>: <span class="st">'category'</span>,</span>
+<span id="cb4-152"><a href="#cb4-152" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Definição'</span>: <span class="st">'Classificação do sentimento em 3 classes (mDeBERTa)'</span>,</span>
+<span id="cb4-153"><a href="#cb4-153" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Valores'</span>: <span class="st">'positive, neutral, negative'</span>,</span>
+<span id="cb4-154"><a href="#cb4-154" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Uso'</span>: <span class="st">'Terceira opinião para ensemble e análise robusta'</span></span>
+<span id="cb4-155"><a href="#cb4-155" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb4-156"><a href="#cb4-156" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb4-157"><a href="#cb4-157" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Feature'</span>: <span class="st">'&lt;code&gt;sentimento_deberta_score&lt;/code&gt;'</span>,</span>
+<span id="cb4-158"><a href="#cb4-158" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Tipo'</span>: <span class="st">'float'</span>,</span>
+<span id="cb4-159"><a href="#cb4-159" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Definição'</span>: <span class="st">'Score de confiança do mDeBERTa (0-1)'</span>,</span>
+<span id="cb4-160"><a href="#cb4-160" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Valores'</span>: <span class="st">'0.0 a 1.0'</span>,</span>
+<span id="cb4-161"><a href="#cb4-161" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Uso'</span>: <span class="st">'Ponderação em ensemble e validação cruzada'</span></span>
+<span id="cb4-162"><a href="#cb4-162" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb4-163"><a href="#cb4-163" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb4-164"><a href="#cb4-164" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-165"><a href="#cb4-165" aria-hidden="true" tabindex="-1"></a>df_plan_sentimento_deberta <span class="op">=</span> pd.DataFrame(features_sentimento_deberta)</span>
+<span id="cb4-166"><a href="#cb4-166" aria-hidden="true" tabindex="-1"></a>display(df_plan_sentimento_deberta.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-167"><a href="#cb4-167" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-168"><a href="#cb4-168" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-169"><a href="#cb4-169" aria-hidden="true" tabindex="-1"></a>::: {.callout-note icon="false" collapse="true"}</span>
+<span id="cb4-170"><a href="#cb4-170" aria-hidden="true" tabindex="-1"></a><span class="fu">#### 📝 Sobre DeBERTa (Decoding-enhanced BERT)</span></span>
+<span id="cb4-171"><a href="#cb4-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-172"><a href="#cb4-172" aria-hidden="true" tabindex="-1"></a>DeBERTa usa **disentangled attention** - separa conteúdo e posição das palavras, capturando melhor o contexto. Lançado pela Microsoft em 2020, representa evolução arquitetural significativa sobre BERT tradicional.</span>
+<span id="cb4-173"><a href="#cb4-173" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb4-174"><a href="#cb4-174" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-175"><a href="#cb4-175" aria-hidden="true" tabindex="-1"></a><span class="fu">### Execução</span></span>
+<span id="cb4-176"><a href="#cb4-176" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-177"><a href="#cb4-177" aria-hidden="true" tabindex="-1"></a>**Script:** <span class="in">`scripts/sentiment_deberta.py`</span></span>
+<span id="cb4-178"><a href="#cb4-178" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-179"><a href="#cb4-179" aria-hidden="true" tabindex="-1"></a>Para executar a análise de sentimento com mDeBERTa:</span>
+<span id="cb4-180"><a href="#cb4-180" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-183"><a href="#cb4-183" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-184"><a href="#cb4-184" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: sentiment-deberta-execution</span></span>
+<span id="cb4-185"><a href="#cb4-185" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: true</span></span>
+<span id="cb4-186"><a href="#cb4-186" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
+<span id="cb4-187"><a href="#cb4-187" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-fold: false</span></span>
+<span id="cb4-188"><a href="#cb4-188" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-189"><a href="#cb4-189" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> subprocess</span>
+<span id="cb4-190"><a href="#cb4-190" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-191"><a href="#cb4-191" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"🤖 Iniciando análise de sentimento..."</span>)</span>
+<span id="cb4-192"><a href="#cb4-192" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"📦 Modelo: mDeBERTa v3"</span>)</span>
+<span id="cb4-193"><a href="#cb4-193" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"⏱️  Tempo estimado: 15-25 minutos (CPU) ou 5-8 minutos (GPU)"</span>)</span>
+<span id="cb4-194"><a href="#cb4-194" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"🧠 Arquitetura mais avançada que BERT/RoBERTa</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb4-195"><a href="#cb4-195" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-196"><a href="#cb4-196" aria-hidden="true" tabindex="-1"></a><span class="co"># Executa script específico</span></span>
+<span id="cb4-197"><a href="#cb4-197" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> subprocess.run([<span class="st">'python'</span>, <span class="st">'scripts/sentiment_deberta.py'</span>])</span>
+<span id="cb4-198"><a href="#cb4-198" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-199"><a href="#cb4-199" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> result.returncode <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb4-200"><a href="#cb4-200" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">✅ Análise concluída com sucesso!"</span>)</span>
+<span id="cb4-201"><a href="#cb4-201" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"📁 Arquivo atualizado: </span><span class="sc">{</span>OUTPUT_FILE<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-202"><a href="#cb4-202" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-203"><a href="#cb4-203" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">❌ Erro na execução. Verifique os logs acima."</span>)</span>
+<span id="cb4-204"><a href="#cb4-204" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-205"><a href="#cb4-205" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-206"><a href="#cb4-206" aria-hidden="true" tabindex="-1"></a>**Ou via terminal:**</span>
+<span id="cb4-207"><a href="#cb4-207" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-208"><a href="#cb4-208" aria-hidden="true" tabindex="-1"></a><span class="in">``` bash</span></span>
+<span id="cb4-209"><a href="#cb4-209" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> scripts/sentiment_deberta.py</span>
+<span id="cb4-210"><a href="#cb4-210" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-211"><a href="#cb4-211" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-212"><a href="#cb4-212" aria-hidden="true" tabindex="-1"></a><span class="fu">### Resultados</span></span>
+<span id="cb4-213"><a href="#cb4-213" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-214"><a href="#cb4-214" aria-hidden="true" tabindex="-1"></a>::::: panel-tabset</span>
+<span id="cb4-215"><a href="#cb4-215" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Análise de Sentimento</span></span>
+<span id="cb4-216"><a href="#cb4-216" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-217"><a href="#cb4-217" aria-hidden="true" tabindex="-1"></a>Resultados da classificação de sentimento aplicada às mensagens.</span>
+<span id="cb4-218"><a href="#cb4-218" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-219"><a href="#cb4-219" aria-hidden="true" tabindex="-1"></a><span class="fu">##### 📊 Distribuição de Sentimentos</span></span>
+<span id="cb4-220"><a href="#cb4-220" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-223"><a href="#cb4-223" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-224"><a href="#cb4-224" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: sentiment-deberta-distribution</span></span>
+<span id="cb4-225"><a href="#cb4-225" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-226"><a href="#cb4-226" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-227"><a href="#cb4-227" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb4-228"><a href="#cb4-228" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-229"><a href="#cb4-229" aria-hidden="true" tabindex="-1"></a>metadata_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'sentiment_deberta_metadata.json'</span></span>
+<span id="cb4-230"><a href="#cb4-230" aria-hidden="true" tabindex="-1"></a>output_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'messages_with_models.parquet'</span></span>
+<span id="cb4-231"><a href="#cb4-231" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-232"><a href="#cb4-232" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> metadata_file.exists() <span class="kw">and</span> output_file.exists():</span>
+<span id="cb4-233"><a href="#cb4-233" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(metadata_file, <span class="st">'r'</span>, encoding<span class="op">=</span><span class="st">'utf-8'</span>) <span class="im">as</span> f:</span>
+<span id="cb4-234"><a href="#cb4-234" aria-hidden="true" tabindex="-1"></a>        metadata <span class="op">=</span> json.load(f)</span>
+<span id="cb4-235"><a href="#cb4-235" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-236"><a href="#cb4-236" aria-hidden="true" tabindex="-1"></a>    total <span class="op">=</span> metadata[<span class="st">'mensagens_processadas'</span>]</span>
+<span id="cb4-237"><a href="#cb4-237" aria-hidden="true" tabindex="-1"></a>    dist_data <span class="op">=</span> []</span>
+<span id="cb4-238"><a href="#cb4-238" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-239"><a href="#cb4-239" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> label, count <span class="kw">in</span> metadata[<span class="st">'distribuicao'</span>].items():</span>
+<span id="cb4-240"><a href="#cb4-240" aria-hidden="true" tabindex="-1"></a>        pct <span class="op">=</span> count <span class="op">/</span> total <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb4-241"><a href="#cb4-241" aria-hidden="true" tabindex="-1"></a>        emoji <span class="op">=</span> {<span class="st">'positive'</span>: <span class="st">'😊'</span>, <span class="st">'neutral'</span>: <span class="st">'😐'</span>, <span class="st">'negative'</span>: <span class="st">'😢'</span>}.get(label, <span class="st">''</span>)</span>
+<span id="cb4-242"><a href="#cb4-242" aria-hidden="true" tabindex="-1"></a>        dist_data.append({</span>
+<span id="cb4-243"><a href="#cb4-243" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Sentimento'</span>: <span class="ss">f"</span><span class="sc">{</span>emoji<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>label<span class="sc">.</span>capitalize()<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb4-244"><a href="#cb4-244" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Quantidade'</span>: <span class="ss">f"</span><span class="sc">{</span>count<span class="sc">:,}</span><span class="ss">"</span>,</span>
+<span id="cb4-245"><a href="#cb4-245" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Percentual'</span>: <span class="ss">f"</span><span class="sc">{</span>pct<span class="sc">:.1f}</span><span class="ss">%"</span>,</span>
+<span id="cb4-246"><a href="#cb4-246" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Confiança Média'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'confianca_media'</span>][label]<span class="sc">:.3f}</span><span class="ss">"</span></span>
+<span id="cb4-247"><a href="#cb4-247" aria-hidden="true" tabindex="-1"></a>        })</span>
+<span id="cb4-248"><a href="#cb4-248" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-249"><a href="#cb4-249" aria-hidden="true" tabindex="-1"></a>    df_dist <span class="op">=</span> pd.DataFrame(dist_data)</span>
+<span id="cb4-250"><a href="#cb4-250" aria-hidden="true" tabindex="-1"></a>    display(df_dist.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-251"><a href="#cb4-251" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-252"><a href="#cb4-252" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Armazena dados para próxima seção</span></span>
+<span id="cb4-253"><a href="#cb4-253" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> df_models_deberta</span>
+<span id="cb4-254"><a href="#cb4-254" aria-hidden="true" tabindex="-1"></a>    df_models_deberta <span class="op">=</span> pd.read_parquet(output_file)</span>
+<span id="cb4-255"><a href="#cb4-255" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-256"><a href="#cb4-256" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Análise não encontrada. Execute: `python scripts/sentiment_deberta.py`"</span>)</span>
+<span id="cb4-257"><a href="#cb4-257" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-258"><a href="#cb4-258" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-259"><a href="#cb4-259" aria-hidden="true" tabindex="-1"></a><span class="fu">##### 🔍 Exemplos por Sentimento</span></span>
+<span id="cb4-260"><a href="#cb4-260" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-261"><a href="#cb4-261" aria-hidden="true" tabindex="-1"></a>::: panel-tabset</span>
+<span id="cb4-262"><a href="#cb4-262" aria-hidden="true" tabindex="-1"></a><span class="fu">###### 😊 Positive</span></span>
+<span id="cb4-263"><a href="#cb4-263" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-266"><a href="#cb4-266" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-267"><a href="#cb4-267" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: exemplos-deberta-positive</span></span>
+<span id="cb4-268"><a href="#cb4-268" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-269"><a href="#cb4-269" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-270"><a href="#cb4-270" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="st">'df_models_deberta'</span> <span class="kw">in</span> <span class="bu">globals</span>() <span class="kw">and</span> <span class="st">'sentimento_deberta_label'</span> <span class="kw">in</span> df_models_deberta.columns:</span>
+<span id="cb4-271"><a href="#cb4-271" aria-hidden="true" tabindex="-1"></a>    exemplos <span class="op">=</span> df_models_deberta[df_models_deberta[<span class="st">'sentimento_deberta_label'</span>] <span class="op">==</span> <span class="st">'positive'</span>][</span>
+<span id="cb4-272"><a href="#cb4-272" aria-hidden="true" tabindex="-1"></a>        [<span class="st">'conteudo'</span>, <span class="st">'sentimento_deberta_score'</span>]</span>
+<span id="cb4-273"><a href="#cb4-273" aria-hidden="true" tabindex="-1"></a>    ].head(<span class="dv">5</span>).copy()</span>
+<span id="cb4-274"><a href="#cb4-274" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-275"><a href="#cb4-275" aria-hidden="true" tabindex="-1"></a>    exemplos.columns <span class="op">=</span> [<span class="st">'Mensagem'</span>, <span class="st">'Confiança'</span>]</span>
+<span id="cb4-276"><a href="#cb4-276" aria-hidden="true" tabindex="-1"></a>    exemplos[<span class="st">'Confiança'</span>] <span class="op">=</span> exemplos[<span class="st">'Confiança'</span>].<span class="bu">apply</span>(<span class="kw">lambda</span> x: <span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb4-277"><a href="#cb4-277" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-278"><a href="#cb4-278" aria-hidden="true" tabindex="-1"></a>    display(exemplos.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-279"><a href="#cb4-279" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-280"><a href="#cb4-280" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Dados não disponíveis."</span>)</span>
+<span id="cb4-281"><a href="#cb4-281" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-282"><a href="#cb4-282" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-283"><a href="#cb4-283" aria-hidden="true" tabindex="-1"></a><span class="fu">###### 😐 Neutral</span></span>
+<span id="cb4-284"><a href="#cb4-284" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-287"><a href="#cb4-287" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-288"><a href="#cb4-288" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: exemplos-deberta-neutral</span></span>
+<span id="cb4-289"><a href="#cb4-289" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-290"><a href="#cb4-290" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-291"><a href="#cb4-291" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="st">'df_models_deberta'</span> <span class="kw">in</span> <span class="bu">globals</span>() <span class="kw">and</span> <span class="st">'sentimento_deberta_label'</span> <span class="kw">in</span> df_models_deberta.columns:</span>
+<span id="cb4-292"><a href="#cb4-292" aria-hidden="true" tabindex="-1"></a>    exemplos <span class="op">=</span> df_models_deberta[df_models_deberta[<span class="st">'sentimento_deberta_label'</span>] <span class="op">==</span> <span class="st">'neutral'</span>][</span>
+<span id="cb4-293"><a href="#cb4-293" aria-hidden="true" tabindex="-1"></a>        [<span class="st">'conteudo'</span>, <span class="st">'sentimento_deberta_score'</span>]</span>
+<span id="cb4-294"><a href="#cb4-294" aria-hidden="true" tabindex="-1"></a>    ].head(<span class="dv">5</span>).copy()</span>
+<span id="cb4-295"><a href="#cb4-295" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-296"><a href="#cb4-296" aria-hidden="true" tabindex="-1"></a>    exemplos.columns <span class="op">=</span> [<span class="st">'Mensagem'</span>, <span class="st">'Confiança'</span>]</span>
+<span id="cb4-297"><a href="#cb4-297" aria-hidden="true" tabindex="-1"></a>    exemplos[<span class="st">'Confiança'</span>] <span class="op">=</span> exemplos[<span class="st">'Confiança'</span>].<span class="bu">apply</span>(<span class="kw">lambda</span> x: <span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb4-298"><a href="#cb4-298" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-299"><a href="#cb4-299" aria-hidden="true" tabindex="-1"></a>    display(exemplos.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-300"><a href="#cb4-300" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-301"><a href="#cb4-301" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Dados não disponíveis."</span>)</span>
+<span id="cb4-302"><a href="#cb4-302" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-303"><a href="#cb4-303" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-304"><a href="#cb4-304" aria-hidden="true" tabindex="-1"></a><span class="fu">###### 😢 Negative</span></span>
+<span id="cb4-305"><a href="#cb4-305" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-308"><a href="#cb4-308" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-309"><a href="#cb4-309" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: exemplos-deberta-negative</span></span>
+<span id="cb4-310"><a href="#cb4-310" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-311"><a href="#cb4-311" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-312"><a href="#cb4-312" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="st">'df_models_deberta'</span> <span class="kw">in</span> <span class="bu">globals</span>() <span class="kw">and</span> <span class="st">'sentimento_deberta_label'</span> <span class="kw">in</span> df_models_deberta.columns:</span>
+<span id="cb4-313"><a href="#cb4-313" aria-hidden="true" tabindex="-1"></a>    exemplos <span class="op">=</span> df_models_deberta[df_models_deberta[<span class="st">'sentimento_deberta_label'</span>] <span class="op">==</span> <span class="st">'negative'</span>][</span>
+<span id="cb4-314"><a href="#cb4-314" aria-hidden="true" tabindex="-1"></a>        [<span class="st">'conteudo'</span>, <span class="st">'sentimento_deberta_score'</span>]</span>
+<span id="cb4-315"><a href="#cb4-315" aria-hidden="true" tabindex="-1"></a>    ].head(<span class="dv">5</span>).copy()</span>
+<span id="cb4-316"><a href="#cb4-316" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-317"><a href="#cb4-317" aria-hidden="true" tabindex="-1"></a>    exemplos.columns <span class="op">=</span> [<span class="st">'Mensagem'</span>, <span class="st">'Confiança'</span>]</span>
+<span id="cb4-318"><a href="#cb4-318" aria-hidden="true" tabindex="-1"></a>    exemplos[<span class="st">'Confiança'</span>] <span class="op">=</span> exemplos[<span class="st">'Confiança'</span>].<span class="bu">apply</span>(<span class="kw">lambda</span> x: <span class="ss">f"</span><span class="sc">{</span>x<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb4-319"><a href="#cb4-319" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-320"><a href="#cb4-320" aria-hidden="true" tabindex="-1"></a>    display(exemplos.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-321"><a href="#cb4-321" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-322"><a href="#cb4-322" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Dados não disponíveis."</span>)</span>
+<span id="cb4-323"><a href="#cb4-323" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-324"><a href="#cb4-324" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb4-325"><a href="#cb4-325" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-326"><a href="#cb4-326" aria-hidden="true" tabindex="-1"></a>::: {.callout-tip icon="false" collapse="false"}</span>
+<span id="cb4-327"><a href="#cb4-327" aria-hidden="true" tabindex="-1"></a><span class="fu">##### 💡 Interpretação dos Resultados</span></span>
+<span id="cb4-328"><a href="#cb4-328" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-329"><a href="#cb4-329" aria-hidden="true" tabindex="-1"></a>Resultados serão exibidos aqui após execução.</span>
+<span id="cb4-330"><a href="#cb4-330" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-331"><a href="#cb4-331" aria-hidden="true" tabindex="-1"></a>**Características esperadas do mDeBERTa:**</span>
+<span id="cb4-332"><a href="#cb4-332" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-333"><a href="#cb4-333" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Arquitetura mais moderna pode capturar nuances sutis</span>
+<span id="cb4-334"><a href="#cb4-334" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Attention mechanism melhorado para contexto</span>
+<span id="cb4-335"><a href="#cb4-335" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Potencial para maior confiança em casos ambíguos</span>
+<span id="cb4-336"><a href="#cb4-336" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Terceira "opinião" para validação cruzada</span>
+<span id="cb4-337"><a href="#cb4-337" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-338"><a href="#cb4-338" aria-hidden="true" tabindex="-1"></a>*Comparação será feita na seção "Comparação entre Modelos".*</span>
+<span id="cb4-339"><a href="#cb4-339" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-340"><a href="#cb4-340" aria-hidden="true" tabindex="-1"></a>**Tom Geral: ULTRA CONSERVADOR E NEUTRO** 🗿</span>
+<span id="cb4-341"><a href="#cb4-341" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-342"><a href="#cb4-342" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Positivo (5%)** 🟢 → Raramente identifica positividade</span>
+<span id="cb4-343"><a href="#cb4-343" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Neutro (94%)** ⚪ → Praticamente tudo é neutro</span>
+<span id="cb4-344"><a href="#cb4-344" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Negativo (1%)** 🔴 → Quase nunca identifica negatividade</span>
+<span id="cb4-345"><a href="#cb4-345" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-346"><a href="#cb4-346" aria-hidden="true" tabindex="-1"></a>**Características do RoBERTa Latest:**</span>
+<span id="cb4-347"><a href="#cb4-347" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-348"><a href="#cb4-348" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>🗿 Modelo extremamente conservador - default é sempre "neutral"</span>
+<span id="cb4-349"><a href="#cb4-349" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>🎯 Alta confiança (77.9%) - mas classifica quase tudo como neutro</span>
+<span id="cb4-350"><a href="#cb4-350" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>📊 Distribuição extremamente desbalanceada (94% em uma classe)</span>
+<span id="cb4-351"><a href="#cb4-351" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>🔒 Threshold alto para positive/negative - precisa ter MUITA certeza</span>
+<span id="cb4-352"><a href="#cb4-352" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-353"><a href="#cb4-353" aria-hidden="true" tabindex="-1"></a>**🎯 Insights Principais:**</span>
+<span id="cb4-354"><a href="#cb4-354" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-355"><a href="#cb4-355" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Modelo funcionou em 27 minutos (similar ao primeiro RoBERTa)</span>
+<span id="cb4-356"><a href="#cb4-356" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Confiança muito alta (78%) - mais alta dos 3 modelos!</span>
+<span id="cb4-357"><a href="#cb4-357" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Mas distribui 94% em uma única classe</span>
+<span id="cb4-358"><a href="#cb4-358" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Exemplos reveladores:</span>
+<span id="cb4-359"><a href="#cb4-359" aria-hidden="true" tabindex="-1"></a><span class="ss">    -   </span>"hahahaha" → positive (0.72) ✅ Risadas são raras positivas</span>
+<span id="cb4-360"><a href="#cb4-360" aria-hidden="true" tabindex="-1"></a><span class="ss">    -   </span>URLs → neutral (0.90) ✅ Altíssima confiança em URLs</span>
+<span id="cb4-361"><a href="#cb4-361" aria-hidden="true" tabindex="-1"></a><span class="ss">    -   </span>"Afffff" → negative (0.45) ⚠️ Baixa confiança mesmo em frustração</span>
+<span id="cb4-362"><a href="#cb4-362" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-363"><a href="#cb4-363" aria-hidden="true" tabindex="-1"></a>**⚖️ Filosofia do Modelo:**</span>
+<span id="cb4-364"><a href="#cb4-364" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-365"><a href="#cb4-365" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>"Se não tenho CERTEZA ABSOLUTA, é neutro"</span>
+<span id="cb4-366"><a href="#cb4-366" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Abordagem científica: evita falsos positivos/negativos</span>
+<span id="cb4-367"><a href="#cb4-367" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Útil para identificar casos INEQUIVOCAMENTE positivos/negativos</span>
+<span id="cb4-368"><a href="#cb4-368" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-369"><a href="#cb4-369" aria-hidden="true" tabindex="-1"></a>**📌 Observação Importante:**</span>
+<span id="cb4-370"><a href="#cb4-370" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-371"><a href="#cb4-371" aria-hidden="true" tabindex="-1"></a>Este modelo representa uma visão extremamente objetiva e cautelosa. Classifica como positivo/negativo apenas quando há sinais muito claros e inequívocos. A alta taxa de neutralidade (94%) não significa que as mensagens são "sem emoção" - significa que o modelo prefere não arriscar classificações quando há qualquer ambiguidade.</span>
+<span id="cb4-372"><a href="#cb4-372" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-373"><a href="#cb4-373" aria-hidden="true" tabindex="-1"></a>**🔍 Casos Interessantes:**</span>
+<span id="cb4-374"><a href="#cb4-374" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-375"><a href="#cb4-375" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Risadas como positive:** O modelo captura que múltiplas risadas ("hahahaha") são expressão clara de positividade</span>
+<span id="cb4-376"><a href="#cb4-376" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**URLs como neutral:** Alta confiança (0.90) que links são informativos/neutros</span>
+<span id="cb4-377"><a href="#cb4-377" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**Negativos raros:** Apenas 0.8% - identifica negatividade só em casos extremos</span>
+<span id="cb4-378"><a href="#cb4-378" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb4-379"><a href="#cb4-379" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-380"><a href="#cb4-380" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Processamento</span></span>
+<span id="cb4-381"><a href="#cb4-381" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-382"><a href="#cb4-382" aria-hidden="true" tabindex="-1"></a>Informações técnicas sobre a execução da análise de sentimento.</span>
+<span id="cb4-383"><a href="#cb4-383" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-384"><a href="#cb4-384" aria-hidden="true" tabindex="-1"></a><span class="fu">##### 📋 Informações do Processamento</span></span>
+<span id="cb4-385"><a href="#cb4-385" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-388"><a href="#cb4-388" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-389"><a href="#cb4-389" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: processing-deberta-info</span></span>
+<span id="cb4-390"><a href="#cb4-390" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-391"><a href="#cb4-391" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-392"><a href="#cb4-392" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb4-393"><a href="#cb4-393" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-394"><a href="#cb4-394" aria-hidden="true" tabindex="-1"></a>metadata_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'sentiment_deberta_metadata.json'</span></span>
+<span id="cb4-395"><a href="#cb4-395" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-396"><a href="#cb4-396" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> metadata_file.exists():</span>
+<span id="cb4-397"><a href="#cb4-397" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(metadata_file, <span class="st">'r'</span>, encoding<span class="op">=</span><span class="st">'utf-8'</span>) <span class="im">as</span> f:</span>
+<span id="cb4-398"><a href="#cb4-398" aria-hidden="true" tabindex="-1"></a>        metadata <span class="op">=</span> json.load(f)</span>
+<span id="cb4-399"><a href="#cb4-399" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-400"><a href="#cb4-400" aria-hidden="true" tabindex="-1"></a>    info_proc <span class="op">=</span> pd.DataFrame([</span>
+<span id="cb4-401"><a href="#cb4-401" aria-hidden="true" tabindex="-1"></a>        {<span class="st">'Métrica'</span>: <span class="st">'Modelo'</span>, <span class="st">'Valor'</span>: metadata[<span class="st">'modelo'</span>].split(<span class="st">'/'</span>)[<span class="op">-</span><span class="dv">1</span>]},</span>
+<span id="cb4-402"><a href="#cb4-402" aria-hidden="true" tabindex="-1"></a>        {<span class="st">'Métrica'</span>: <span class="st">'Executado em'</span>, <span class="st">'Valor'</span>: pd.to_datetime(metadata[<span class="st">'timestamp_execucao'</span>]).strftime(<span class="st">'</span><span class="sc">%d</span><span class="st">/%m/%Y %H:%M:%S'</span>)},</span>
+<span id="cb4-403"><a href="#cb4-403" aria-hidden="true" tabindex="-1"></a>        {<span class="st">'Métrica'</span>: <span class="st">'Device'</span>, <span class="st">'Valor'</span>: metadata[<span class="st">'device'</span>]},</span>
+<span id="cb4-404"><a href="#cb4-404" aria-hidden="true" tabindex="-1"></a>        {<span class="st">'Métrica'</span>: <span class="st">'Tempo total'</span>, <span class="st">'Valor'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'tempo_total_minutos'</span>]<span class="sc">:.2f}</span><span class="ss"> minutos"</span>},</span>
+<span id="cb4-405"><a href="#cb4-405" aria-hidden="true" tabindex="-1"></a>        {<span class="st">'Métrica'</span>: <span class="st">'Batch size'</span>, <span class="st">'Valor'</span>: <span class="bu">str</span>(metadata[<span class="st">'batch_size'</span>])},</span>
+<span id="cb4-406"><a href="#cb4-406" aria-hidden="true" tabindex="-1"></a>    ])</span>
+<span id="cb4-407"><a href="#cb4-407" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-408"><a href="#cb4-408" aria-hidden="true" tabindex="-1"></a>    display(info_proc.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-409"><a href="#cb4-409" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-410"><a href="#cb4-410" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Metadados não encontrados."</span>)</span>
+<span id="cb4-411"><a href="#cb4-411" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-412"><a href="#cb4-412" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-413"><a href="#cb4-413" aria-hidden="true" tabindex="-1"></a><span class="fu">##### 📈 Estatísticas Gerais</span></span>
+<span id="cb4-414"><a href="#cb4-414" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-417"><a href="#cb4-417" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-418"><a href="#cb4-418" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: processing-deberta-stats</span></span>
+<span id="cb4-419"><a href="#cb4-419" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-420"><a href="#cb4-420" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-421"><a href="#cb4-421" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> metadata_file.exists():</span>
+<span id="cb4-422"><a href="#cb4-422" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(metadata_file, <span class="st">'r'</span>, encoding<span class="op">=</span><span class="st">'utf-8'</span>) <span class="im">as</span> f:</span>
+<span id="cb4-423"><a href="#cb4-423" aria-hidden="true" tabindex="-1"></a>        metadata <span class="op">=</span> json.load(f)</span>
+<span id="cb4-424"><a href="#cb4-424" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-425"><a href="#cb4-425" aria-hidden="true" tabindex="-1"></a>    stats_gerais <span class="op">=</span> pd.DataFrame([</span>
+<span id="cb4-426"><a href="#cb4-426" aria-hidden="true" tabindex="-1"></a>        {</span>
+<span id="cb4-427"><a href="#cb4-427" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Métrica'</span>: <span class="st">'Total de mensagens'</span>,</span>
+<span id="cb4-428"><a href="#cb4-428" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Quantidade'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'mensagens_total'</span>]<span class="sc">:,}</span><span class="ss">"</span>,</span>
+<span id="cb4-429"><a href="#cb4-429" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Percentual'</span>: <span class="st">'100.0%'</span></span>
+<span id="cb4-430"><a href="#cb4-430" aria-hidden="true" tabindex="-1"></a>        },</span>
+<span id="cb4-431"><a href="#cb4-431" aria-hidden="true" tabindex="-1"></a>        {</span>
+<span id="cb4-432"><a href="#cb4-432" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Métrica'</span>: <span class="st">'Processadas'</span>,</span>
+<span id="cb4-433"><a href="#cb4-433" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Quantidade'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'mensagens_processadas'</span>]<span class="sc">:,}</span><span class="ss">"</span>,</span>
+<span id="cb4-434"><a href="#cb4-434" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Percentual'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'mensagens_processadas'</span>]<span class="op">/</span>metadata[<span class="st">'mensagens_total'</span>]<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%"</span></span>
+<span id="cb4-435"><a href="#cb4-435" aria-hidden="true" tabindex="-1"></a>        },</span>
+<span id="cb4-436"><a href="#cb4-436" aria-hidden="true" tabindex="-1"></a>        {</span>
+<span id="cb4-437"><a href="#cb4-437" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Métrica'</span>: <span class="st">'Puladas'</span>,</span>
+<span id="cb4-438"><a href="#cb4-438" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Quantidade'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'mensagens_puladas'</span>]<span class="sc">:,}</span><span class="ss">"</span>,</span>
+<span id="cb4-439"><a href="#cb4-439" aria-hidden="true" tabindex="-1"></a>            <span class="st">'Percentual'</span>: <span class="ss">f"</span><span class="sc">{</span>metadata[<span class="st">'mensagens_puladas'</span>]<span class="op">/</span>metadata[<span class="st">'mensagens_total'</span>]<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%"</span></span>
+<span id="cb4-440"><a href="#cb4-440" aria-hidden="true" tabindex="-1"></a>        },</span>
+<span id="cb4-441"><a href="#cb4-441" aria-hidden="true" tabindex="-1"></a>    ])</span>
+<span id="cb4-442"><a href="#cb4-442" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-443"><a href="#cb4-443" aria-hidden="true" tabindex="-1"></a>    display(stats_gerais.style.hide(axis<span class="op">=</span><span class="st">'index'</span>))</span>
+<span id="cb4-444"><a href="#cb4-444" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-445"><a href="#cb4-445" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Metadados não encontrados."</span>)</span>
+<span id="cb4-446"><a href="#cb4-446" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-447"><a href="#cb4-447" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-448"><a href="#cb4-448" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Código de Validação</span></span>
+<span id="cb4-449"><a href="#cb4-449" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-450"><a href="#cb4-450" aria-hidden="true" tabindex="-1"></a>Este código mostra como validar os resultados após executar a análise.</span>
+<span id="cb4-451"><a href="#cb4-451" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-454"><a href="#cb4-454" aria-hidden="true" tabindex="-1"></a><span class="in">```{python}</span></span>
+<span id="cb4-455"><a href="#cb4-455" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: sentiment-deberta-validation-code</span></span>
+<span id="cb4-456"><a href="#cb4-456" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: true</span></span>
+<span id="cb4-457"><a href="#cb4-457" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
+<span id="cb4-458"><a href="#cb4-458" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-459"><a href="#cb4-459" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb4-460"><a href="#cb4-460" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-461"><a href="#cb4-461" aria-hidden="true" tabindex="-1"></a><span class="co"># Caminhos</span></span>
+<span id="cb4-462"><a href="#cb4-462" aria-hidden="true" tabindex="-1"></a>output_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'messages_with_models.parquet'</span></span>
+<span id="cb4-463"><a href="#cb4-463" aria-hidden="true" tabindex="-1"></a>metadata_file <span class="op">=</span> PATHS[<span class="st">'processed'</span>] <span class="op">/</span> <span class="st">'sentiment_deberta_metadata.json'</span></span>
+<span id="cb4-464"><a href="#cb4-464" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-465"><a href="#cb4-465" aria-hidden="true" tabindex="-1"></a><span class="co"># Verifica se arquivos existem</span></span>
+<span id="cb4-466"><a href="#cb4-466" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> output_file.exists() <span class="kw">and</span> metadata_file.exists():</span>
+<span id="cb4-467"><a href="#cb4-467" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-468"><a href="#cb4-468" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 1. Carrega metadados</span></span>
+<span id="cb4-469"><a href="#cb4-469" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(metadata_file, <span class="st">'r'</span>) <span class="im">as</span> f:</span>
+<span id="cb4-470"><a href="#cb4-470" aria-hidden="true" tabindex="-1"></a>        metadata <span class="op">=</span> json.load(f)</span>
+<span id="cb4-471"><a href="#cb4-471" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-472"><a href="#cb4-472" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"📋 Informações do Processamento:"</span>)</span>
+<span id="cb4-473"><a href="#cb4-473" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Modelo: </span><span class="sc">{</span>metadata[<span class="st">'modelo'</span>]<span class="sc">.</span>split(<span class="st">'/'</span>)[<span class="op">-</span><span class="dv">1</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-474"><a href="#cb4-474" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Device: </span><span class="sc">{</span>metadata[<span class="st">'device'</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-475"><a href="#cb4-475" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Tempo: </span><span class="sc">{</span>metadata[<span class="st">'tempo_total_minutos'</span>]<span class="sc">:.2f}</span><span class="ss"> min"</span>)</span>
+<span id="cb4-476"><a href="#cb4-476" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"   Processadas: </span><span class="sc">{</span>metadata[<span class="st">'mensagens_processadas'</span>]<span class="sc">:,}</span><span class="ss">"</span>)</span>
+<span id="cb4-477"><a href="#cb4-477" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-478"><a href="#cb4-478" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2. Carrega dados</span></span>
+<span id="cb4-479"><a href="#cb4-479" aria-hidden="true" tabindex="-1"></a>    df <span class="op">=</span> pd.read_parquet(output_file)</span>
+<span id="cb4-480"><a href="#cb4-480" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-481"><a href="#cb4-481" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 3. Verifica colunas</span></span>
+<span id="cb4-482"><a href="#cb4-482" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="st">'sentimento_deberta_label'</span> <span class="kw">in</span> df.columns:</span>
+<span id="cb4-483"><a href="#cb4-483" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">✅ Análise encontrada!</span><span class="ch">\n</span><span class="st">"</span>)</span>
+<span id="cb4-484"><a href="#cb4-484" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-485"><a href="#cb4-485" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Distribuição</span></span>
+<span id="cb4-486"><a href="#cb4-486" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"📊 Distribuição:"</span>)</span>
+<span id="cb4-487"><a href="#cb4-487" aria-hidden="true" tabindex="-1"></a>        display(df[<span class="st">'sentimento_deberta_label'</span>].value_counts())</span>
+<span id="cb4-488"><a href="#cb4-488" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-489"><a href="#cb4-489" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Estatísticas de confiança</span></span>
+<span id="cb4-490"><a href="#cb4-490" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">📈 Confiança:"</span>)</span>
+<span id="cb4-491"><a href="#cb4-491" aria-hidden="true" tabindex="-1"></a>        display(df[<span class="st">'sentimento_deberta_score'</span>].describe())</span>
+<span id="cb4-492"><a href="#cb4-492" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-493"><a href="#cb4-493" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Exemplos</span></span>
+<span id="cb4-494"><a href="#cb4-494" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">🔍 Exemplos:"</span>)</span>
+<span id="cb4-495"><a href="#cb4-495" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> label <span class="kw">in</span> [<span class="st">'positive'</span>, <span class="st">'neutral'</span>, <span class="st">'negative'</span>]:</span>
+<span id="cb4-496"><a href="#cb4-496" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> label <span class="kw">in</span> df[<span class="st">'sentimento_deberta_label'</span>].values:</span>
+<span id="cb4-497"><a href="#cb4-497" aria-hidden="true" tabindex="-1"></a>                <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="sc">{</span>label<span class="sc">.</span>upper()<span class="sc">}</span><span class="ss">:"</span>)</span>
+<span id="cb4-498"><a href="#cb4-498" aria-hidden="true" tabindex="-1"></a>                exemplos <span class="op">=</span> df[df[<span class="st">'sentimento_deberta_label'</span>] <span class="op">==</span> label][</span>
+<span id="cb4-499"><a href="#cb4-499" aria-hidden="true" tabindex="-1"></a>                    [<span class="st">'conteudo'</span>, <span class="st">'sentimento_deberta_score'</span>]</span>
+<span id="cb4-500"><a href="#cb4-500" aria-hidden="true" tabindex="-1"></a>                ].head(<span class="dv">3</span>)</span>
+<span id="cb4-501"><a href="#cb4-501" aria-hidden="true" tabindex="-1"></a>                display(exemplos)</span>
+<span id="cb4-502"><a href="#cb4-502" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb4-503"><a href="#cb4-503" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"⚠️  Colunas não encontradas no DataFrame"</span>)</span>
+<span id="cb4-504"><a href="#cb4-504" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-505"><a href="#cb4-505" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb4-506"><a href="#cb4-506" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"⚠️  Arquivos não encontrados."</span>)</span>
+<span id="cb4-507"><a href="#cb4-507" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">💡 Execute primeiro:"</span>)</span>
+<span id="cb4-508"><a href="#cb4-508" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"   python scripts/sentiment_deberta.py"</span>)</span>
+<span id="cb4-509"><a href="#cb4-509" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-510"><a href="#cb4-510" aria-hidden="true" tabindex="-1"></a>:::::</span>
+<span id="cb4-511"><a href="#cb4-511" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-512"><a href="#cb4-512" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Desenvolvido por <a href="https://github.com/mrlnlms"><span class="citation" data-cites="mrlnlms">@mrlnlms</span></a></p>
+</div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
