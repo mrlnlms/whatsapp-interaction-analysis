@@ -665,4 +665,3 @@ python scripts/transcribe_media.py
 # Próximos Passos
 
 1.  [**Feature Engineering**](03-feature-engineering.qmd) — Criação de variáveis derivadas
-2.  [**EDA**](05-eda.qmd) — Análise exploratória
