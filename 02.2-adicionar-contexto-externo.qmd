@@ -1,0 +1,797 @@
+---
+title: "Contexto Externo - Encontros Presenciais"
+subtitle: "Integração de dados externos ao dataset"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    df-print: paged
+    theme: cosmo
+    number-sections: true
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+Este notebook integra **dados de encontros presenciais** ao dataset de mensagens. 
+
+A análise temporal anterior identificou que **contexto externo** (presença física vs distância) é uma **variável crítica** para entender padrões de comunicação em relacionamentos à distância.
+
+**Hipótese a validar:**
+- Quando **juntos**: Volume de mensagens ≈ 0 msgs/dia
+- Quando **separados**: Volume ≈ 200-500 msgs/dia
+- **Gaps no timeline** coincidem com encontros presenciais
+
+---
+
+# Setup
+
+## Bibliotecas
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+from datetime import datetime, timedelta
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações de visualização
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+```
+
+## Caminhos
+
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada
+INPUT_FILE = DATA_DIR / 'messages.parquet'
+
+# Arquivo de saída
+OUTPUT_FILE = DATA_DIR / 'messages_with_context.parquet'
+
+print(f"📁 Diretório: {DATA_DIR}")
+print(f"📂 Input: {INPUT_FILE.name}")
+print(f"✅ Existe: {INPUT_FILE.exists()}")
+print(f"📤 Output: {OUTPUT_FILE.name}")
+```
+
+## Carregamento
+
+```{python}
+# Carrega dataset
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Shape: {df.shape}")
+print(f"📅 Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"👥 Remetentes: {df['remetente'].unique().tolist()}")
+```
+
+---
+
+# Definição dos Encontros
+
+## Datas dos Encontros Presenciais
+
+Relacionamento à distância **SP ↔ BSB** com encontros regulares ao longo de 1 ano.
+
+```{python}
+# Define cores para visualizações
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71'
+}
+
+# ============================================================================
+# DATAS PRECISAS DAS VIAGENS
+# ============================================================================
+
+encontros = [
+    {
+        'nome': 'Chapada/BSB (1ª viagem)',
+        'inicio': '2024-12-12',
+        'fim': '2024-12-24',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': '2024-12-16',  # 1ª vez juntos
+        'marco_nome': '💕 1ª Vez Juntos'
+    },
+    {
+        'nome': 'BSB (Janeiro)',
+        'inicio': '2025-01-23',
+        'fim': '2025-01-29',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Hostel)',
+        'inicio': '2025-02-06',
+        'fim': '2025-02-10',
+        'tipo': 'Letícia @ SP',
+        'local': 'São Paulo',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (Carnaval)',
+        'inicio': '2025-02-27',
+        'fim': '2025-03-10',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': '2025-03-05',
+        'marco_nome': '🦷 Arrancou dente'
+    },
+    {
+        'nome': 'BSB (Abril-Maio)',
+        'inicio': '2025-04-16',
+        'fim': '2025-05-05',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia Sorocaba',
+        'inicio': '2025-05-17',
+        'fim': '2025-05-24',
+        'tipo': 'Letícia @ Sorocaba',
+        'local': 'Sorocaba',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'Letícia SP (Trampo)',
+        'inicio': '2025-07-21',
+        'fim': '2025-07-26',
+        'tipo': 'Letícia @ SP',
+        'local': 'São Paulo',
+        'marco_especial': None,
+        'marco_nome': None
+    },
+    {
+        'nome': 'BSB (2 meses!)',
+        'inicio': '2025-08-22',
+        'fim': '2025-10-11',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': '2025-08-22',
+        'marco_nome': '🏠 2 meses juntos'
+    },
+    {
+        'nome': 'BSB (Niver Letícia)',
+        'inicio': '2025-11-05',
+        'fim': '2025-11-19',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': '2025-11-04',
+        'marco_nome': '🎂 Aniversário Letícia'
+    },
+    {
+        'nome': 'BSB (Fim de ano!)',
+        'inicio': '2025-12-12',
+        'fim': '2026-01-04',
+        'tipo': 'Marlon @ BSB',
+        'local': 'Brasília',
+        'marco_especial': None,
+        'marco_nome': None
+    }
+]
+
+# Converte para DataFrame
+encontros_df = pd.DataFrame(encontros)
+encontros_df['inicio'] = pd.to_datetime(encontros_df['inicio'])
+encontros_df['fim'] = pd.to_datetime(encontros_df['fim'])
+encontros_df['duracao_dias'] = (encontros_df['fim'] - encontros_df['inicio']).dt.days + 1
+encontros_df['encontro_id'] = range(1, len(encontros_df) + 1)
+
+# Converte marcos especiais
+encontros_df['marco_especial'] = pd.to_datetime(encontros_df['marco_especial'], errors='coerce')
+
+print("="*80)
+print("📅 ENCONTROS REGISTRADOS")
+print("="*80)
+print(f"\nTotal de encontros: {len(encontros_df)}\n")
+print(encontros_df[['encontro_id', 'nome', 'inicio', 'fim', 'duracao_dias', 'tipo']].to_string(index=False))
+```
+
+## Estatísticas Gerais
+
+```{python}
+# Período do dataset
+periodo_inicio = df['timestamp'].min().date()
+periodo_fim = df['timestamp'].max().date()
+total_dias_dataset = (periodo_fim - periodo_inicio).days + 1
+
+# Encontros dentro do período do dataset
+encontros_no_dataset = encontros_df[
+    (encontros_df['inicio'].dt.date >= periodo_inicio) & 
+    (encontros_df['inicio'].dt.date <= periodo_fim)
+]
+
+# Calcula dias juntos no período do dataset
+dias_juntos_no_dataset = 0
+for _, encontro in encontros_no_dataset.iterrows():
+    inicio_efetivo = max(encontro['inicio'].date(), periodo_inicio)
+    fim_efetivo = min(encontro['fim'].date(), periodo_fim)
+    if inicio_efetivo <= fim_efetivo:
+        dias_juntos_no_dataset += (fim_efetivo - inicio_efetivo).days + 1
+
+pct_juntos = (dias_juntos_no_dataset / total_dias_dataset) * 100
+
+print(f"\n📊 Resumo Temporal:")
+print(f"   • Período do dataset: {periodo_inicio} a {periodo_fim} ({total_dias_dataset} dias)")
+print(f"   • Encontros no período: {len(encontros_no_dataset)} de {len(encontros_df)}")
+print(f"   • Dias juntos: {dias_juntos_no_dataset} dias ({pct_juntos:.1f}% do período)")
+print(f"   • Dias separados: {total_dias_dataset - dias_juntos_no_dataset} dias ({100-pct_juntos:.1f}%)")
+
+print(f"\n📊 Detalhes dos Encontros:")
+print(f"   • Viagem mais longa: {encontros_df['duracao_dias'].max()} dias ({encontros_df.loc[encontros_df['duracao_dias'].idxmax(), 'nome']})")
+print(f"   • Viagem mais curta: {encontros_df['duracao_dias'].min()} dias ({encontros_df.loc[encontros_df['duracao_dias'].idxmin(), 'nome']})")
+print(f"   • Duração média: {encontros_df['duracao_dias'].mean():.1f} dias")
+
+print(f"\n📍 Distribuição por Local:")
+print(encontros_df['local'].value_counts().to_string())
+
+print(f"\n✈️ Distribuição por Tipo:")
+print(encontros_df['tipo'].value_counts().to_string())
+
+print("\n" + "="*80)
+```
+
+---
+
+# Integração ao Dataset
+
+## Criação de Features Básicas
+
+```{python}
+# Cria coluna de data para merge
+df['data_msg'] = df['timestamp'].dt.date
+
+# Inicializa colunas
+df['em_encontro'] = False
+df['encontro_id'] = None
+df['encontro_nome'] = None
+df['local_encontro'] = None
+df['tipo_encontro'] = None
+df['dia_do_encontro'] = None
+df['eh_marco_especial'] = False
+df['marco_nome'] = None
+
+print("✅ Colunas inicializadas")
+```
+
+## Integração - Encontros
+
+```{python}
+# Para cada encontro, marca mensagens enviadas durante ele
+for _, encontro in encontros_df.iterrows():
+    # Mascara de mensagens neste encontro
+    mask = (df['data_msg'] >= encontro['inicio'].date()) & (df['data_msg'] <= encontro['fim'].date())
+    
+    # Atribui features básicas
+    df.loc[mask, 'em_encontro'] = True
+    df.loc[mask, 'encontro_id'] = encontro['encontro_id']
+    df.loc[mask, 'encontro_nome'] = encontro['nome']
+    df.loc[mask, 'local_encontro'] = encontro['local']
+    df.loc[mask, 'tipo_encontro'] = encontro['tipo']
+    
+    # Calcula dia do encontro (1, 2, 3...)
+    df.loc[mask, 'dia_do_encontro'] = (
+        pd.to_datetime(df.loc[mask, 'data_msg']) - encontro['inicio']
+    ).dt.days + 1
+
+print(f"✅ Features de encontro atribuídas")
+print(f"   • Mensagens durante encontros: {df['em_encontro'].sum():,}")
+print(f"   • Mensagens fora de encontros: {(~df['em_encontro']).sum():,}")
+```
+
+## Integração - Marcos Especiais
+
+```{python}
+# Para cada marco especial, marca as mensagens daquele dia
+for _, encontro in encontros_df.iterrows():
+    if pd.notna(encontro['marco_especial']):
+        mask = df['data_msg'] == encontro['marco_especial'].date()
+        df.loc[mask, 'eh_marco_especial'] = True
+        df.loc[mask, 'marco_nome'] = encontro['marco_nome']
+
+print(f"✅ Marcos especiais atribuídos")
+print(f"   • Mensagens em marcos especiais: {df['eh_marco_especial'].sum():,}")
+if df['eh_marco_especial'].sum() > 0:
+    print(f"   • Marcos identificados:")
+    for marco in df[df['eh_marco_especial']]['marco_nome'].unique():
+        count = df[df['marco_nome'] == marco].shape[0]
+        print(f"      - {marco}: {count} mensagens")
+```
+
+## Distância Temporal - Último Encontro
+
+```{python}
+# Calcula dias desde término do último encontro
+df['dias_desde_ultimo_encontro'] = None
+
+# Ordena encontros por data
+encontros_ord = encontros_df.sort_values('inicio')
+
+for idx, encontro in encontros_ord.iterrows():
+    # Período APÓS este encontro até o próximo (ou fim do dataset)
+    fim_encontro = encontro['fim'].date()
+    
+    # Encontra próximo encontro
+    proximos = encontros_ord[encontros_ord['inicio'] > encontro['fim']]
+    if len(proximos) > 0:
+        inicio_proximo = proximos.iloc[0]['inicio'].date()
+    else:
+        inicio_proximo = df['data_msg'].max()
+    
+    # Mensagens no período de separação
+    mask = (df['data_msg'] > fim_encontro) & (df['data_msg'] < inicio_proximo)
+    df.loc[mask, 'dias_desde_ultimo_encontro'] = (
+        pd.to_datetime(df.loc[mask, 'data_msg']) - pd.to_datetime(fim_encontro)
+    ).dt.days
+
+# Mensagens ANTES do primeiro encontro
+primeiro_encontro = encontros_ord.iloc[0]['inicio'].date()
+mask = df['data_msg'] < primeiro_encontro
+df.loc[mask, 'dias_desde_ultimo_encontro'] = None
+
+print(f"✅ 'dias_desde_ultimo_encontro' calculado")
+print(f"   • Mensagens com valor: {df['dias_desde_ultimo_encontro'].notna().sum():,}")
+```
+
+## Distância Temporal - Próximo Encontro
+
+```{python}
+# Calcula dias até início do próximo encontro
+df['dias_ate_proximo_encontro'] = None
+
+for idx, encontro in encontros_ord.iterrows():
+    # Encontra período ANTES deste encontro (desde o anterior)
+    inicio_encontro = encontro['inicio'].date()
+    
+    # Encontra encontro anterior
+    anteriores = encontros_ord[encontros_ord['fim'] < encontro['inicio']]
+    if len(anteriores) > 0:
+        fim_anterior = anteriores.iloc[-1]['fim'].date()
+    else:
+        fim_anterior = df['data_msg'].min()
+    
+    # Mensagens no período de separação antes deste encontro
+    mask = (df['data_msg'] > fim_anterior) & (df['data_msg'] < inicio_encontro)
+    df.loc[mask, 'dias_ate_proximo_encontro'] = (
+        pd.to_datetime(inicio_encontro) - pd.to_datetime(df.loc[mask, 'data_msg'])
+    ).dt.days
+
+# Mensagens APÓS o último encontro
+ultimo_encontro = encontros_ord.iloc[-1]['fim'].date()
+mask = df['data_msg'] > ultimo_encontro
+df.loc[mask, 'dias_ate_proximo_encontro'] = None
+
+print(f"✅ 'dias_ate_proximo_encontro' calculado")
+print(f"   • Mensagens com valor: {df['dias_ate_proximo_encontro'].notna().sum():,}")
+```
+
+## Validação da Integração
+
+```{python}
+# Verifica integridade
+print("\n📊 Validação da Integração:\n")
+
+# 1. Mensagens durante encontros
+msgs_durante = df[df['em_encontro']].shape[0]
+print(f"1. Mensagens durante encontros: {msgs_durante:,}")
+
+# 2. Distribuição por encontro
+if msgs_durante > 0:
+    print(f"\n2. Distribuição por encontro:")
+    dist_encontros = df[df['em_encontro']]['encontro_nome'].value_counts().sort_index()
+    for nome, count in dist_encontros.items():
+        print(f"   • {nome}: {count:,} mensagens")
+
+# 3. Mensagens em marcos especiais
+msgs_marcos = df[df['eh_marco_especial']].shape[0]
+print(f"\n3. Mensagens em marcos especiais: {msgs_marcos:,}")
+
+# 4. Cobertura temporal
+print(f"\n4. Cobertura de features temporais:")
+print(f"   • dias_desde_ultimo_encontro: {df['dias_desde_ultimo_encontro'].notna().sum():,} msgs")
+print(f"   • dias_ate_proximo_encontro: {df['dias_ate_proximo_encontro'].notna().sum():,} msgs")
+
+# 5. Overlap
+print(f"\n5. Verificação de overlap:")
+durante_e_com_dias = df[df['em_encontro'] & df['dias_desde_ultimo_encontro'].notna()].shape[0]
+print(f"   • Mensagens durante encontro E com dias_desde: {durante_e_com_dias} (deve ser 0)")
+
+print("\n✅ Integração validada!")
+```
+
+---
+
+# Validação da Hipótese
+
+## Timeline com Encontros
+
+```{python}
+#| label: fig-timeline-encontros
+#| fig-cap: "Volume de mensagens com encontros marcados"
+
+# Agrega mensagens por dia
+msgs_por_dia = df.groupby('data_msg').size().reset_index(name='count')
+msgs_por_dia['data_msg'] = pd.to_datetime(msgs_por_dia['data_msg'])
+
+# Cria gráfico
+fig = go.Figure()
+
+# Linha de volume
+fig.add_trace(go.Scatter(
+    x=msgs_por_dia['data_msg'],
+    y=msgs_por_dia['count'],
+    mode='lines',
+    name='Volume de Mensagens',
+    line=dict(color=COLORS['neutral'], width=1),
+    hovertemplate='%{x|%d/%m/%Y}<br>%{y} mensagens<extra></extra>'
+))
+
+# Adiciona retângulos para cada encontro
+for _, encontro in encontros_df.iterrows():
+    # Só plota se estiver no período do dataset
+    if encontro['inicio'].date() <= periodo_fim and encontro['fim'].date() >= periodo_inicio:
+        fig.add_vrect(
+            x0=encontro['inicio'],
+            x1=encontro['fim'],
+            fillcolor=COLORS['juntos'],
+            opacity=0.2,
+            layer='below',
+            line_width=0,
+            annotation_text=encontro['nome'],
+            annotation_position='top left',
+            annotation=dict(font_size=9, textangle=-90)
+        )
+
+fig.update_layout(
+    title='Timeline de Mensagens com Períodos de Encontros',
+    xaxis_title='Data',
+    yaxis_title='Quantidade de Mensagens',
+    height=500,
+    hovermode='x unified',
+    showlegend=True
+)
+
+fig.show()
+```
+
+## Volume: Junto vs Separado
+
+```{python}
+# Calcula estatísticas
+durante_encontros = df[df['em_encontro']].groupby('data_msg').size()
+fora_encontros = df[~df['em_encontro']].groupby('data_msg').size()
+
+print("📊 Volume de Mensagens: Junto vs Separado\n")
+print(f"{'Estatística':<25} {'Juntos':<15} {'Separados':<15}")
+print("="*55)
+print(f"{'Média msgs/dia':<25} {durante_encontros.mean():<15.1f} {fora_encontros.mean():<15.1f}")
+print(f"{'Mediana msgs/dia':<25} {durante_encontros.median():<15.0f} {fora_encontros.median():<15.0f}")
+print(f"{'Desvio padrão':<25} {durante_encontros.std():<15.1f} {fora_encontros.std():<15.1f}")
+print(f"{'Mínimo':<25} {durante_encontros.min():<15.0f} {fora_encontros.min():<15.0f}")
+print(f"{'Máximo':<25} {durante_encontros.max():<15.0f} {fora_encontros.max():<15.0f}")
+
+# Teste estatístico
+from scipy.stats import ttest_ind
+
+stat_t, p_value = ttest_ind(durante_encontros, fora_encontros)
+
+print(f"\n📊 Teste T (volume juntos vs separados):")
+print(f"   t-statistic: {stat_t:.4f}")
+print(f"   p-value: {p_value:.6f}")
+
+if p_value < 0.001:
+    print(f"   ✅ Diferença ALTAMENTE significativa (p < 0.001)")
+elif p_value < 0.05:
+    print(f"   ✅ Diferença significativa (p < 0.05)")
+else:
+    print(f"   ❌ Sem diferença significativa (p >= 0.05)")
+
+# Efeito prático
+reducao_pct = ((fora_encontros.mean() - durante_encontros.mean()) / fora_encontros.mean()) * 100
+print(f"\n📉 Efeito prático:")
+print(f"   Volume CAI {reducao_pct:.1f}% quando estão juntos")
+```
+
+```{python}
+#| label: fig-volume-junto-separado
+#| fig-cap: "Comparação de volume: junto vs separado"
+
+# Prepara dados
+df_plot = pd.DataFrame({
+    'Contexto': ['Juntos', 'Separados'],
+    'Média': [durante_encontros.mean(), fora_encontros.mean()],
+    'Mediana': [durante_encontros.median(), fora_encontros.median()]
+})
+
+# Visualização
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=df_plot['Contexto'],
+    y=df_plot['Média'],
+    name='Média',
+    marker_color=[COLORS['juntos'], COLORS['neutral']],
+    text=df_plot['Média'].round(1),
+    textposition='outside'
+))
+
+fig.update_layout(
+    title='Volume Médio de Mensagens por Dia: Junto vs Separado',
+    yaxis_title='Mensagens por Dia',
+    height=400,
+    showlegend=False
+)
+
+fig.show()
+```
+
+## Gaps Coincidem com Encontros?
+
+```{python}
+# Define threshold de "gap" (dias com volume muito baixo)
+THRESHOLD_GAP = 10  # msgs/dia
+
+# Identifica dias com volume baixo
+dias_baixo_volume = msgs_por_dia[msgs_por_dia['count'] < THRESHOLD_GAP].copy()
+dias_baixo_volume['data'] = dias_baixo_volume['data_msg'].dt.date
+
+# Verifica quantos coincidem com encontros
+dias_baixo_volume['eh_encontro'] = dias_baixo_volume['data'].apply(
+    lambda d: any((e['inicio'].date() <= d <= e['fim'].date()) for _, e in encontros_df.iterrows())
+)
+
+total_gaps = len(dias_baixo_volume)
+gaps_em_encontros = dias_baixo_volume['eh_encontro'].sum()
+pct_coincidencia = (gaps_em_encontros / total_gaps) * 100 if total_gaps > 0 else 0
+
+print(f"📊 Análise de Gaps (dias com < {THRESHOLD_GAP} msgs/dia):\n")
+print(f"   • Total de dias com volume baixo: {total_gaps}")
+print(f"   • Coincidem com encontros: {gaps_em_encontros} ({pct_coincidencia:.1f}%)")
+print(f"   • Não coincidem: {total_gaps - gaps_em_encontros} ({100-pct_coincidencia:.1f}%)")
+
+if pct_coincidencia > 70:
+    print(f"\n   ✅ HIPÓTESE CONFIRMADA: Maioria dos gaps coincide com encontros!")
+elif pct_coincidencia > 50:
+    print(f"\n   ⚠️ HIPÓTESE PARCIALMENTE CONFIRMADA: Metade dos gaps coincide com encontros")
+else:
+    print(f"\n   ❌ HIPÓTESE NÃO CONFIRMADA: Maioria dos gaps NÃO coincide com encontros")
+```
+
+::: {.callout-warning}
+### 💡 Insight - Validação da Hipótese
+
+[PREENCHER APÓS RODAR - resumir se gaps coincidem, redução de volume, significância]
+:::
+
+---
+
+# Impacto nos Padrões Temporais
+
+## Hora do Dia: Junto vs Separado
+
+```{python}
+#| label: fig-hora-contexto
+#| fig-cap: "Distribuição por hora: junto vs separado"
+
+# Calcula distribuição por hora e contexto
+df['hora'] = df['timestamp'].dt.hour
+
+hora_junto = df[df['em_encontro']].groupby('hora').size()
+hora_separado = df[~df['em_encontro']].groupby('hora').size()
+
+# Normaliza (proporção)
+hora_junto_pct = (hora_junto / hora_junto.sum() * 100).reindex(range(24), fill_value=0)
+hora_separado_pct = (hora_separado / hora_separado.sum() * 100).reindex(range(24), fill_value=0)
+
+# Visualização
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=list(range(24)),
+    y=hora_separado_pct,
+    mode='lines+markers',
+    name='Separados',
+    line=dict(color=COLORS['neutral'], width=2),
+    marker=dict(size=6)
+))
+
+fig.add_trace(go.Scatter(
+    x=list(range(24)),
+    y=hora_junto_pct,
+    mode='lines+markers',
+    name='Juntos',
+    line=dict(color=COLORS['juntos'], width=2),
+    marker=dict(size=6)
+))
+
+fig.update_layout(
+    title='Distribuição por Hora do Dia: Junto vs Separado (%)',
+    xaxis_title='Hora do Dia',
+    yaxis_title='Proporção de Mensagens (%)',
+    height=400,
+    hovermode='x unified',
+    xaxis=dict(tickmode='linear', tick0=0, dtick=1)
+)
+
+fig.show()
+
+# Teste estatístico
+from scipy.stats import chi2_contingency
+
+contingency = pd.crosstab(df['hora'], df['em_encontro'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"\n📊 Teste Chi-square (padrão horário junto vs separado):")
+print(f"   p-value: {p_val:.6f}")
+if p_val < 0.05:
+    print(f"   ✅ Padrões horários SÃO diferentes quando juntos vs separados")
+else:
+    print(f"   ❌ Padrões horários SÃO similares independente do contexto")
+```
+
+## Dia da Semana: Junto vs Separado
+
+```{python}
+#| label: fig-dia-contexto
+#| fig-cap: "Distribuição por dia da semana: junto vs separado"
+
+# Calcula distribuição por dia e contexto
+df['dia_semana_num'] = df['timestamp'].dt.dayofweek
+dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana'] = df['dia_semana_num'].apply(lambda x: dias_semana[x])
+
+dia_junto = df[df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+dia_separado = df[~df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+
+# Normaliza
+dia_junto_pct = (dia_junto / dia_junto.sum() * 100)
+dia_separado_pct = (dia_separado / dia_separado.sum() * 100)
+
+# Visualização
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=dias_semana,
+    y=dia_separado_pct,
+    name='Separados',
+    marker_color=COLORS['neutral'],
+    text=dia_separado_pct.round(1),
+    textposition='outside'
+))
+
+fig.add_trace(go.Bar(
+    x=dias_semana,
+    y=dia_junto_pct,
+    name='Juntos',
+    marker_color=COLORS['juntos'],
+    text=dia_junto_pct.round(1),
+    textposition='outside'
+))
+
+fig.update_layout(
+    title='Distribuição por Dia da Semana: Junto vs Separado (%)',
+    yaxis_title='Proporção de Mensagens (%)',
+    height=400,
+    barmode='group'
+)
+
+fig.show()
+
+# Teste estatístico
+contingency_dia = pd.crosstab(df['dia_semana'], df['em_encontro'])
+chi2_dia, p_val_dia, dof_dia, expected_dia = chi2_contingency(contingency_dia)
+
+print(f"\n📊 Teste Chi-square (padrão semanal junto vs separado):")
+print(f"   p-value: {p_val_dia:.6f}")
+if p_val_dia < 0.05:
+    print(f"   ✅ Padrões semanais SÃO diferentes quando juntos vs separados")
+else:
+    print(f"   ❌ Padrões semanais SÃO similares independente do contexto")
+```
+
+::: {.callout-warning}
+### 💡 Insight - Impacto nos Padrões Temporais
+
+[PREENCHER APÓS RODAR - resumir se hora/dia mudam quando juntos]
+:::
+
+---
+
+# Export
+
+## Visão Geral do Dataset Enriquecido
+
+```{python}
+print("📊 Dataset Enriquecido:\n")
+print(f"   • Mensagens: {len(df):,}")
+print(f"   • Colunas: {df.shape[1]}")
+print(f"   • Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+
+print(f"\n📋 Novas colunas adicionadas (10):")
+novas_colunas = [
+    'em_encontro', 'encontro_id', 'encontro_nome', 'local_encontro', 
+    'tipo_encontro', 'dia_do_encontro', 'eh_marco_especial', 'marco_nome',
+    'dias_desde_ultimo_encontro', 'dias_ate_proximo_encontro'
+]
+for col in novas_colunas:
+    non_null = df[col].notna().sum()
+    print(f"   • {col}: {non_null:,} não-nulos")
+
+# Amostra
+print(f"\n📋 Amostra do dataset enriquecido:")
+colunas_mostrar = ['timestamp', 'remetente', 'em_encontro', 'encontro_nome', 
+                   'dias_desde_ultimo_encontro', 'dias_ate_proximo_encontro']
+print(df[colunas_mostrar].head(10).to_string())
+```
+
+## Salvando Dataset
+
+```{python}
+# Remove coluna auxiliar
+df = df.drop(columns=['data_msg'])
+
+# Exporta
+df.to_parquet(OUTPUT_FILE, index=False)
+
+print(f"\n✅ Dataset exportado com sucesso!")
+print(f"📁 Arquivo: {OUTPUT_FILE}")
+print(f"📊 Shape: {df.shape}")
+print(f"💾 Tamanho: {OUTPUT_FILE.stat().st_size / 1024 / 1024:.2f} MB")
+```
+
+---
+
+# Resumo Executivo
+
+::: {.callout-note}
+## 📊 Resumo - Contexto Externo Integrado
+
+**Encontros presenciais:**
+- Total de encontros: {len(encontros_df)}
+- Dias juntos no período: {dias_juntos_no_dataset} ({pct_juntos:.1f}%)
+- Viagem mais longa: {encontros_df['duracao_dias'].max()} dias
+
+**Validação da hipótese:**
+- Volume médio separados: {fora_encontros.mean():.1f} msgs/dia
+- Volume médio juntos: {durante_encontros.mean():.1f} msgs/dia
+- Redução: {reducao_pct:.1f}% (p < 0.001)
+- Gaps coincidem com encontros: [VALOR]%
+
+**Features adicionadas (10):**
+- Contexto: `em_encontro`, `encontro_id`, `encontro_nome`, `local_encontro`, `tipo_encontro`
+- Temporal: `dias_desde_ultimo_encontro`, `dias_ate_proximo_encontro`, `dia_do_encontro`
+- Marcos: `eh_marco_especial`, `marco_nome`
+
+**Impacto nos padrões:**
+- Padrão horário: [MUDA/NÃO MUDA] quando juntos
+- Padrão semanal: [MUDA/NÃO MUDA] quando juntos
+
+**Dataset exportado:** `messages_with_context.parquet` ({df.shape[0]:,} × {df.shape[1]} colunas)
+
+**Próximo passo:** Análise de conteúdo e interação com contexto integrado
+:::

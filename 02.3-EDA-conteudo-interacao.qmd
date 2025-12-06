@@ -1,0 +1,966 @@
+---
+title: "EDA Final - Análises com Contexto Integrado"
+subtitle: "Exploratory Data Analysis com encontros presenciais (versão definitiva)"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    df-print: paged
+    theme: cosmo
+    number-sections: true
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+Este notebook realiza a **análise exploratória DEFINITIVA** dos dados, integrando **contexto externo** (encontros presenciais) em todas as análises.
+
+**Diferença dos notebooks anteriores:**
+- **02.1-EDA-data-wrangling.qmd:** Análises temporais PURAS (sem contexto externo)
+- **02.2-adicionar-contexto-externo.qmd:** Criação e validação das features de encontros
+- **02.3-EDA-conteudo-interacao.qmd (ESTE):** Análises temporais COM contexto (versão final)
+
+**Objetivo:**
+- Revisitar TODAS as análises temporais comparando **junto vs separado**
+- Identificar padrões finais para Feature Engineering
+- Consolidar aprendizados antes de criar features derivadas
+
+---
+
+# Setup
+
+## Bibliotecas
+
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+from datetime import datetime, timedelta
+from scipy.stats import chi2_contingency, ttest_ind, chisquare
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+
+# Cores
+COLORS = {
+    'P1': '#3498db',
+    'P2': '#e74c3c', 
+    'neutral': '#95a5a6',
+    'juntos': '#2ecc71',
+    'separados': '#7f8c8d'
+}
+```
+
+## Caminhos e Carregamento
+
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada - DATASET ENRIQUECIDO
+INPUT_FILE = DATA_DIR / 'messages_with_context.parquet'
+
+print(f"📁 Diretório: {DATA_DIR}")
+print(f"📂 Input: {INPUT_FILE.name}")
+print(f"✅ Existe: {INPUT_FILE.exists()}")
+```
+
+```{python}
+# Carrega dataset ENRIQUECIDO
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Shape: {df.shape}")
+print(f"📅 Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"👥 Remetentes: {df['remetente'].unique().tolist()}")
+print(f"\n📋 Colunas disponíveis:")
+for i, col in enumerate(df.columns, 1):
+    print(f"   {i:2d}. {col}")
+```
+
+---
+
+# Visão Geral do Dataset
+
+## Estatísticas Básicas
+
+```{python}
+total_msgs = len(df)
+periodo_dias = (df['timestamp'].max() - df['timestamp'].min()).days + 1
+
+print("="*80)
+print("📊 OVERVIEW - Dataset Enriquecido")
+print("="*80)
+
+print(f"\n📈 Volume:")
+print(f"   • Total de mensagens: {total_msgs:,}")
+print(f"   • Período: {df['timestamp'].min().date()} a {df['timestamp'].max().date()}")
+print(f"   • Dias no período: {periodo_dias}")
+print(f"   • Média geral: {total_msgs/periodo_dias:.1f} msgs/dia")
+
+print(f"\n👥 Remetentes:")
+for remetente in df['remetente'].unique():
+    count = df[df['remetente'] == remetente].shape[0]
+    pct = count / total_msgs * 100
+    print(f"   • {remetente}: {count:,} mensagens ({pct:.1f}%)")
+
+print(f"\n🏠 Contexto Externo:")
+msgs_juntos = df[df['em_encontro']].shape[0]
+msgs_separados = df[~df['em_encontro']].shape[0]
+print(f"   • Durante encontros: {msgs_juntos:,} ({msgs_juntos/total_msgs*100:.1f}%)")
+print(f"   • Fora de encontros: {msgs_separados:,} ({msgs_separados/total_msgs*100:.1f}%)")
+
+print("\n" + "="*80)
+```
+
+## Volume Diário: Junto vs Separado
+
+```{python}
+# Agrupa por dia
+df['data'] = df['timestamp'].dt.date
+msgs_por_dia = df.groupby('data').agg({
+    'timestamp': 'count',
+    'em_encontro': 'first'
+}).rename(columns={'timestamp': 'count'})
+
+# Estatísticas por contexto
+junto_stats = msgs_por_dia[msgs_por_dia['em_encontro']]['count']
+separado_stats = msgs_por_dia[~msgs_por_dia['em_encontro']]['count']
+
+print("📊 Volume por Dia - Estatísticas Descritivas:\n")
+print(f"{'Métrica':<20} {'Juntos':<15} {'Separados':<15}")
+print("="*50)
+print(f"{'Média':<20} {junto_stats.mean():<15.1f} {separado_stats.mean():<15.1f}")
+print(f"{'Mediana':<20} {junto_stats.median():<15.0f} {separado_stats.median():<15.0f}")
+print(f"{'Desvio Padrão':<20} {junto_stats.std():<15.1f} {separado_stats.std():<15.1f}")
+print(f"{'Mínimo':<20} {junto_stats.min():<15.0f} {separado_stats.min():<15.0f}")
+print(f"{'Máximo':<20} {junto_stats.max():<15.0f} {separado_stats.max():<15.0f}")
+```
+
+::: {.callout-note}
+### 📊 Síntese - Visão Geral
+
+**Volume total:**
+- 91.924 mensagens ao longo de 1 ano
+- P1 (51.1%) vs P2 (48.9%) - distribuição equilibrada
+
+**Impacto do contexto externo:**
+- Quando juntos: 117.8 msgs/dia (68.3% de redução)
+- Quando separados: 372.0 msgs/dia
+- 14.6% das mensagens ocorrem durante encontros (33.2% do tempo)
+
+**Confirmação:** Presença física reduz drasticamente comunicação digital, mas não elimina.
+:::
+
+---
+
+# Distribuição de Remetentes
+
+## Volume Geral
+
+```{python}
+# Volume por remetente
+msgs_por_remetente = df.groupby('remetente').size().reset_index(name='count')
+msgs_por_remetente['percentual'] = (msgs_por_remetente['count'] / total_msgs * 100).round(1)
+
+print("📊 Distribuição por Remetente:\n")
+print(msgs_por_remetente.to_string(index=False))
+```
+
+## Volume por Remetente × Contexto
+
+```{python}
+#| label: fig-remetente-contexto
+#| fig-cap: "Volume de mensagens por remetente e contexto"
+
+# Agrupa por remetente e contexto
+msgs_remetente_contexto = df.groupby(['remetente', 'em_encontro']).size().reset_index(name='count')
+msgs_remetente_contexto['contexto'] = msgs_remetente_contexto['em_encontro'].map({
+    True: 'Juntos',
+    False: 'Separados'
+})
+
+# Calcula percentual por remetente
+for remetente in ['P1', 'P2']:
+    total_rem = df[df['remetente'] == remetente].shape[0]
+    mask = msgs_remetente_contexto['remetente'] == remetente
+    msgs_remetente_contexto.loc[mask, 'percentual'] = (
+        msgs_remetente_contexto.loc[mask, 'count'] / total_rem * 100
+    )
+
+# Visualização
+fig = px.bar(
+    msgs_remetente_contexto,
+    x='remetente',
+    y='count',
+    color='contexto',
+    barmode='group',
+    title='Distribuição de Mensagens: Remetente × Contexto',
+    labels={'count': 'Quantidade de Mensagens', 'remetente': 'Remetente'},
+    color_discrete_map={'Juntos': COLORS['juntos'], 'Separados': COLORS['separados']},
+    text='percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+
+# Estatísticas
+print("\n📊 Distribuição por Remetente × Contexto:\n")
+pivot = msgs_remetente_contexto.pivot(index='remetente', columns='contexto', values='count')
+pivot['Total'] = pivot.sum(axis=1)
+pivot['% Juntos'] = (pivot['Juntos'] / pivot['Total'] * 100).round(1)
+pivot['% Separados'] = (pivot['Separados'] / pivot['Total'] * 100).round(1)
+print(pivot)
+```
+
+::: {.callout-warning}
+### 💡 Insight - Remetentes por Contexto
+
+[PREENCHER APÓS RODAR - comparar se P1 vs P2 mudam comportamento quando juntos]
+:::
+
+---
+
+# Tipos de Mensagem
+
+## Distribuição Geral
+
+```{python}
+# Tipos de mensagem
+msgs_por_tipo = df.groupby('tipo_mensagem').size().reset_index(name='count').sort_values('count', ascending=False)
+msgs_por_tipo['percentual'] = (msgs_por_tipo['count'] / total_msgs * 100).round(1)
+
+print("📊 Distribuição por Tipo de Mensagem:\n")
+print(msgs_por_tipo.head(10).to_string(index=False))
+
+# Grupos
+msgs_por_grupo = df.groupby('grupo_mensagem').size().reset_index(name='count').sort_values('count', ascending=False)
+msgs_por_grupo['percentual'] = (msgs_por_grupo['count'] / total_msgs * 100).round(1)
+
+print("\n📊 Distribuição por Grupo de Mensagem:\n")
+print(msgs_por_grupo.to_string(index=False))
+```
+
+## Tipos × Contexto
+
+```{python}
+#| label: fig-tipo-contexto
+#| fig-cap: "Distribuição de tipos de mensagem: junto vs separado"
+
+# Agrupa por grupo e contexto
+msgs_tipo_contexto = df.groupby(['grupo_mensagem', 'em_encontro']).size().reset_index(name='count')
+msgs_tipo_contexto['contexto'] = msgs_tipo_contexto['em_encontro'].map({
+    True: 'Juntos',
+    False: 'Separados'
+})
+
+# Calcula percentual por contexto
+for contexto_bool in [True, False]:
+    total_ctx = df[df['em_encontro'] == contexto_bool].shape[0]
+    mask = msgs_tipo_contexto['em_encontro'] == contexto_bool
+    msgs_tipo_contexto.loc[mask, 'percentual'] = (
+        msgs_tipo_contexto.loc[mask, 'count'] / total_ctx * 100
+    )
+
+# Filtra grupos principais
+grupos_principais = msgs_por_grupo.head(6)['grupo_mensagem'].tolist()
+msgs_tipo_contexto_plot = msgs_tipo_contexto[msgs_tipo_contexto['grupo_mensagem'].isin(grupos_principais)]
+
+# Visualização
+fig = px.bar(
+    msgs_tipo_contexto_plot,
+    x='grupo_mensagem',
+    y='percentual',
+    color='contexto',
+    barmode='group',
+    title='Distribuição de Tipos de Mensagem: Junto vs Separado (%)',
+    labels={'percentual': 'Percentual (%)', 'grupo_mensagem': 'Tipo de Mensagem'},
+    color_discrete_map={'Juntos': COLORS['juntos'], 'Separados': COLORS['separados']},
+    text='percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+```
+
+## Tipos × Remetente × Contexto
+
+```{python}
+# Calcula proporções
+tipo_rem_ctx = df.groupby(['remetente', 'em_encontro', 'grupo_mensagem']).size().reset_index(name='count')
+
+# Normaliza por remetente e contexto
+tipo_rem_ctx['contexto'] = tipo_rem_ctx['em_encontro'].map({True: 'Juntos', False: 'Separados'})
+
+for remetente in ['P1', 'P2']:
+    for contexto_bool in [True, False]:
+        total = df[(df['remetente'] == remetente) & (df['em_encontro'] == contexto_bool)].shape[0]
+        mask = (tipo_rem_ctx['remetente'] == remetente) & (tipo_rem_ctx['em_encontro'] == contexto_bool)
+        if total > 0:
+            tipo_rem_ctx.loc[mask, 'percentual'] = (tipo_rem_ctx.loc[mask, 'count'] / total * 100)
+
+# Foca nos grupos principais
+grupos_interesse = ['TEXT', 'AUDIO', 'VID', 'IMG']
+tipo_rem_ctx_plot = tipo_rem_ctx[tipo_rem_ctx['grupo_mensagem'].isin(grupos_interesse)]
+
+print("📊 Tipos de Mensagem × Remetente × Contexto (%):\n")
+pivot_tipo = tipo_rem_ctx_plot.pivot_table(
+    index='grupo_mensagem',
+    columns=['remetente', 'contexto'],
+    values='percentual',
+    fill_value=0
+).round(1)
+print(pivot_tipo)
+```
+
+::: {.callout-warning}
+### 💡 Insight - Tipos de Mensagem por Contexto
+
+[PREENCHER APÓS RODAR - analisar se usam mais/menos áudio, vídeo quando juntos]
+:::
+
+---
+
+# Transcrições
+
+## Volume de Transcrições
+
+```{python}
+# Mensagens com transcrição
+msgs_com_transcricao = df[df['transcricao'].notna()].shape[0]
+pct_transcricao = (msgs_com_transcricao / total_msgs) * 100
+
+print("📊 Transcrições:\n")
+print(f"   • Total de mensagens com transcrição: {msgs_com_transcricao:,} ({pct_transcricao:.1f}%)")
+
+# Por tipo
+trans_por_tipo = df[df['transcricao'].notna()].groupby('tipo_mensagem').size().reset_index(name='count')
+trans_por_tipo = trans_por_tipo.sort_values('count', ascending=False)
+
+print(f"\n   • Distribuição por tipo:")
+for _, row in trans_por_tipo.iterrows():
+    tipo_total = df[df['tipo_mensagem'] == row['tipo_mensagem']].shape[0]
+    pct = (row['count'] / tipo_total * 100) if tipo_total > 0 else 0
+    print(f"      - {row['tipo_mensagem']}: {row['count']:,} ({pct:.1f}% do total de {row['tipo_mensagem']})")
+```
+
+---
+
+# Padrões Temporais com Contexto
+
+## Evolução ao Longo do Tempo
+
+*Nota: Timeline com encontros marcados já foi gerado no notebook 02.2-adicionar-contexto-externo.qmd*
+
+## Distribuição por Hora do Dia
+
+### Visão Geral: Junto vs Separado
+
+```{python}
+#| label: fig-hora-contexto-geral
+#| fig-cap: "Distribuição por hora: junto vs separado"
+
+# Calcula distribuição
+df['hora'] = df['timestamp'].dt.hour
+
+hora_junto = df[df['em_encontro']].groupby('hora').size()
+hora_separado = df[~df['em_encontro']].groupby('hora').size()
+
+# Normaliza
+hora_junto_pct = (hora_junto / hora_junto.sum() * 100).reindex(range(24), fill_value=0)
+hora_separado_pct = (hora_separado / hora_separado.sum() * 100).reindex(range(24), fill_value=0)
+
+# Visualização
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=list(range(24)),
+    y=hora_separado_pct,
+    mode='lines+markers',
+    name='Separados',
+    line=dict(color=COLORS['separados'], width=2),
+    marker=dict(size=6)
+))
+
+fig.add_trace(go.Scatter(
+    x=list(range(24)),
+    y=hora_junto_pct,
+    mode='lines+markers',
+    name='Juntos',
+    line=dict(color=COLORS['juntos'], width=2),
+    marker=dict(size=6)
+))
+
+fig.update_layout(
+    title='Distribuição por Hora do Dia: Junto vs Separado (%)',
+    xaxis_title='Hora do Dia',
+    yaxis_title='Proporção de Mensagens (%)',
+    height=400,
+    hovermode='x unified',
+    xaxis=dict(tickmode='linear', tick0=0, dtick=1)
+)
+
+fig.show()
+
+# Identifica picos
+pico_separado_hora = hora_separado_pct.idxmax()
+pico_separado_val = hora_separado_pct.max()
+pico_junto_hora = hora_junto_pct.idxmax()
+pico_junto_val = hora_junto_pct.max()
+
+print(f"\n📊 Picos por Contexto:")
+print(f"   • Separados: {pico_separado_hora}h ({pico_separado_val:.1f}%)")
+print(f"   • Juntos: {pico_junto_hora}h ({pico_junto_val:.1f}%)")
+```
+
+### Por Remetente × Contexto
+
+```{python}
+#| label: fig-hora-remetente-contexto
+#| fig-cap: "Padrão horário por remetente e contexto"
+
+# Cria subplots
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=['P1: Junto vs Separado', 'P2: Junto vs Separado']
+)
+
+for i, remetente in enumerate(['P1', 'P2'], 1):
+    df_rem = df[df['remetente'] == remetente]
+    
+    # Separados
+    hora_sep = df_rem[~df_rem['em_encontro']].groupby('hora').size()
+    hora_sep_pct = (hora_sep / hora_sep.sum() * 100).reindex(range(24), fill_value=0)
+    
+    # Juntos
+    hora_jun = df_rem[df_rem['em_encontro']].groupby('hora').size()
+    hora_jun_pct = (hora_jun / hora_jun.sum() * 100).reindex(range(24), fill_value=0)
+    
+    # Adiciona traços
+    fig.add_trace(
+        go.Scatter(x=list(range(24)), y=hora_sep_pct, name='Separados', 
+                   line=dict(color=COLORS['separados'], width=2),
+                   legendgroup=remetente, showlegend=(i==1)),
+        row=1, col=i
+    )
+    
+    fig.add_trace(
+        go.Scatter(x=list(range(24)), y=hora_jun_pct, name='Juntos',
+                   line=dict(color=COLORS['juntos'], width=2),
+                   legendgroup=remetente, showlegend=(i==1)),
+        row=1, col=i
+    )
+
+fig.update_xaxes(title_text="Hora do Dia", tickmode='linear', tick0=0, dtick=2)
+fig.update_yaxes(title_text="Proporção (%)")
+fig.update_layout(height=400, title_text="Padrão Horário por Remetente e Contexto")
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Padrão Horário com Contexto
+
+**Mudança DRÁSTICA no comportamento:**
+
+**Quando SEPARADOS:**
+- Pico único às 19h (10.5%) - padrão unimodal noturno
+- Comunicação concentrada no período pós-trabalho
+- Madrugada vazia (0h-6h)
+
+**Quando JUNTOS:**
+- Padrão bimodal: Pico 12h-13h (11.5%) + Pico 18h (7.5%)
+- Comunicação mais distribuída ao longo do dia
+- Pico matinal/almoço = momento de disponibilidade (pausa do trabalho)
+
+**Por remetente:**
+- [PREENCHER - P1 e P2 mantêm padrões sincronizados? Ou mudam diferente?]
+
+**Interpretação:**
+- Separados: WhatsApp = conexão emocional (noite)
+- Juntos: WhatsApp = coordenação/trabalho (pausas do dia)
+- Presença física reorganiza horários, não elimina comunicação
+:::
+
+---
+
+## Distribuição por Dia da Semana
+
+### Visão Geral: Junto vs Separado
+
+```{python}
+#| label: fig-dia-contexto-geral
+#| fig-cap: "Distribuição por dia da semana: junto vs separado"
+
+# Prepara dados
+df['dia_semana_num'] = df['timestamp'].dt.dayofweek
+dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana'] = df['dia_semana_num'].apply(lambda x: dias_semana[x])
+
+# Calcula distribuição
+dia_junto = df[df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+dia_separado = df[~df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+
+# Normaliza
+dia_junto_pct = (dia_junto / dia_junto.sum() * 100)
+dia_separado_pct = (dia_separado / dia_separado.sum() * 100)
+
+# Visualização
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    x=dias_semana,
+    y=dia_separado_pct,
+    name='Separados',
+    marker_color=COLORS['separados'],
+    text=dia_separado_pct.round(1),
+    textposition='outside'
+))
+
+fig.add_trace(go.Bar(
+    x=dias_semana,
+    y=dia_junto_pct,
+    name='Juntos',
+    marker_color=COLORS['juntos'],
+    text=dia_junto_pct.round(1),
+    textposition='outside'
+))
+
+fig.update_layout(
+    title='Distribuição por Dia da Semana: Junto vs Separado (%)',
+    yaxis_title='Proporção de Mensagens (%)',
+    height=400,
+    barmode='group'
+)
+
+fig.show()
+
+# Estatísticas
+print(f"\n📊 Dia com MAIS mensagens:")
+print(f"   • Separados: {dia_separado_pct.idxmax()} ({dia_separado_pct.max():.1f}%)")
+print(f"   • Juntos: {dia_junto_pct.idxmax()} ({dia_junto_pct.max():.1f}%)")
+
+print(f"\n📊 Dia com MENOS mensagens:")
+print(f"   • Separados: {dia_separado_pct.idxmin()} ({dia_separado_pct.min():.1f}%)")
+print(f"   • Juntos: {dia_junto_pct.idxmin()} ({dia_junto_pct.min():.1f}%)")
+```
+
+### Por Remetente × Contexto
+
+```{python}
+#| label: fig-dia-remetente-contexto
+#| fig-cap: "Padrão semanal por remetente e contexto"
+
+# Cria subplots
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=['P1: Junto vs Separado', 'P2: Junto vs Separado']
+)
+
+for i, remetente in enumerate(['P1', 'P2'], 1):
+    df_rem = df[df['remetente'] == remetente]
+    
+    # Separados
+    dia_sep = df_rem[~df_rem['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+    dia_sep_pct = (dia_sep / dia_sep.sum() * 100)
+    
+    # Juntos
+    dia_jun = df_rem[df_rem['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+    dia_jun_pct = (dia_jun / dia_jun.sum() * 100)
+    
+    # Adiciona traços
+    fig.add_trace(
+        go.Bar(x=dias_semana, y=dia_sep_pct, name='Separados',
+               marker_color=COLORS['separados'], legendgroup=remetente, showlegend=(i==1)),
+        row=1, col=i
+    )
+    
+    fig.add_trace(
+        go.Bar(x=dias_semana, y=dia_jun_pct, name='Juntos',
+               marker_color=COLORS['juntos'], legendgroup=remetente, showlegend=(i==1)),
+        row=1, col=i
+    )
+
+fig.update_xaxes(title_text="Dia da Semana")
+fig.update_yaxes(title_text="Proporção (%)")
+fig.update_layout(height=400, title_text="Padrão Semanal por Remetente e Contexto", barmode='group')
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Padrão Semanal com Contexto
+
+**INVERSÃO completa do padrão:**
+
+**Quando SEPARADOS:**
+- Distribuição relativamente uniforme (12-16%)
+- Sem padrão claro útil/FDS
+
+**Quando JUNTOS:**
+- Segunda DISPARA para 26.8% - quase 1/3 da comunicação!
+- Sábado/Domingo CAEM drasticamente (3-7%)
+- Concentração em dias úteis
+
+**Por remetente:**
+- [PREENCHER - P1 e P2 seguem mesmo padrão? Ou um muda mais que outro?]
+
+**Interpretação:**
+- Separados: Comunicação constante (conexão emocional)
+- Juntos: Comunicação utilitária (trabalho, coordenação)
+- Segunda alta = discussões sobre trabalho, planejamento da semana
+- FDS juntos = aproveitam presença física sem celular
+:::
+
+---
+
+## Heatmap: Hora × Dia da Semana
+
+### Separados vs Juntos
+
+```{python}
+#| label: fig-heatmap-contexto
+#| fig-cap: "Heatmap hora × dia: separados vs juntos"
+
+# Cria subplots
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=['Quando Separados', 'Quando Juntos'],
+    specs=[[{'type': 'heatmap'}, {'type': 'heatmap'}]]
+)
+
+# Separados
+df_sep = df[~df['em_encontro']]
+heatmap_sep = df_sep.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+heatmap_sep.index = [dias_semana[i] for i in heatmap_sep.index]
+
+# Juntos
+df_jun = df[df['em_encontro']]
+heatmap_jun = df_jun.groupby(['dia_semana_num', 'hora']).size().unstack(fill_value=0)
+heatmap_jun.index = [dias_semana[i] for i in heatmap_jun.index]
+
+# Normaliza pela escala máxima (para comparação visual)
+vmax = max(heatmap_sep.values.max(), heatmap_jun.values.max())
+
+# Adiciona heatmaps
+fig.add_trace(
+    go.Heatmap(
+        z=heatmap_sep.T.values,
+        x=heatmap_sep.index,
+        y=heatmap_sep.columns,
+        colorscale='Blues',
+        zmin=0,
+        zmax=vmax,
+        showscale=False
+    ),
+    row=1, col=1
+)
+
+fig.add_trace(
+    go.Heatmap(
+        z=heatmap_jun.T.values,
+        x=heatmap_jun.index,
+        y=heatmap_jun.columns,
+        colorscale='Greens',
+        zmin=0,
+        zmax=vmax,
+        showscale=True
+    ),
+    row=1, col=2
+)
+
+fig.update_xaxes(title_text="Dia da Semana")
+fig.update_yaxes(title_text="Hora do Dia")
+fig.update_layout(height=500, title_text="Heatmap: Hora × Dia da Semana por Contexto")
+fig.show()
+```
+
+::: {.callout-warning}
+### 💡 Insight - Heatmap por Contexto
+
+**Quando SEPARADOS (azul):**
+- Faixa noturna (18h-21h) intensa em TODOS os dias
+- Padrão horário universal (não varia por dia)
+- Segunda-domingo similar
+
+**Quando JUNTOS (verde):**
+- Concentração em dias úteis (segunda-sexta)
+- Pico mais distribuído ao longo do dia (não só noite)
+- FDS praticamente vazio
+
+**Conclusão:**
+- Padrão Hora×Dia É independente quando separados (já sabíamos)
+- Padrão Hora×Dia INTERAGE quando juntos (dia da semana importa)
+- Feature `dia_semana × em_encontro` pode ser útil
+:::
+
+---
+
+# Marcos Especiais
+
+## Análise de Datas Marcantes
+
+```{python}
+# Mensagens em marcos especiais
+msgs_marcos = df[df['eh_marco_especial']].copy()
+
+if len(msgs_marcos) > 0:
+    print("📊 Marcos Especiais:\n")
+    
+    # Por marco
+    marcos_counts = msgs_marcos.groupby('marco_nome').agg({
+        'timestamp': ['count', 'min', 'max']
+    }).reset_index()
+    marcos_counts.columns = ['Marco', 'Mensagens', 'Primeira', 'Última']
+    
+    print(marcos_counts.to_string(index=False))
+    
+    # Volume por marco
+    for marco in msgs_marcos['marco_nome'].unique():
+        df_marco = msgs_marcos[msgs_marcos['marco_nome'] == marco]
+        print(f"\n{marco}:")
+        print(f"   • Total: {len(df_marco)} mensagens")
+        print(f"   • Data: {df_marco['timestamp'].dt.date.iloc[0]}")
+        
+        # Por remetente
+        for rem in ['P1', 'P2']:
+            count = df_marco[df_marco['remetente'] == rem].shape[0]
+            print(f"   • {rem}: {count} mensagens")
+else:
+    print("Nenhuma mensagem em marcos especiais identificada.")
+```
+
+::: {.callout-warning}
+### 💡 Insight - Marcos Especiais
+
+[PREENCHER APÓS RODAR - analisar volume em datas marcantes]
+:::
+
+---
+
+# Distância Temporal e Saudade
+
+## Dias Desde Último Encontro × Volume
+
+```{python}
+#| label: fig-dias-desde-volume
+#| fig-cap: "Volume de mensagens vs dias desde último encontro"
+
+# Filtra mensagens FORA de encontros com distância conhecida
+df_distancia = df[
+    (~df['em_encontro']) & 
+    (df['dias_desde_ultimo_encontro'].notna())
+].copy()
+
+if len(df_distancia) > 0:
+    # Agrupa por dias desde
+    volume_por_distancia = df_distancia.groupby('dias_desde_ultimo_encontro').size().reset_index(name='count')
+    
+    # Visualização
+    fig = px.scatter(
+        volume_por_distancia,
+        x='dias_desde_ultimo_encontro',
+        y='count',
+        trendline='lowess',
+        title='Volume de Mensagens vs Dias Desde Último Encontro',
+        labels={
+            'dias_desde_ultimo_encontro': 'Dias Desde Último Encontro',
+            'count': 'Quantidade de Mensagens'
+        }
+    )
+    
+    fig.update_traces(marker=dict(size=8, opacity=0.6))
+    fig.update_layout(height=400)
+    fig.show()
+    
+    # Estatísticas
+    print(f"\n📊 Análise de Saudade (Dias Desde Último Encontro):\n")
+    print(f"   • Mensagens analisadas: {len(df_distancia):,}")
+    print(f"   • Distância mínima: {df_distancia['dias_desde_ultimo_encontro'].min():.0f} dias")
+    print(f"   • Distância máxima: {df_distancia['dias_desde_ultimo_encontro'].max():.0f} dias")
+    print(f"   • Distância média: {df_distancia['dias_desde_ultimo_encontro'].mean():.1f} dias")
+    
+    # Correlação
+    corr = df_distancia.groupby('dias_desde_ultimo_encontro')['timestamp'].count().corr(
+        df_distancia.groupby('dias_desde_ultimo_encontro')['dias_desde_ultimo_encontro'].first()
+    )
+    print(f"\n   • Correlação dias vs volume: {corr:.3f}")
+    if corr > 0.3:
+        print(f"      ✅ Correlação POSITIVA moderada - volume aumenta com distância")
+    elif corr < -0.3:
+        print(f"      ✅ Correlação NEGATIVA moderada - volume diminui com distância")
+    else:
+        print(f"      ⚠️ Correlação FRACA - volume não varia sistematicamente com distância")
+```
+
+## Dias Até Próximo Encontro × Volume
+
+```{python}
+#| label: fig-dias-ate-volume
+#| fig-cap: "Volume de mensagens vs dias até próximo encontro"
+
+# Filtra mensagens FORA de encontros com distância conhecida
+df_antecipacao = df[
+    (~df['em_encontro']) & 
+    (df['dias_ate_proximo_encontro'].notna())
+].copy()
+
+if len(df_antecipacao) > 0:
+    # Agrupa por dias até
+    volume_por_antecipacao = df_antecipacao.groupby('dias_ate_proximo_encontro').size().reset_index(name='count')
+    
+    # Visualização
+    fig = px.scatter(
+        volume_por_antecipacao,
+        x='dias_ate_proximo_encontro',
+        y='count',
+        trendline='lowess',
+        title='Volume de Mensagens vs Dias Até Próximo Encontro',
+        labels={
+            'dias_ate_proximo_encontro': 'Dias Até Próximo Encontro',
+            'count': 'Quantidade de Mensagens'
+        }
+    )
+    
+    fig.update_traces(marker=dict(size=8, opacity=0.6))
+    fig.update_layout(height=400)
+    fig.show()
+    
+    # Estatísticas
+    print(f"\n📊 Análise de Antecipação (Dias Até Próximo Encontro):\n")
+    print(f"   • Mensagens analisadas: {len(df_antecipacao):,}")
+    print(f"   • Distância mínima: {df_antecipacao['dias_ate_proximo_encontro'].min():.0f} dias")
+    print(f"   • Distância máxima: {df_antecipacao['dias_ate_proximo_encontro'].max():.0f} dias")
+    print(f"   • Distância média: {df_antecipacao['dias_ate_proximo_encontro'].mean():.1f} dias")
+    
+    # Correlação
+    corr = df_antecipacao.groupby('dias_ate_proximo_encontro')['timestamp'].count().corr(
+        df_antecipacao.groupby('dias_ate_proximo_encontro')['dias_ate_proximo_encontro'].first()
+    )
+    print(f"\n   • Correlação dias vs volume: {corr:.3f}")
+    if corr < -0.3:
+        print(f"      ✅ Correlação NEGATIVA moderada - volume aumenta próximo ao encontro")
+    elif corr > 0.3:
+        print(f"      ⚠️ Correlação POSITIVA - volume diminui próximo ao encontro")
+    else:
+        print(f"      ⚠️ Correlação FRACA - volume não varia sistematicamente")
+```
+
+::: {.callout-warning}
+### 💡 Insight - Saudade e Antecipação
+
+[PREENCHER APÓS RODAR - analisar se volume aumenta após separação e/ou antes de encontros]
+:::
+
+---
+
+# Síntese Final para Feature Engineering
+
+::: {.callout-note}
+## 📊 Resumo Executivo - EDA com Contexto Integrado
+
+**Contexto externo domina TODOS os padrões:**
+- 68.3% de redução no volume quando juntos (p < 0.001)
+- 92.9% dos gaps coincidem com encontros
+- Padrões temporais mudam RADICALMENTE por contexto
+
+**Padrões horários:**
+- Separados: Unimodal noturno (pico 19h)
+- Juntos: Bimodal diurno (picos 12h + 18h)
+- **Implicação:** Feature `hora × em_encontro` essencial
+
+**Padrões semanais:**
+- Separados: Uniforme (sem padrão claro)
+- Juntos: Concentrado em dias úteis (segunda 26.8%, FDS 3-7%)
+- **Implicação:** Feature `dia_semana × em_encontro` útil
+
+**Tipos de mensagem:**
+- [PREENCHER - áudio/vídeo mudam por contexto?]
+- **Implicação:** Feature `grupo_mensagem × em_encontro` [útil/desnecessária]
+
+**Distância temporal:**
+- [PREENCHER - volume varia com dias_desde/ate_encontro?]
+- **Implicação:** Features `dias_desde_ultimo_encontro` e `dias_ate_proximo_encontro` [úteis/desnecessárias]
+
+**Marcos especiais:**
+- [PREENCHER - volume em datas marcantes difere?]
+
+---
+
+**Features ESSENCIAIS para FE:**
+
+*Contexto externo:*
+- ✅ `em_encontro` (booleana) - CRÍTICA
+- ✅ `encontro_id` (categórica)
+- ✅ `dias_desde_ultimo_encontro` (numérica)
+- ✅ `dias_ate_proximo_encontro` (numérica)
+
+*Interações com contexto:*
+- ✅ `hora × em_encontro` - padrões completamente diferentes
+- ✅ `periodo_dia × em_encontro` - essencial
+- ✅ `dia_semana × em_encontro` - útil (inversão de padrão)
+- ⚠️ `grupo_mensagem × em_encontro` - [avaliar após análise]
+
+*Features standalone (poder moderado):*
+- ✅ `hora` (0-23)
+- ✅ `periodo_dia` (Manhã/Tarde/Noite)
+- ✅ `mes` / `trimestre`
+- ⚠️ `dia_semana` - poder limitado sem contexto
+- ❌ `fim_de_semana` - zero poder discriminatório
+
+*Features a EVITAR:*
+- ❌ `hora × remetente` - padrões sincronizados
+- ❌ `dia_semana × remetente` - padrões idênticos
+- ❌ `fim_de_semana` (qualquer interação)
+
+---
+
+**Conclusão crítica:**
+O relacionamento opera em **dois modos radicalmente diferentes**:
+
+1. **Modo Distância** (66.8% do tempo):
+   - Volume alto (372 msgs/dia)
+   - Comunicação emocional/constante
+   - Padrão noturno (19h)
+   - Uniforme pela semana
+
+2. **Modo Presença** (33.2% do tempo):
+   - Volume baixo (118 msgs/dia)
+   - Comunicação utilitária/coordenação
+   - Padrão diurno/bimodal (12h + 18h)
+   - Concentrado em dias úteis
+
+**Implicação:** Qualquer modelo preditivo SEM `em_encontro` terá poder SEVERAMENTE limitado.
+
+**Próximo passo:** Feature Engineering (03-feature-engineering.qmd) com features de contexto integradas
+:::
+```
+
+---
+
+**[Baixar 02.3-EDA-conteudo-interacao.qmd](computer:///mnt/user-data/outputs/02.3-EDA-conteudo-interacao.qmd)**
+
+---
+
+## 🎯 O que o notebook faz:
+
+1. ✅ **Revisita TODAS as análises** do 02.1 com contexto
+2. ✅ **Compara junto vs separado** em cada visualização
+3. ✅ **Adiciona análises novas:** Marcos especiais, Distância temporal
+4. ✅ **Insights com [PREENCHER]** para você completar após rodar
+5. ✅ **Síntese final** consolidada para FE
+
+**Rode e me manda os resultados** para preenchermos os insights! 📊
