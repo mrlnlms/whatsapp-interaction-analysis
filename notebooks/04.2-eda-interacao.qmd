@@ -1,0 +1,1673 @@
+---
+title: "EDA - Padrões de Interação"
+subtitle: "Análise de tempo entre mensagens, sequências, turnos e fluxo de conversa"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+---
+
+# Introdução
+
+Este notebook analisa **padrões de interação** na comunicação do relacionamento.
+
+**Objetivo:** Entender dinâmicas de conversa - velocidade de resposta, turnos, sequências e fluxo temporal.
+
+**Decisão metodológica:**
+- Análises **FILTRADAS** para período de relacionamento (pós 16/dez/2024)
+- Razão: Evitar viés da mistura amizade + relacionamento (6.4x diferença no volume)
+- Dataset: 89.336 mensagens em 309 dias
+
+**Estrutura:**
+1. Tempo entre mensagens (velocidade de interação)
+2. Respostas rápidas (< 1min, < 5min, etc)
+3. Sequências de mensagens (grupos consecutivos)
+4. Turnos de conversa (P1 → P2 → P1)
+5. Distância temporal (dias_desde/ate encontros)
+
+---
+
+# Setup
+
+## Bibliotecas
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats
+from pathlib import Path
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações de visualização
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+```
+
+## Caminhos e Cores
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada (com contexto integrado)
+INPUT_FILE = DATA_DIR / 'messages_with_context.parquet'
+
+# Cores padronizadas
+COLORS = {
+    'P1': '#636EFA',
+    'P2': '#EF553B',
+    'separados': '#636EFA',
+    'juntos': '#00CC96',
+    'TEXT': '#636EFA',
+    'AUDIO': '#EF553B',
+    'VID': '#00CC96',
+    'IMG': '#AB63FA'
+}
+
+print(f"📁 Diretório: {DATA_DIR}")
+print(f"📂 Arquivo: {INPUT_FILE.name}")
+print(f"✅ Existe: {INPUT_FILE.exists()}")
+```
+
+## Carregamento e Filtro
+```{python}
+# Carrega dataset completo
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Dataset completo:")
+print(f"   • Mensagens: {len(df):,}")
+print(f"   • Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+
+# FILTRO: Apenas relacionamento (pós 16/dez/2024)
+data_marco = pd.Timestamp('2024-12-16')
+df_rel = df[df['timestamp'] >= data_marco].copy()
+
+print(f"\n📊 Dataset filtrado (relacionamento):")
+print(f"   • Mensagens: {len(df_rel):,} ({len(df_rel)/len(df)*100:.1f}%)")
+print(f"   • Período: {df_rel['timestamp'].min().date()} → {df_rel['timestamp'].max().date()}")
+print(f"   • Dias: {(df_rel['timestamp'].max() - df_rel['timestamp'].min()).days + 1}")
+
+# CRÍTICO: Ordena por timestamp para análises de sequência
+df_sorted = df_rel.sort_values('timestamp').reset_index(drop=True)
+
+print(f"\n✅ Dataset ordenado cronologicamente")
+print(f"   • Index reset (0 a {len(df_sorted)-1:,})")
+print(f"   • Pronto para análises de interação")
+```
+
+---
+
+# Padrões de Interação
+
+## Tempo entre Mensagens
+```{python}
+# Calcula tempo entre mensagens consecutivas
+df_sorted['tempo_desde_ultima'] = df_sorted['timestamp'].diff().dt.total_seconds()
+
+# Remove primeira mensagem (NaN)
+tempo_entre_msgs = df_sorted['tempo_desde_ultima'].dropna()
+
+print(f"⏱️ Tempo entre mensagens (segundos):")
+print(f"\n{tempo_entre_msgs.describe()}")
+
+# Converte para minutos para interpretação
+print(f"\n⏱️ Em minutos:")
+print(f"\n{(tempo_entre_msgs / 60).describe()}")
+
+# Converte para horas
+print(f"\n⏱️ Em horas:")
+print(f"\n{(tempo_entre_msgs / 3600).describe()}")
+```
+
+### Distribuição Geral
+```{python}
+#| label: fig-tempo-entre
+#| fig-cap: "Distribuição do tempo entre mensagens (até 1 hora)"
+
+# Visualização (limitando a 1 hora para melhor visualização)
+tempo_plot = tempo_entre_msgs[tempo_entre_msgs <= 3600]  # até 1 hora
+
+fig = px.histogram(
+    x=tempo_plot / 60,  # converte para minutos
+    nbins=50,
+    title='Distribuição do Tempo entre Mensagens (até 1 hora)',
+    labels={'x': 'Minutos', 'y': 'Frequência'},
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+fig.update_layout(height=400)
+fig.show()
+
+# Estatísticas específicas
+print(f"\n📊 Faixas de tempo:")
+print(f"   • < 1 minuto: {(tempo_entre_msgs < 60).sum():,} ({(tempo_entre_msgs < 60).sum()/len(tempo_entre_msgs)*100:.1f}%)")
+print(f"   • 1-5 minutos: {((tempo_entre_msgs >= 60) & (tempo_entre_msgs < 300)).sum():,} ({((tempo_entre_msgs >= 60) & (tempo_entre_msgs < 300)).sum()/len(tempo_entre_msgs)*100:.1f}%)")
+print(f"   • 5-15 minutos: {((tempo_entre_msgs >= 300) & (tempo_entre_msgs < 900)).sum():,} ({((tempo_entre_msgs >= 300) & (tempo_entre_msgs < 900)).sum()/len(tempo_entre_msgs)*100:.1f}%)")
+print(f"   • 15-60 minutos: {((tempo_entre_msgs >= 900) & (tempo_entre_msgs < 3600)).sum():,} ({((tempo_entre_msgs >= 900) & (tempo_entre_msgs < 3600)).sum()/len(tempo_entre_msgs)*100:.1f}%)")
+print(f"   • > 1 hora: {(tempo_entre_msgs >= 3600).sum():,} ({(tempo_entre_msgs >= 3600).sum()/len(tempo_entre_msgs)*100:.1f}%)")
+```
+
+### Escala Logarítmica
+```{python}
+#| label: fig-tempo-log
+#| fig-cap: "Distribuição em escala logarítmica"
+
+# Remove zeros (log não aceita)
+tempo_positivo = tempo_entre_msgs[tempo_entre_msgs > 0]
+
+# Histograma em escala LOG
+fig = px.histogram(
+    x=np.log10(tempo_positivo / 60),  # Log10 de minutos
+    nbins=50,
+    title='Distribuição do Tempo entre Mensagens (Escala LOG)',
+    labels={'x': 'Log10(Minutos)', 'y': 'Frequência'},
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+# Adiciona labels customizados no eixo X
+fig.update_xaxes(
+    tickvals=[-2, -1, 0, 1, 2, 3, 4],
+    ticktext=['0.01min', '0.1min', '1min', '10min', '100min', '1.000min', '10.000min']
+)
+
+fig.update_layout(height=400)
+fig.show()
+```
+
+### Distribuição por Faixas
+```{python}
+#| label: fig-tempo-faixas
+#| fig-cap: "Tempo entre mensagens por faixa interpretável"
+
+# Define bins por faixas interpretáveis
+bins_segundos = [0, 10, 60, 300, 1800, 3600, 86400, float('inf')]
+labels = ['0-10s', '10s-1min', '1-5min', '5-30min', '30min-1h', '1h-24h', '>24h']
+
+tempo_faixas = pd.cut(tempo_entre_msgs, bins=bins_segundos, labels=labels)
+
+# Conta por faixa
+contagem = tempo_faixas.value_counts().sort_index()
+
+# Gráfico de barras
+fig = px.bar(
+    x=contagem.index,
+    y=contagem.values,
+    title='Tempo entre Mensagens por Faixa',
+    labels={'x': 'Faixa de Tempo', 'y': 'Quantidade'},
+    text=contagem.values,
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+
+print("\n📊 Distribuição por faixa (geral):")
+for faixa, qtd in contagem.items():
+    pct = (qtd / len(tempo_entre_msgs) * 100)
+    print(f"   {faixa}: {qtd:,} ({pct:.1f}%)")
+```
+
+### Por Contexto (Junto vs Separado)
+```{python}
+#| label: fig-tempo-contexto-faixas
+#| fig-cap: "Distribuição por faixa de tempo: junto vs separado"
+
+# Define faixas interpretáveis
+bins_segundos = [0, 10, 60, 300, 1800, 3600, float('inf')]
+labels = ['0-10s', '10s-1min', '1-5min', '5-30min', '30min-1h', '>1h']
+
+# Calcula por contexto (usando em_encontro direto)
+resultados = []
+
+# Separados (em_encontro = False)
+tempo_sep = df_sorted[~df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+faixas_sep = pd.cut(tempo_sep, bins=bins_segundos, labels=labels)
+contagem_sep = faixas_sep.value_counts().sort_index()
+
+for faixa, qtd in contagem_sep.items():
+    resultados.append({
+        'Contexto': 'Separados',
+        'Faixa': faixa,
+        'Quantidade': qtd,
+        'Percentual': (qtd / len(tempo_sep) * 100)
+    })
+
+# Juntos (em_encontro = True)
+tempo_jun = df_sorted[df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+faixas_jun = pd.cut(tempo_jun, bins=bins_segundos, labels=labels)
+contagem_jun = faixas_jun.value_counts().sort_index()
+
+for faixa, qtd in contagem_jun.items():
+    resultados.append({
+        'Contexto': 'Juntos',
+        'Faixa': faixa,
+        'Quantidade': qtd,
+        'Percentual': (qtd / len(tempo_jun) * 100)
+    })
+
+df_faixas = pd.DataFrame(resultados)
+
+# Gráfico de barras agrupadas
+fig = px.bar(
+    df_faixas,
+    x='Faixa',
+    y='Percentual',
+    color='Contexto',
+    barmode='group',
+    title='Distribuição por Faixa de Tempo: Junto vs Separado',
+    labels={'Percentual': 'Percentual (%)', 'Faixa': 'Tempo entre Mensagens'},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']},
+    text='Percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=450)
+fig.show()
+
+# Tabela
+print("\n📊 Distribuição por faixa e contexto:")
+pivot = df_faixas.pivot(index='Faixa', columns='Contexto', values='Percentual').round(1)
+print(pivot)
+```
+
+### Distribuição Acumulada (CDF)
+```{python}
+#| label: fig-tempo-cdf-contexto
+#| fig-cap: "Distribuição acumulada por contexto (CDF)"
+
+# CDF separado por contexto (usando em_encontro direto)
+fig = go.Figure()
+
+percentis_contexto = {}
+
+# Separados
+tempo_sep = df_sorted[~df_sorted['em_encontro']]['tempo_desde_ultima'].dropna() / 60  # minutos
+tempo_sorted_sep = np.sort(tempo_sep)
+cdf_sep = np.arange(1, len(tempo_sorted_sep) + 1) / len(tempo_sorted_sep) * 100
+
+fig.add_trace(go.Scatter(
+    x=tempo_sorted_sep,
+    y=cdf_sep,
+    mode='lines',
+    name='Separados',
+    line=dict(width=3, color=COLORS['separados'])
+))
+
+percentis_contexto['Separados'] = {
+    'p50': np.percentile(tempo_sep, 50),
+    'p75': np.percentile(tempo_sep, 75),
+    'p90': np.percentile(tempo_sep, 90),
+    'p95': np.percentile(tempo_sep, 95)
+}
+
+# Juntos
+tempo_jun = df_sorted[df_sorted['em_encontro']]['tempo_desde_ultima'].dropna() / 60  # minutos
+tempo_sorted_jun = np.sort(tempo_jun)
+cdf_jun = np.arange(1, len(tempo_sorted_jun) + 1) / len(tempo_sorted_jun) * 100
+
+fig.add_trace(go.Scatter(
+    x=tempo_sorted_jun,
+    y=cdf_jun,
+    mode='lines',
+    name='Juntos',
+    line=dict(width=3, color=COLORS['juntos'])
+))
+
+percentis_contexto['Juntos'] = {
+    'p50': np.percentile(tempo_jun, 50),
+    'p75': np.percentile(tempo_jun, 75),
+    'p90': np.percentile(tempo_jun, 90),
+    'p95': np.percentile(tempo_jun, 95)
+}
+
+fig.update_layout(
+    title='Distribuição Acumulada por Contexto',
+    xaxis_title='Minutos',
+    yaxis_title='% Acumulada',
+    xaxis=dict(range=[0, 60]),
+    height=500,
+    hovermode='x unified'
+)
+
+# Linhas de referência
+fig.add_hline(y=50, line_dash="dash", annotation_text="50%", line_color="gray", opacity=0.5)
+fig.add_hline(y=75, line_dash="dash", annotation_text="75%", line_color="gray", opacity=0.5)
+fig.add_hline(y=90, line_dash="dash", annotation_text="90%", line_color="gray", opacity=0.5)
+
+fig.show()
+
+# Tabela comparativa
+print("\n📊 Percentis por contexto:")
+print(f"{'':15} {'Separados':>12} {'Juntos':>12} {'Diferença':>12}")
+print("-" * 55)
+for p in ['p50', 'p75', 'p90', 'p95']:
+    p_num = int(p[1:])
+    val_sep = percentis_contexto['Separados'][p]
+    val_jun = percentis_contexto['Juntos'][p]
+    diff = val_jun - val_sep
+    print(f"{p_num}º percentil: {val_sep:>10.2f} min {val_jun:>10.2f} min {diff:>+10.2f} min")
+```
+
+
+::: {.callout-note}
+### 💡 Insight - Tempo entre Mensagens
+
+**Distribuição geral:**
+- **81.0%** das mensagens em < 1 minuto (conversação fluida!)
+- **28.7%** em < 10 segundos (respostas ultra-rápidas)
+- Mediana geral: **7.2 segundos**
+
+---
+
+**Por contexto - JUNTOS É MAIS LENTO:**
+
+**Separados (azul):**
+- Mediana: **0.12 min** (7 segundos)
+- 75% em até: **0.58 min** (35 segundos)
+- 90% em até: **2.80 min** (fluxo consistente)
+
+**Juntos (verde):**
+- Mediana: **0.18 min** (11 segundos) - **+50% mais lento!**
+- 75% em até: **0.73 min** (44 segundos)
+- 90% em até: **5.35 min** (+2.5 min vs separados!)
+- 95% em até: **16.78 min** (+8 min vs separados!)
+
+---
+
+**Descoberta CRÍTICA - Distribuição BIMODAL quando juntos:**
+
+**Quando SEPARADOS:**
+- Distribuição SUAVE e uniforme
+- 26.8% em 0-10s, depois cresce gradualmente
+- Poucas pausas longas (>1h = apenas 1.1%)
+- **Padrão:** Fluxo contínuo e consistente
+
+**Quando JUNTOS:**
+- Distribuição BIMODAL (dois picos!)
+- **Pico 1:** 39.6% em 0-10s (coordenação instantânea!)
+- **Pico 2:** 10.3% em >5min (pausas longas, 3x mais que separados!)
+- **Padrão:** Rajadas rápidas + pausas longas
+
+---
+
+**Interpretação:**
+
+**SEPARADOS = Atenção constante:**
+- WhatsApp como canal principal
+- Respostas rápidas e consistentes (mediana 7s)
+- Fluxo natural de conversa
+- Poucas interrupções
+
+**JUNTOS = Coordenação pontual:**
+- Dois modos distintos:
+  1. **Ultra-rápido** (39.6% < 10s): "Onde você está?", "Vou sair agora"
+  2. **Pausas longas** (10.3% > 5min): Conversas presenciais, celular guardado
+- WhatsApp como ferramenta de logística
+- NÃO é fluxo contínuo
+
+**Conclusão:**
+> Paradoxo: Juntos tem MAIS respostas ultra-rápidas (39.6% < 10s) MAS mediana é MAIS LENTA (11s vs 7s). Razão: Distribuição bimodal - quando juntos, ou respondem INSTANTANEAMENTE (coordenação) ou demoram MUITO (conversando presencialmente).
+:::
+
+
+## Respostas Rápidas
+```{python}
+# ============================================================================
+# RESPOSTAS RÁPIDAS
+# ============================================================================
+
+print("="*80)
+print("⚡ RESPOSTAS RÁPIDAS - Análise de Velocidade")
+print("="*80)
+
+# Usa df_sorted já filtrado (relacionamento)
+tempo_rel = df_sorted['tempo_desde_ultima'].dropna()
+
+# ============================================================================
+# 1. VISÃO GERAL
+# ============================================================================
+
+print("\n📊 Velocidade Geral de Resposta:\n")
+
+thresholds = [10, 30, 60, 120, 300]  # segundos
+for threshold in thresholds:
+    count = (tempo_rel < threshold).sum()
+    pct = (count / len(tempo_rel)) * 100
+    print(f"   < {threshold}s: {count:,} ({pct:.1f}%)")
+
+# ============================================================================
+# 2. POR CONTEXTO (Junto vs Separado)
+# ============================================================================
+
+print("\n⚡ Velocidade por CONTEXTO:\n")
+
+# Separados
+tempo_sep = df_sorted[~df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+print(f"Separados:")
+print(f"   < 10s:  {(tempo_sep < 10).sum():,} ({(tempo_sep < 10).sum()/len(tempo_sep)*100:.1f}%)")
+print(f"   < 30s:  {(tempo_sep < 30).sum():,} ({(tempo_sep < 30).sum()/len(tempo_sep)*100:.1f}%)")
+print(f"   < 60s:  {(tempo_sep < 60).sum():,} ({(tempo_sep < 60).sum()/len(tempo_sep)*100:.1f}%)")
+print(f"   < 120s: {(tempo_sep < 120).sum():,} ({(tempo_sep < 120).sum()/len(tempo_sep)*100:.1f}%)")
+print(f"   < 300s: {(tempo_sep < 300).sum():,} ({(tempo_sep < 300).sum()/len(tempo_sep)*100:.1f}%)")
+
+# Juntos
+tempo_jun = df_sorted[df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+print(f"\nJuntos:")
+print(f"   < 10s:  {(tempo_jun < 10).sum():,} ({(tempo_jun < 10).sum()/len(tempo_jun)*100:.1f}%)")
+print(f"   < 30s:  {(tempo_jun < 30).sum():,} ({(tempo_jun < 30).sum()/len(tempo_jun)*100:.1f}%)")
+print(f"   < 60s:  {(tempo_jun < 60).sum():,} ({(tempo_jun < 60).sum()/len(tempo_jun)*100:.1f}%)")
+print(f"   < 120s: {(tempo_jun < 120).sum():,} ({(tempo_jun < 120).sum()/len(tempo_jun)*100:.1f}%)")
+print(f"   < 300s: {(tempo_jun < 300).sum():,} ({(tempo_jun < 300).sum()/len(tempo_jun)*100:.1f}%)")
+
+# ============================================================================
+# 3. POR REMETENTE (P1 vs P2)
+# ============================================================================
+
+print("\n⚡ Velocidade por REMETENTE:\n")
+
+for rem in ['P1', 'P2']:
+    tempo_rem = df_sorted[df_sorted['remetente'] == rem]['tempo_desde_ultima'].dropna()
+    
+    print(f"{rem}:")
+    print(f"   < 10s:  {(tempo_rem < 10).sum():,} ({(tempo_rem < 10).sum()/len(tempo_rem)*100:.1f}%)")
+    print(f"   < 30s:  {(tempo_rem < 30).sum():,} ({(tempo_rem < 30).sum()/len(tempo_rem)*100:.1f}%)")
+    print(f"   < 60s:  {(tempo_rem < 60).sum():,} ({(tempo_rem < 60).sum()/len(tempo_rem)*100:.1f}%)")
+    print()
+
+# ============================================================================
+# 4. VISUALIZAÇÃO - Contexto
+# ============================================================================
+```
+
+```{python}
+#| label: fig-respostas-rapidas
+#| fig-cap: "Velocidade de resposta por contexto"
+
+# Prepara dados
+dados_comparacao = []
+
+# Separados
+tempo_sep = df_sorted[~df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+dados_comparacao.extend([
+    {'Contexto': 'Separados', 'Faixa': '< 10s', 'Percentual': (tempo_sep < 10).sum()/len(tempo_sep)*100},
+    {'Contexto': 'Separados', 'Faixa': '10-30s', 'Percentual': ((tempo_sep >= 10) & (tempo_sep < 30)).sum()/len(tempo_sep)*100},
+    {'Contexto': 'Separados', 'Faixa': '30-60s', 'Percentual': ((tempo_sep >= 30) & (tempo_sep < 60)).sum()/len(tempo_sep)*100},
+    {'Contexto': 'Separados', 'Faixa': '1-2min', 'Percentual': ((tempo_sep >= 60) & (tempo_sep < 120)).sum()/len(tempo_sep)*100},
+    {'Contexto': 'Separados', 'Faixa': '2-5min', 'Percentual': ((tempo_sep >= 120) & (tempo_sep < 300)).sum()/len(tempo_sep)*100},
+    {'Contexto': 'Separados', 'Faixa': '> 5min', 'Percentual': (tempo_sep >= 300).sum()/len(tempo_sep)*100}
+])
+
+# Juntos
+tempo_jun = df_sorted[df_sorted['em_encontro']]['tempo_desde_ultima'].dropna()
+dados_comparacao.extend([
+    {'Contexto': 'Juntos', 'Faixa': '< 10s', 'Percentual': (tempo_jun < 10).sum()/len(tempo_jun)*100},
+    {'Contexto': 'Juntos', 'Faixa': '10-30s', 'Percentual': ((tempo_jun >= 10) & (tempo_jun < 30)).sum()/len(tempo_jun)*100},
+    {'Contexto': 'Juntos', 'Faixa': '30-60s', 'Percentual': ((tempo_jun >= 30) & (tempo_jun < 60)).sum()/len(tempo_jun)*100},
+    {'Contexto': 'Juntos', 'Faixa': '1-2min', 'Percentual': ((tempo_jun >= 60) & (tempo_jun < 120)).sum()/len(tempo_jun)*100},
+    {'Contexto': 'Juntos', 'Faixa': '2-5min', 'Percentual': ((tempo_jun >= 120) & (tempo_jun < 300)).sum()/len(tempo_jun)*100},
+    {'Contexto': 'Juntos', 'Faixa': '> 5min', 'Percentual': (tempo_jun >= 300).sum()/len(tempo_jun)*100}
+])
+
+df_comp = pd.DataFrame(dados_comparacao)
+
+# Ordena faixas
+ordem_faixas = ['< 10s', '10-30s', '30-60s', '1-2min', '2-5min', '> 5min']
+df_comp['Faixa'] = pd.Categorical(df_comp['Faixa'], categories=ordem_faixas, ordered=True)
+df_comp = df_comp.sort_values('Faixa')
+
+# Gráfico
+fig = px.bar(
+    df_comp,
+    x='Faixa',
+    y='Percentual',
+    color='Contexto',
+    barmode='group',
+    title='Velocidade de Resposta: Junto vs Separado',
+    labels={'Percentual': '%', 'Faixa': 'Tempo de Resposta'},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']},
+    text='Percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=450)
+fig.show()
+
+print("="*80)
+```
+
+::: {.callout-tip}
+### 💡 Insight - Velocidade de Resposta
+
+**Performance geral - Conversação extremamente ágil:**
+- **81.0%** < 60s (4 em cada 5 mensagens!)
+- **72.5%** < 30s 
+- **53.5%** < 10s (maioria é ultra-rápida!)
+
+---
+
+**Por contexto - Separados LEVEMENTE mais rápido:**
+
+| Threshold | Separados | Juntos | Diferença |
+|-----------|-----------|--------|-----------|
+| **< 10s** | **54.6%** | 47.4% | +7.2pp 🔥 |
+| **< 30s** | 72.8% | 70.5% | +2.3pp |
+| **< 60s** | **81.5%** | 78.0% | +3.5pp |
+| **< 5min** | 92.9% | 89.7% | +3.2pp |
+
+**Descoberta:** Quando separados, respostas são **consistentemente mais rápidas** em TODAS as faixas (diferença pequena mas consistente).
+
+---
+
+**Por remetente - SIMETRIA PERFEITA:**
+
+| Threshold | P1 | P2 | Diferença |
+|-----------|----|----|-----------|
+| **< 10s** | 51.5% | **55.5%** | +4.0pp |
+| **< 30s** | 72.1% | 72.9% | +0.8pp |
+| **< 60s** | 81.4% | 80.6% | -0.8pp |
+
+**Descoberta:** P2 é LEVEMENTE mais rápido (55.5% < 10s vs 51.5% P1), mas diferença é marginal. Ambos respondem com velocidade similar.
+
+---
+
+**Gráfico por faixas revela padrão:**
+
+**< 10s (Ultra-rápido):**
+- Separados: 54.6% (MAIORIA!)
+- Juntos: 47.4% (quase metade)
+- **Diferença de 7.2pp** - separados mais ultra-rápido
+
+**10-30s:**
+- Similar (18-23%) em ambos contextos
+
+**> 5min (Pausas longas):**
+- Separados: 7.1%
+- Juntos: **10.3%** (+45% mais pausas!)
+- Confirma distribuição bimodal quando juntos
+
+---
+
+**Interpretação integrada:**
+
+**SEPARADOS:**
+- **54.6%** de respostas < 10s (atenção constante ao WhatsApp)
+- Apenas **7.1%** de pausas > 5min
+- WhatsApp sempre ativo (compensam distância física)
+- Conversa fluida e ininterrupta
+
+**JUNTOS:**
+- **47.4%** de respostas < 10s (ainda alto, mas 7pp menor)
+- **10.3%** de pausas > 5min (45% mais que separados!)
+- Padrão: Coordenação rápida ("onde almoçar?") + pausas (conversando pessoalmente)
+- WhatsApp secundário
+
+---
+
+**Conclusão central:**
+> **81% de respostas < 60s** indica relacionamento **EXTREMAMENTE interativo**. Ambos mantêm atenção constante ao WhatsApp, respondendo em segundos. Diferença de contexto é **MARGINAL** na velocidade absoluta, mas padrão muda: separados = fluxo contínuo (54.6% ultra-rápido), juntos = coordenação pontual (mais pausas longas, 10.3% > 5min).
+
+**P1 e P2 são igualmente ágeis** - diferença de 4pp em < 10s é desprezível. Relacionamento tem **simetria perfeita** na velocidade de resposta.
+:::
+
+
+---
+
+Descoberta chave: Juntos tem MAIS respostas ultra-rápidas (39.6% em 0-10s na primeira medida) MAS também mais pausas longas, resultando em mediana mais lenta! 🔥
+
+## Sequências de Mensagens
+```{python}
+# ============================================================================
+# SEQUÊNCIAS DE MENSAGENS
+# ============================================================================
+
+# Calcula sequências (mensagens consecutivas do mesmo remetente)
+df_sorted['mudou_remetente'] = df_sorted['remetente'] != df_sorted['remetente'].shift()
+df_sorted['sequencia'] = df_sorted.groupby(
+    (df_sorted['mudou_remetente']).cumsum()
+).cumcount() + 1
+
+print("="*80)
+print("📊 SEQUÊNCIAS DE MENSAGENS")
+print("="*80)
+
+# ============================================================================
+# 1. VISÃO GERAL
+# ============================================================================
+
+print("\n📊 Sequências - Estatísticas Gerais:\n")
+print(df_sorted['sequencia'].describe())
+print(f"\n📈 Maior sequência: {df_sorted['sequencia'].max()} mensagens consecutivas")
+
+# Distribuição
+seq_dist = df_sorted.groupby('sequencia').size().sort_index()
+
+print(f"\n📊 Top 20 sequências mais comuns:")
+for seq, count in seq_dist.head(20).items():
+    pct = (count / len(df_sorted)) * 100
+    print(f"   {seq:2d} msg: {count:,} ({pct:.1f}%)")
+
+# ============================================================================
+# 2. POR CONTEXTO (Junto vs Separado)
+# ============================================================================
+
+print("\n📊 Sequências por CONTEXTO:\n")
+
+# Separados
+df_sep = df_sorted[~df_sorted['em_encontro']]
+print(f"Separados:")
+print(f"   Média: {df_sep['sequencia'].mean():.2f} msgs")
+print(f"   Mediana: {df_sep['sequencia'].median():.0f} msgs")
+print(f"   Máximo: {df_sep['sequencia'].max()} msgs")
+print(f"   75%: {df_sep['sequencia'].quantile(0.75):.0f} msgs")
+print(f"   90%: {df_sep['sequencia'].quantile(0.90):.0f} msgs")
+
+# Juntos
+df_jun = df_sorted[df_sorted['em_encontro']]
+print(f"\nJuntos:")
+print(f"   Média: {df_jun['sequencia'].mean():.2f} msgs")
+print(f"   Mediana: {df_jun['sequencia'].median():.0f} msgs")
+print(f"   Máximo: {df_jun['sequencia'].max()} msgs")
+print(f"   75%: {df_jun['sequencia'].quantile(0.75):.0f} msgs")
+print(f"   90%: {df_jun['sequencia'].quantile(0.90):.0f} msgs")
+
+# ============================================================================
+# 3. POR REMETENTE
+# ============================================================================
+
+print("\n📊 Sequências por REMETENTE:\n")
+
+for rem in ['P1', 'P2']:
+    df_rem = df_sorted[df_sorted['remetente'] == rem]
+    
+    print(f"{rem}:")
+    print(f"   Média: {df_rem['sequencia'].mean():.2f} msgs")
+    print(f"   Mediana: {df_rem['sequencia'].median():.0f} msgs")
+    print(f"   Máximo: {df_rem['sequencia'].max()} msgs")
+    print()
+```
+
+### Distribuição de Sequências
+```{python}
+#| label: fig-sequencias-top15
+#| fig-cap: "Top 15 tamanhos de sequências mais comuns"
+
+# Visualização - Top 15
+fig = px.bar(
+    x=seq_dist.index[:15],
+    y=seq_dist.values[:15],
+    title='Top 15 Tamanhos de Sequências Mais Comuns',
+    labels={'x': 'Tamanho da Sequência (msgs consecutivas)', 'y': 'Frequência'},
+    text=seq_dist.values[:15],
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+```
+
+### Por Contexto
+```{python}
+#| label: fig-sequencias-boxplot
+#| fig-cap: "Tamanho de sequências por contexto (boxplot)"
+
+# Limita até sequência 20 para visualização
+df_plot = df_sorted[df_sorted['sequencia'] <= 20].copy()
+df_plot['contexto'] = df_plot['em_encontro'].map({True: 'Juntos', False: 'Separados'})
+
+fig = px.box(
+    df_plot,
+    x='contexto',
+    y='sequencia',
+    color='contexto',
+    title='Tamanho de Sequências: Junto vs Separado (até 20 msgs)',
+    labels={'sequencia': 'Tamanho da Sequência', 'contexto': ''},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']}
+)
+
+fig.update_layout(showlegend=False, height=400)
+fig.show()
+```
+
+### Distribuição por Faixas
+```{python}
+#| label: fig-sequencias-faixas
+#| fig-cap: "Distribuição de sequências por faixa e contexto"
+
+# Define faixas de sequência
+def classificar_sequencia(seq):
+    if seq == 1:
+        return '1 msg'
+    elif seq <= 3:
+        return '2-3 msgs'
+    elif seq <= 5:
+        return '4-5 msgs'
+    elif seq <= 10:
+        return '6-10 msgs'
+    else:
+        return '>10 msgs'
+
+df_sorted['faixa_seq'] = df_sorted['sequencia'].apply(classificar_sequencia)
+
+# Calcula por contexto
+dados_faixas = []
+
+# Separados
+df_sep = df_sorted[~df_sorted['em_encontro']]
+faixas_sep = df_sep['faixa_seq'].value_counts()
+for faixa, count in faixas_sep.items():
+    dados_faixas.append({
+        'Contexto': 'Separados',
+        'Faixa': faixa,
+        'Quantidade': count,
+        'Percentual': (count / len(df_sep)) * 100
+    })
+
+# Juntos
+df_jun = df_sorted[df_sorted['em_encontro']]
+faixas_jun = df_jun['faixa_seq'].value_counts()
+for faixa, count in faixas_jun.items():
+    dados_faixas.append({
+        'Contexto': 'Juntos',
+        'Faixa': faixa,
+        'Quantidade': count,
+        'Percentual': (count / len(df_jun)) * 100
+    })
+
+df_faixas = pd.DataFrame(dados_faixas)
+
+# Ordena faixas
+ordem_faixas = ['1 msg', '2-3 msgs', '4-5 msgs', '6-10 msgs', '>10 msgs']
+df_faixas['Faixa'] = pd.Categorical(df_faixas['Faixa'], categories=ordem_faixas, ordered=True)
+df_faixas = df_faixas.sort_values('Faixa')
+
+# Gráfico
+fig = px.bar(
+    df_faixas,
+    x='Faixa',
+    y='Percentual',
+    color='Contexto',
+    barmode='group',
+    title='Distribuição de Sequências por Faixa: Junto vs Separado',
+    labels={'Percentual': '%', 'Faixa': 'Tamanho da Sequência'},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']},
+    text='Percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=450)
+fig.show()
+
+# Tabela
+print("\n📊 Distribuição por faixa e contexto:\n")
+pivot = df_faixas.pivot(index='Faixa', columns='Contexto', values='Percentual').round(1)
+print(pivot)
+
+print("="*80)
+```
+
+::: {.callout-note}
+### 💡 Insight - Sequências de Mensagens
+
+**Definição:** Sequência = mensagens consecutivas do mesmo remetente sem intercalar.
+
+**Visão geral:**
+- **Mediana: 2 mensagens** (padrão dominante: enviar 2 msgs seguidas)
+- **Média: 3.35 mensagens**
+- **Máximo: 54 mensagens consecutivas!** (monólogo épico!)
+- **30.6%** são mensagens únicas (sem sequência)
+
+**Top 3 padrões:**
+- **1 msg:** 30.6% (resposta simples)
+- **2 msgs:** 22.7% (padrão "mensagem + complemento")
+- **3 msgs:** 13.6% (desenvolvimento breve)
+- **Total 1-3 msgs:** 66.9% (2 em cada 3 mensagens!)
+
+---
+
+**Por contexto - SEPARADOS desenvolvem mais:**
+
+**SEPARADOS (azul):**
+- **Média: 3.45 msgs** 
+- Mediana: 2 msgs
+- 90%: **7 msgs**
+- Máximo: 34 msgs
+- **>10 msgs: 3.6%** (sequências longas)
+
+**JUNTOS (verde):**
+- **Média: 2.73 msgs** (**-21% vs separados!**)
+- Mediana: 2 msgs
+- 90%: **5 msgs** (-29% vs separados)
+- Máximo: 54 msgs (outlier - maior do dataset!)
+- **>10 msgs: 2.2%** (39% menos que separados)
+
+**Diferença crítica:** Quando separados, desenvolvem pensamentos em **26% mais mensagens seguidas** (3.45 vs 2.73).
+
+---
+
+**Distribuição por faixas revela padrões:**
+
+**1 msg (mensagem única, sem sequência):**
+- **Juntos: 38.7%** 🔥
+- Separados: 29.2%
+- **+9.5pp quando juntos** = Mais ping-pong rápido
+
+**2-3 msgs (sequências curtas):**
+- Juntos: 40.0%
+- Separados: 35.7%
+- Similar (padrão dominante em ambos)
+
+**6-10 msgs (sequências desenvolvidas):**
+- **Separados: 14.5%** 🔥
+- Juntos: 6.4%
+- **+127% quando separados** = Desenvolvem ideias
+
+**>10 msgs (monólogos):**
+- **Separados: 3.6%**
+- Juntos: 2.2%
+- **+64% quando separados**
+
+---
+
+**Boxplot confirma visualmente:**
+- Ambos: Mediana = 2 msgs (caixa similar)
+- **SEPARADOS:** Cauda longa (outliers até 20+)
+- **JUNTOS:** Mais concentrado (menos outliers)
+
+---
+
+**Por remetente - P1 desenvolve LEVEMENTE mais:**
+- **P1: 3.52 msgs** (média)
+- **P2: 3.16 msgs** (média)
+- **Diferença: +11%** (P1 envia sequências marginalmente mais longas)
+- Ambos: Mediana 2, padrão similar
+
+---
+
+**Interpretação:**
+
+**SEPARADOS = Desenvolvem pensamento:**
+- Enviam **múltiplas mensagens seguidas** (média 3.45)
+- 14.5% fazem sequências de 6-10 msgs
+- 3.6% fazem monólogos >10 msgs
+- **Padrão:** "Deixa eu contar..." (desenvolvimento narrativo)
+- WhatsApp como espaço de expressão
+
+**JUNTOS = Ping-pong ágil:**
+- **38.7%** são mensagens únicas (coordenação rápida)
+- Média 2.73 msgs (21% menor)
+- Apenas 6.4% fazem sequências 6-10 msgs (-56% vs separados!)
+- **Padrão:** "Onde?", "Ali", "Ok" (troca rápida)
+- WhatsApp como coordenação instantânea
+
+---
+
+**Descoberta central:**
+
+> Quando **SEPARADOS**, WhatsApp é **CANAL DE EXPRESSÃO** - desenvolvem ideias em múltiplas mensagens seguidas (média 3.45, 18.1% fazem sequências >6 msgs).
+> 
+> Quando **JUNTOS**, WhatsApp é **FERRAMENTA DE COORDENAÇÃO** - mensagens curtas e fragmentadas (38.7% únicas, média 2.73, apenas 8.6% fazem sequências >6 msgs).
+
+**P1 vs P2:** Diferença marginal (11%) - P1 tende a desenvolver pensamentos em sequências ligeiramente mais longas, mas padrão geral é simétrico.
+
+**Record holder:** Alguém enviou **54 mensagens consecutivas** quando juntos! (Provavelmente áudio transcrito ou narração longa de algo acontecendo no momento)
+:::
+
+---
+Descoberta chave: Juntos tem 38.7% de mensagens ÚNICAS (sem sequência) vs apenas 29.2% quando separados. Contexto muda DRAMATICAMENTE o padrão de envio! 🔥
+
+---
+
+## Análise de Turnos
+```{python}
+# ============================================================================
+# ANÁLISE DE TURNOS
+# ============================================================================
+
+print("="*80)
+print("💬 ANÁLISE DE TURNOS")
+print("="*80)
+
+# Define turnos (gap > 1 hora = nova conversa)
+THRESHOLD_INICIO = 3600  # 1 hora em segundos
+
+df_sorted['inicio_conversa'] = (
+    (df_sorted['tempo_desde_ultima'] > THRESHOLD_INICIO) | 
+    (df_sorted['tempo_desde_ultima'].isna())
+)
+
+df_sorted['turno_id'] = df_sorted['inicio_conversa'].cumsum()
+
+# ============================================================================
+# 1. VISÃO GERAL
+# ============================================================================
+
+total_turnos = df_sorted['inicio_conversa'].sum()
+msgs_por_turno = len(df_sorted) / total_turnos
+
+print(f"\n💬 Turnos de conversa (gap > 1h):")
+print(f"   Total de turnos: {total_turnos:,}")
+print(f"   Média msgs/turno: {msgs_por_turno:.1f}")
+
+# Tamanho dos turnos
+turnos_tamanho = df_sorted.groupby('turno_id').size()
+
+print(f"\n📊 Tamanho dos turnos - Estatísticas:")
+print(turnos_tamanho.describe())
+
+print(f"\n📈 Percentis:")
+print(f"   50%: {turnos_tamanho.quantile(0.50):.0f} msgs")
+print(f"   75%: {turnos_tamanho.quantile(0.75):.0f} msgs")
+print(f"   90%: {turnos_tamanho.quantile(0.90):.0f} msgs")
+print(f"   95%: {turnos_tamanho.quantile(0.95):.0f} msgs")
+print(f"   99%: {turnos_tamanho.quantile(0.99):.0f} msgs")
+
+# ============================================================================
+# 2. POR CONTEXTO
+# ============================================================================
+
+print("\n💬 Turnos por CONTEXTO:\n")
+
+# Separados
+df_sep = df_sorted[~df_sorted['em_encontro']].copy()
+df_sep['inicio_conv_ctx'] = (
+    (df_sep['tempo_desde_ultima'] > THRESHOLD_INICIO) | 
+    (df_sep['tempo_desde_ultima'].isna())
+)
+df_sep['turno_id_ctx'] = df_sep['inicio_conv_ctx'].cumsum()
+
+total_turnos_sep = df_sep['inicio_conv_ctx'].sum()
+msgs_por_turno_sep = len(df_sep) / total_turnos_sep if total_turnos_sep > 0 else 0
+turnos_tamanho_sep = df_sep.groupby('turno_id_ctx').size()
+
+print(f"Separados:")
+print(f"   Total turnos: {total_turnos_sep:,}")
+print(f"   Média msgs/turno: {msgs_por_turno_sep:.1f}")
+print(f"   Mediana msgs/turno: {turnos_tamanho_sep.median():.0f}")
+print(f"   Máximo msgs/turno: {turnos_tamanho_sep.max()}")
+print(f"   90% até: {turnos_tamanho_sep.quantile(0.90):.0f} msgs")
+
+# Juntos
+df_jun = df_sorted[df_sorted['em_encontro']].copy()
+df_jun['inicio_conv_ctx'] = (
+    (df_jun['tempo_desde_ultima'] > THRESHOLD_INICIO) | 
+    (df_jun['tempo_desde_ultima'].isna())
+)
+df_jun['turno_id_ctx'] = df_jun['inicio_conv_ctx'].cumsum()
+
+total_turnos_jun = df_jun['inicio_conv_ctx'].sum()
+msgs_por_turno_jun = len(df_jun) / total_turnos_jun if total_turnos_jun > 0 else 0
+turnos_tamanho_jun = df_jun.groupby('turno_id_ctx').size()
+
+print(f"\nJuntos:")
+print(f"   Total turnos: {total_turnos_jun:,}")
+print(f"   Média msgs/turno: {msgs_por_turno_jun:.1f}")
+print(f"   Mediana msgs/turno: {turnos_tamanho_jun.median():.0f}")
+print(f"   Máximo msgs/turno: {turnos_tamanho_jun.max()}")
+print(f"   90% até: {turnos_tamanho_jun.quantile(0.90):.0f} msgs")
+
+# ============================================================================
+# 3. DURAÇÃO DOS TURNOS
+# ============================================================================
+
+print("\n⏱️ Duração dos turnos (tempo entre início e última msg):\n")
+
+# Calcula duração de cada turno
+duracao_turnos = df_sorted.groupby('turno_id').agg({
+    'timestamp': ['min', 'max'],
+    'turno_id': 'size'
+}).reset_index(drop=True)
+
+duracao_turnos.columns = ['inicio', 'fim', 'num_msgs']
+duracao_turnos['duracao_segundos'] = (
+    duracao_turnos['fim'] - duracao_turnos['inicio']
+).dt.total_seconds()
+duracao_turnos['duracao_minutos'] = duracao_turnos['duracao_segundos'] / 60
+
+print(duracao_turnos['duracao_minutos'].describe())
+
+print(f"\n⏱️ Percentis de duração:")
+print(f"   50%: {duracao_turnos['duracao_minutos'].quantile(0.50):.1f} min")
+print(f"   75%: {duracao_turnos['duracao_minutos'].quantile(0.75):.1f} min")
+print(f"   90%: {duracao_turnos['duracao_minutos'].quantile(0.90):.1f} min")
+print(f"   95%: {duracao_turnos['duracao_minutos'].quantile(0.95):.1f} min")
+```
+
+### Distribuição de Tamanho
+```{python}
+#| label: fig-turnos-histograma
+#| fig-cap: "Distribuição do tamanho dos turnos (até 100 msgs)"
+
+# Limita para visualização (até 100 msgs)
+turnos_plot = turnos_tamanho[turnos_tamanho <= 100]
+
+fig = px.histogram(
+    x=turnos_plot,
+    nbins=50,
+    title='Distribuição do Tamanho dos Turnos (até 100 msgs)',
+    labels={'x': 'Mensagens por Turno', 'y': 'Frequência'},
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+```
+
+### Por Contexto
+```{python}
+#| label: fig-turnos-boxplot
+#| fig-cap: "Tamanho dos turnos por contexto (boxplot)"
+
+# Prepara dados
+turnos_sep_df = turnos_tamanho_sep.reset_index(name='tamanho')
+turnos_sep_df['Contexto'] = 'Separados'
+
+turnos_jun_df = turnos_tamanho_jun.reset_index(name='tamanho')
+turnos_jun_df['Contexto'] = 'Juntos'
+
+df_turnos_ctx = pd.concat([turnos_sep_df, turnos_jun_df], ignore_index=True)
+
+# Filtra até 100 para visualização
+df_turnos_plot = df_turnos_ctx[df_turnos_ctx['tamanho'] <= 100]
+
+fig = px.box(
+    df_turnos_plot,
+    x='Contexto',
+    y='tamanho',
+    color='Contexto',
+    title='Tamanho dos Turnos: Junto vs Separado (até 100 msgs)',
+    labels={'tamanho': 'Mensagens por Turno', 'Contexto': ''},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']}
+)
+
+fig.update_layout(showlegend=False, height=400)
+fig.show()
+```
+
+### Distribuição por Faixas
+```{python}
+#| label: fig-turnos-faixas
+#| fig-cap: "Distribuição de turnos por faixa de tamanho"
+
+# Classifica tamanho
+def classificar_turno(tamanho):
+    if tamanho <= 5:
+        return 'Muito curto (1-5)'
+    elif tamanho <= 20:
+        return 'Curto (6-20)'
+    elif tamanho <= 50:
+        return 'Médio (21-50)'
+    elif tamanho <= 100:
+        return 'Longo (51-100)'
+    else:
+        return 'Muito longo (>100)'
+
+df_turnos_ctx['faixa'] = df_turnos_ctx['tamanho'].apply(classificar_turno)
+
+# Calcula proporções
+dados_faixas = []
+
+for ctx in ['Separados', 'Juntos']:
+    df_ctx = df_turnos_ctx[df_turnos_ctx['Contexto'] == ctx]
+    faixas = df_ctx['faixa'].value_counts()
+    
+    for faixa, count in faixas.items():
+        dados_faixas.append({
+            'Contexto': ctx,
+            'Faixa': faixa,
+            'Percentual': (count / len(df_ctx)) * 100
+        })
+
+df_faixas = pd.DataFrame(dados_faixas)
+
+# Ordena
+ordem_faixas = ['Muito curto (1-5)', 'Curto (6-20)', 'Médio (21-50)', 
+                'Longo (51-100)', 'Muito longo (>100)']
+df_faixas['Faixa'] = pd.Categorical(df_faixas['Faixa'], categories=ordem_faixas, ordered=True)
+df_faixas = df_faixas.sort_values('Faixa')
+
+# Gráfico
+fig = px.bar(
+    df_faixas,
+    x='Faixa',
+    y='Percentual',
+    color='Contexto',
+    barmode='group',
+    title='Distribuição de Turnos por Tamanho: Junto vs Separado',
+    labels={'Percentual': '%', 'Faixa': 'Tamanho do Turno'},
+    color_discrete_map={'Separados': COLORS['separados'], 'Juntos': COLORS['juntos']},
+    text='Percentual'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_xaxes(tickangle=-45)
+fig.update_layout(height=450)
+fig.show()
+
+# Tabela
+print("\n📊 Distribuição por faixa e contexto:\n")
+pivot = df_faixas.pivot(index='Faixa', columns='Contexto', values='Percentual').round(1)
+print(pivot)
+
+print("="*80)
+```
+
+::: {.callout-important}
+### 💡 Insight - Turnos de Conversa (Sessões WhatsApp)
+
+**Definição:** Turno = sessão de conversa sem pausas >1h. Pausa >1h = nova sessão.
+
+**Visão geral - Sessões LONGAS:**
+- **1.126 turnos** em 309 dias (3.6 sessões/dia)
+- **Média: 79.3 msgs/turno** (sessões extensas!)
+- **Mediana: 15 msgs/turno**
+- **Duração mediana: 42.5 minutos** (quase 1h conversando!)
+- **Record: 1.290 mensagens em um único turno!** 🔥
+
+---
+
+**Por contexto - SEPARADOS tem turnos 2x MAIORES:**
+
+**SEPARADOS (azul):**
+- Total: 822 turnos
+- **Média: 92.5 msgs/turno** 
+- Mediana: 16 msgs
+- 90%: **296 msgs** (conversas MUITO longas!)
+- Máximo: **1.290 msgs** (maratona de conversa!)
+- Duração: ~50 min (estimado)
+
+**JUNTOS (verde):**
+- Total: 304 turnos
+- **Média: 43.7 msgs/turno** (**-53% vs separados!**)
+- Mediana: 11 msgs
+- 90%: **113 msgs** (-62% vs separados)
+- Máximo: 844 msgs
+- Duração: ~25 min (estimado)
+
+**Diferença BRUTAL:** Quando separados, cada sessão no WhatsApp tem **+112% mais mensagens** (92.5 vs 43.7). Turnos são **MAIS QUE O DOBRO** do tamanho!
+
+---
+
+**Distribuição por faixas - Padrões opostos:**
+
+**Muito curto (1-5 msgs):**
+- **Juntos: 42.1%** 🔥 (quase metade!)
+- Separados: 31.8%
+- **+32% quando juntos** = Pings rápidos
+
+**Curto (6-20 msgs):**
+- Separados: 19.8%
+- Juntos: 15.1%
+- Similar (conversas breves)
+
+**Médio (21-50 msgs):**
+- Juntos: 15.8%
+- Separados: 11.7%
+- Juntos compensa com turnos médios
+
+**Longo (51-100 msgs):**
+- Juntos: 14.1%
+- Separados: 9.0%
+- Surpreendente - juntos tem MAIS turnos longos
+
+**Muito longo (>100 msgs):**
+- **Separados: 27.7%** 🔥 (mais de 1/4!)
+- **Juntos: 12.8%**
+- **+116% quando separados** = Maratonas de conversa!
+
+---
+
+**Boxplot revela:**
+- **Mediana similar** (16 vs 11) - caixa parecida
+- **Separados:** Cauda MUITO longa (outliers até 100+)
+- **Juntos:** Mais concentrado (menos extremos)
+- Distribuição SEPARADOS é ASSIMÉTRICA (heavy tail)
+
+---
+
+**Duração temporal - Quase 1h por sessão:**
+- **Mediana: 42.5 minutos** (quase 1h conversando!)
+- 75%: **161.7 minutos** (quase 3h!)
+- 90%: **348.6 minutos** (quase 6h de conversa contínua!)
+- Máximo: **1.077 minutos** (18 HORAS em uma sessão! 🤯)
+
+---
+
+**Interpretação:**
+
+**SEPARADOS = "Encontros digitais" longos:**
+- **92.5 msgs/turno** (sessões extensas)
+- **27.7%** de turnos >100 msgs (maratonas!)
+- Entram no WhatsApp e conversam por **horas**
+- Turnos são "sessões de conexão emocional"
+- Record: 1.290 mensagens = conversa épica!
+
+**JUNTOS = Pings pontuais:**
+- **43.7 msgs/turno** (metade vs separados)
+- **42.1%** turnos muito curtos (1-5 msgs)
+- Apenas **12.8%** de turnos >100 msgs
+- Usam WhatsApp para **coordenação rápida**
+- Turnos são "interações práticas"
+
+---
+
+**Descoberta CENTRAL:**
+
+> **Quando separados, cada vez que abrem o WhatsApp, conversam por +112% mais mensagens** (92.5 vs 43.7 msgs/turno).
+> PADRÃO BIMODAL QUANDO JUNTOS (vale enfatizar):
+>Quando JUNTOS, a distribuição é U-shaped (bimodal):
+>
+>42.1% muito curto (1-5) 🔥
+>15.1% curto (6-20)
+>15.8% médio (21-50)
+>14.1% longo (51-100) 🔥
+>12.8% muito longo (>100)
+>
+Ou é MUITO curto OU é relativamente longo - os extremos são altos!
+>
+> **27.7% dos turnos quando separados são MARATONAS** (>100 msgs) - quase 3x mais que quando juntos (12.8%).
+>
+> Quando SEPARADOS, distribuição é J-shaped (concentração no extremo):
+>
+>31.8% muito curto
+>19.8% curto
+>11.7% médio
+>9.0% longo
+>27.7% MUITO LONGO 🔥🔥🔥 (DOMINA!)
+>
+>Crescimento contínuo até o extremo >100!
+>
+> WhatsApp à distância NÃO é "ferramenta de mensagens rápidas" - é **ESPAÇO DE ENCONTRO DIGITAL** onde passam **horas** conversando (mediana 42.5 min, 90% em 5h48min!).
+
+**Paradoxo:** Juntos tem turnos curtos (42.1% em 1-5 msgs) MAS TAMBÉM turnos longos (14.1% em 51-100). Padrão **BIMODAL** - ou é ping rápido ("onde almoçar?") ou é conversa longa (narrando algo que está acontecendo).
+
+**Record épico:** Maior turno = **1.290 mensagens consecutivas sem pausa >1h** = conversa de **18 HORAS!** (Provavelmente encontro de 2 meses em Set/2025 com muitas transcrições de áudio/vídeo?)
+:::
+
+**Essa diferença de FORMA da distribuição é LINDA!**
+
+Juntos = Bimodal (pings rápidos + narrativas longas ocasionais)
+Separados = Heavy tail (cresce até maratonas >100)
+
+---
+
+## Efeito da Distância Temporal
+
+### Contexto
+
+Agora investigamos se a **distância temporal** dos encontros afeta a intensidade de comunicação:
+
+- **Dias desde último encontro:** "Saudade" aumenta volume?
+- **Dias até próximo encontro:** Antecipação aumenta volume?
+
+Análise restrita a mensagens **SEPARADOS** (quando `em_encontro = False`).
+
+### Dias Desde Último Encontro × Volume
+```{python}
+#| label: fig-dias-desde-volume
+#| fig-cap: "Volume de mensagens vs dias desde último encontro"
+
+# Filtra mensagens FORA de encontros com distância conhecida
+df_distancia = df_sorted[
+    (~df_sorted['em_encontro']) & 
+    (df_sorted['dias_desde_ultimo_encontro'].notna())
+].copy()
+
+print(f"📊 Análise de 'Saudade' (Dias Desde Último Encontro):")
+print(f"   • Mensagens analisadas: {len(df_distancia):,}")
+print(f"   • Distância mínima: {df_distancia['dias_desde_ultimo_encontro'].min():.0f} dias")
+print(f"   • Distância máxima: {df_distancia['dias_desde_ultimo_encontro'].max():.0f} dias")
+print(f"   • Distância média: {df_distancia['dias_desde_ultimo_encontro'].mean():.1f} dias")
+
+# Agrupa por dias desde
+volume_por_distancia = df_distancia.groupby('dias_desde_ultimo_encontro').size().reset_index(name='count')
+
+# Correlação (usando dados agregados)
+from scipy.stats import pearsonr
+corr_desde, p_val_desde = pearsonr(volume_por_distancia['dias_desde_ultimo_encontro'], 
+                                     volume_por_distancia['count'])
+
+print(f"\n   • Correlação: r = {corr_desde:.3f} (p = {p_val_desde:.4f})")
+
+if abs(corr_desde) < 0.3:
+    print(f"      ⚠️ Correlação FRACA - volume não varia com distância")
+elif corr_desde > 0.3:
+    print(f"      ✅ Correlação POSITIVA - volume aumenta com distância (saudade!)")
+else:
+    print(f"      ✅ Correlação NEGATIVA - volume diminui com distância")
+
+# Visualização
+fig = px.scatter(
+    volume_por_distancia,
+    x='dias_desde_ultimo_encontro',
+    y='count',
+    trendline='lowess',
+    title='Volume de Mensagens vs Dias Desde Último Encontro',
+    labels={
+        'dias_desde_ultimo_encontro': 'Dias Desde Último Encontro',
+        'count': 'Quantidade de Mensagens'
+    },
+    color_discrete_sequence=[COLORS['separados']]
+)
+
+fig.update_traces(marker=dict(size=10, opacity=0.7, color=COLORS['separados']))
+fig.update_layout(height=500, hovermode='closest')
+fig.show()
+```
+
+:::: {.callout-warning}
+### 💡 Insight - "Saudade" (Dias Desde)
+
+**Correlação: r = -0.842 (p < 0.0001) - FORTÍSSIMA!**
+
+**❌ RESULTADO CONTRA-INTUITIVO:**
+
+Volume **DIMINUI** conforme tempo separados aumenta!
+
+- **Logo após encontro (1-5 dias):** ~2.700 msgs/dia (PICO!)
+- **Meio do período (20-30 dias):** ~1.500 msgs/dia (normaliza)
+- **Longe do encontro (50+ dias):** ~600 msgs/dia (VALE)
+
+---
+
+**Por quê? "Saudade" não é linear!**
+
+**Hipótese validada visualmente:**
+
+**Dias 1-7 pós-encontro = PICO DE COMUNICAÇÃO**
+- Animação ainda alta ("já com saudade!")
+- Compartilham fotos/momentos do encontro
+- Conexão emocional ainda "quente"
+- Volume MÁXIMO nessa janela
+
+**Dias 8-40 = NORMALIZAÇÃO**
+- Volume cai gradualmente
+- Rotina retoma (trabalho, vida)
+- Comunicação estabiliza em nível "padrão"
+- Curva descendente suave
+
+**Dias 40+ = VALE (quando longe do próximo)**
+- Volume mínimo (~600 msgs)
+- Período de "normalidade total"
+- Sem urgência de coordenar
+
+---
+
+**Descoberta central:**
+
+> "Saudade" NÃO aumenta linearmente com tempo - ao contrário, **DECAI**!
+> 
+> Pico de comunicação é **LOGO APÓS** se verem (efeito "ainda conectados"), não após muito tempo separados.
+
+**Implicação:** Volume alto pós-encontro pode ser "extensão emocional" do encontro físico - continuam "juntos digitalmente" nos primeiros dias.
+:::
+
+### Dias Até Próximo Encontro × Volume
+```{python}
+#| label: fig-dias-ate-volume
+#| fig-cap: "Volume de mensagens vs dias até próximo encontro"
+
+# Filtra mensagens FORA de encontros com distância conhecida
+df_antecipacao = df_sorted[
+    (~df_sorted['em_encontro']) & 
+    (df_sorted['dias_ate_proximo_encontro'].notna())
+].copy()
+
+print(f"\n📊 Análise de 'Antecipação' (Dias Até Próximo Encontro):")
+print(f"   • Mensagens analisadas: {len(df_antecipacao):,}")
+print(f"   • Distância mínima: {df_antecipacao['dias_ate_proximo_encontro'].min():.0f} dias")
+print(f"   • Distância máxima: {df_antecipacao['dias_ate_proximo_encontro'].max():.0f} dias")
+print(f"   • Distância média: {df_antecipacao['dias_ate_proximo_encontro'].mean():.1f} dias")
+
+# Agrupa por dias até
+volume_por_antecipacao = df_antecipacao.groupby('dias_ate_proximo_encontro').size().reset_index(name='count')
+
+# Correlação
+corr_ate, p_val_ate = pearsonr(volume_por_antecipacao['dias_ate_proximo_encontro'], 
+                                 volume_por_antecipacao['count'])
+
+print(f"\n   • Correlação: r = {corr_ate:.3f} (p = {p_val_ate:.4f})")
+
+if abs(corr_ate) < 0.3:
+    print(f"      ⚠️ Correlação FRACA - volume não varia com proximidade")
+elif corr_ate < -0.3:
+    print(f"      ✅ Correlação NEGATIVA - volume aumenta próximo ao encontro (ansiedade!)")
+else:
+    print(f"      ⚠️ Correlação POSITIVA - volume diminui próximo ao encontro")
+
+# Visualização
+fig = px.scatter(
+    volume_por_antecipacao,
+    x='dias_ate_proximo_encontro',
+    y='count',
+    trendline='lowess',
+    title='Volume de Mensagens vs Dias Até Próximo Encontro',
+    labels={
+        'dias_ate_proximo_encontro': 'Dias Até Próximo Encontro',
+        'count': 'Quantidade de Mensagens'
+    },
+    color_discrete_sequence=[COLORS['juntos']]
+)
+
+fig.update_traces(marker=dict(size=10, opacity=0.7, color=COLORS['juntos']))
+fig.update_layout(height=500, hovermode='closest')
+fig.show()
+```
+
+::: {.callout-tip}
+### 💡 Insight - "Antecipação" (Dias Até)
+
+**Correlação: r = -0.903 (p < 0.0001) - AINDA MAIS FORTE!**
+
+**✅ RESULTADO INTUITIVO:**
+
+Volume **AUMENTA DRAMATICAMENTE** conforme encontro se aproxima!
+
+- **Longe do encontro (50+ dias até):** ~200-400 msgs/dia (mínimo)
+- **Meio do caminho (20-30 dias até):** ~1.500 msgs/dia (normaliza)
+- **Próximo do encontro (1-5 dias até):** ~3.000 msgs/dia (EXPLOSÃO!)
+
+---
+
+**Curva de "Contagem Regressiva":**
+
+**50+ dias até encontro:**
+- Volume MÍNIMO (~200-400 msgs)
+- Encontro ainda "distante demais"
+- Sem urgência de coordenar
+- Rotina padrão
+
+**20-40 dias até:**
+- Volume cresce gradualmente (~1.000-2.000 msgs)
+- Começam a pensar no encontro
+- Planejamento inicial
+
+**1-10 dias até encontro = EXPLOSÃO:**
+- Volume TRIPLICA (~3.000 msgs/dia!)
+- **Coordenação intensa:** "onde?", "que horas?", "o que levar?"
+- **Ansiedade/empolgação:** "não vejo a hora!", "falta só X dias!"
+- **Preparação:** compartilham planos, rotas, expectativas
+
+---
+
+**Descoberta central:**
+
+> Última semana antes do encontro = **PICO ABSOLUTO** de comunicação.
+> 
+> Correlação de **-0.903** é uma das MAIS FORTES do dataset - proximidade do encontro é **PREDITOR BRUTAL** de volume!
+
+**Implicação:** WhatsApp se transforma em "central de coordenação pré-encontro" - últimos dias são freneticamente interativos.
+:::
+
+### Síntese - Distância Temporal
+```{python}
+print("\n" + "="*80)
+print("📊 SÍNTESE - Efeito da Distância Temporal")
+print("="*80)
+
+print(f"\n🔍 Dias DESDE último encontro:")
+print(f"   • Correlação: r = {corr_desde:.3f}")
+if abs(corr_desde) < 0.3:
+    print(f"   • ⚠️ SEM EFEITO - volume estável")
+elif corr_desde > 0:
+    print(f"   • ✅ SAUDADE - volume aumenta com tempo separados")
+else:
+    print(f"   • ⚠️ REDUÇÃO - volume diminui com tempo separados")
+
+print(f"\n🔍 Dias ATÉ próximo encontro:")
+print(f"   • Correlação: r = {corr_ate:.3f}")
+if abs(corr_ate) < 0.3:
+    print(f"   • ⚠️ SEM EFEITO - volume estável")
+elif corr_ate < 0:
+    print(f"   • ✅ ANTECIPAÇÃO - volume aumenta próximo ao encontro")
+else:
+    print(f"   • ⚠️ ECONOMIA - volume diminui próximo ao encontro")
+
+print("\n" + "="*80)
+print("✅ NOTEBOOK 05-EDA-INTERACAO.QMD COMPLETO!")
+print("="*80)
+```
+
+::: {.callout-important}
+### 🎯 Síntese - Ciclo de Comunicação Entre Encontros
+
+**DESCOBERTA ÉPICA - Padrão em "U" invertido:**
+
+Comunicação ao longo do período entre encontros segue um **CICLO PREVISÍVEL:**
+```
+Volume
+   ↑
+3000|    📈                               📈
+    |   /  \                            /  \
+2000|  /    \                          /    \
+    | /      \________________________/      \
+1000|/                                        \
+    |                                          \
+   0+--------------------------------------------→ Tempo
+     ENCONTRO  10d   20d   30d   40d   ENCONTRO
+        ↑              ↓                    ↑
+      PICO 1         VALE               PICO 2
+   (Pós-encontro)  (Rotina)       (Pré-encontro)
+```
+
+---
+
+**3 FASES distintas:**
+
+**1. FASE PÓS-ENCONTRO (Dias 1-7 após):**
+- **Volume: ~2.700 msgs/dia** 🔥
+- Efeito "ainda juntos digitalmente"
+- Compartilham memórias do encontro
+- Saudade imediata ("já com saudade!")
+- **r = -0.842** com dias DESDE
+
+**2. FASE DE ROTINA (Dias 8-40):**
+- **Volume: ~1.000-1.500 msgs/dia**
+- Normalização gradual
+- Vida cotidiana retoma
+- Comunicação estável
+- "Vale" entre os dois picos
+
+**3. FASE PRÉ-ENCONTRO (Dias 1-7 antes):**
+- **Volume: ~3.000 msgs/dia** 🔥🔥🔥
+- Coordenação intensa
+- Ansiedade/empolgação crescente
+- Planejamento detalhado
+- **r = -0.903** com dias ATÉ (MAIS FORTE!)
+
+---
+
+**Comparação das correlações:**
+
+| Variável | Correlação | Força | Interpretação |
+|----------|------------|-------|---------------|
+| Dias DESDE | **-0.842** | Fortíssima | ↓ Volume conforme afasta do último |
+| Dias ATÉ | **-0.903** | BRUTAL | ↑ Volume conforme aproxima do próximo |
+
+**Antecipação é MAIS FORTE que saudade imediata!**
+
+---
+
+**Implicações:**
+
+1. **Volume NÃO é constante** durante separação - é **CÍCLICO**
+2. **Picos acontecem nas TRANSIÇÕES** (logo após + logo antes encontros)
+3. **Vale acontece no MEIO** (período de normalidade)
+4. **Antecipação > Saudade:** Expectativa do futuro mobiliza MAIS que nostalgia do passado
+
+**Validação do modelo temporal:**
+
+> Encontros não apenas REDUZEM volume (-68.3% quando juntos) - eles também **MODULAM** o volume durante separação, criando padrão cíclico com picos nas transições.
+
+**Feature engineering potencial:**
+- `fase_entre_encontros`: "Pós" (1-7 dias após), "Rotina" (8-40), "Pré" (1-7 dias antes)
+- Captura ciclo emocional melhor que distância linear
+:::
+
+::: {.callout-important}
+
+## 🎯 Conclusão Final - Notebook 05: Padrões de Interação
+
+**5 Descobertas principais:**
+
+**1. Velocidade extrema:**
+- **81.0%** de respostas <60s
+- Mediana: 7 segundos quando separados
+- Relacionamento é **ALTAMENTE interativo**
+
+**2. Sequências desenvolvidas quando separados:**
+- Separados: 3.45 msgs/sequência (+26%)
+- Juntos: 2.73 msgs/sequência
+- Desenvolvem pensamentos vs ping-pong
+
+**3. Turnos 2x maiores quando separados:**
+- Separados: **92.5 msgs/turno**
+- Juntos: 43.7 msgs/turno (-53%)
+- Sessões longas vs coordenação pontual
+
+**4. Ciclo temporal em "U" invertido:**
+- **Pico pós-encontro:** ~2.700 msgs (r=-0.842 com dias desde)
+- **Vale no meio:** ~1.000 msgs (rotina)
+- **Pico pré-encontro:** ~3.000 msgs (r=-0.903 com dias até)
+
+**5. Contexto modula TUDO:**
+- Volume, velocidade, sequências, turnos
+- Diferença de **-68.3%** quando juntos
+- Dois "protocolos" completamente distintos
+
+---
+
+**Padrão integrado:**
+
+> **SEPARADOS:** WhatsApp como ESPAÇO DE CONEXÃO
+> - Sessões longas (92.5 msgs/turno)
+> - Sequências desenvolvidas (3.45 msgs)
+> - Respostas rápidas (54.6% <10s)
+> - Volume varia com ciclo temporal (picos nas transições)
+> 
+> **JUNTOS:** WhatsApp como FERRAMENTA DE COORDENAÇÃO
+> - Sessões curtas (43.7 msgs/turno)
+> - Ping-pong (2.73 msgs/sequência)
+> - Mais pausas (10.3% >5min)
+> - Volume baixo e estável
+
+**Próximo passo:** 06-eda-conteudo.qmd
+- Análise de sentimento
+- Tópicos de conversa
+- Padrões de linguagem
+:::
+
+---
