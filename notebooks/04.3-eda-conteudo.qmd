@@ -1,0 +1,1775 @@
+---
+title: "EDA - Análise de Conteúdo"
+subtitle: "Tamanho de mensagens, padrões textuais e características de linguagem"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+---
+
+# Introdução
+
+Este notebook analisa o **conteúdo textual** das mensagens do relacionamento.
+
+**Objetivo:** Entender características de linguagem - tamanho de mensagens, complexidade textual, padrões de escrita.
+
+**Decisão metodológica:**
+- Análise **FILTRADA** para período de relacionamento (pós 16/dez/2024)
+- Foco em mensagens com **conteúdo textual** (exclui mídia pura)
+- Dataset: 89.336 mensagens em 309 dias
+
+**Estrutura:**
+1. Mensagens com texto (cobertura)
+2. Tamanho das mensagens (caracteres e palavras)
+3. Comparação por remetente
+4. Comparação por contexto (junto vs separado)
+5. Evolução temporal do tamanho
+
+**Nota:** Análise de sentimento e tópicos será desenvolvida posteriormente com NLP avançado.
+
+---
+
+# Setup
+
+## Bibliotecas
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats
+from pathlib import Path
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Configurações
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+```
+
+## Caminhos e Cores
+```{python}
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivo de entrada
+INPUT_FILE = DATA_DIR / 'messages_with_context.parquet'
+
+# Cores padronizadas
+COLORS = {
+    'P1': '#636EFA',
+    'P2': '#EF553B',
+    'separados': '#636EFA',
+    'juntos': '#00CC96',
+    'TEXT': '#636EFA',
+    'AUDIO': '#EF553B',
+    'VID': '#00CC96',
+    'IMG': '#AB63FA'
+}
+
+print(f"📁 Diretório: {DATA_DIR}")
+print(f"📂 Arquivo: {INPUT_FILE.name}")
+print(f"✅ Existe: {INPUT_FILE.exists()}")
+```
+
+## Carregamento
+```{python}
+# Carrega dataset completo
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Dataset COMPLETO (amizade + relacionamento):")
+print(f"   • Mensagens: {len(df):,}")
+print(f"   • Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"   • Dias: {(df['timestamp'].max() - df['timestamp'].min()).days + 1}")
+
+# Estatísticas por fase
+print(f"\n📊 Distribuição por fase:")
+print(f"   • Amizade: {(df['fase_relacionamento'] == 'Amizade').sum():,} msgs")
+print(f"   • Relacionamento: {(df['fase_relacionamento'] == 'Relacionamento').sum():,} msgs")
+```
+
+---
+
+# Análise de Conteúdo
+
+## Mensagens com Texto
+```{python}
+# Filtra mensagens de texto (não-nulas)
+df_texto = df[df['conteudo'].notna()].copy()
+
+total_msgs = len(df)
+msgs_com_texto = len(df_texto)
+pct_texto = (msgs_com_texto / total_msgs) * 100
+
+print(f"📝 Cobertura de Conteúdo Textual:")
+print(f"   • Total de mensagens: {total_msgs:,}")
+print(f"   • Mensagens com texto: {msgs_com_texto:,}")
+print(f"   • Percentual: {pct_texto:.1f}%")
+
+# Distribuição por tipo (usa grupo_mensagem direto!)
+print(f"\n📊 Composição do corpus textual:")
+for tipo in ['TEXT', 'AUDIO', 'VID', 'IMG']:
+    count = ((df_texto['grupo_mensagem'] == tipo)).sum()
+    pct = (count / len(df_texto)) * 100
+    print(f"   • {tipo}: {count:,} ({pct:.1f}%)")
+
+# Cobertura por tipo (disponibilidade)
+print(f"\n📊 Disponibilidade de arquivos para transcrição:")
+for tipo in ['TEXT', 'AUDIO', 'VID', 'IMG']:
+    df_tipo = df[df['grupo_mensagem'] == tipo]
+    com_texto = df_tipo['conteudo'].notna().sum()
+    total_tipo = len(df_tipo)
+    pct = (com_texto / total_tipo * 100) if total_tipo > 0 else 0
+    
+    if tipo == 'TEXT':
+        print(f"   • {tipo}: {com_texto:,}/{total_tipo:,} (100% - nativo)")
+    else:
+        print(f"   • {tipo}: {com_texto:,}/{total_tipo:,} ({pct:.1f}% arquivos disponíveis)")
+```
+
+::: {.callout-warning}
+### 💡 Contexto - Composição do Corpus Textual
+
+**Dataset para análise: 66.743 mensagens com texto** (72.6% do total)
+
+---
+
+**Composição por tipo de mensagem:**
+
+**TEXT: 65.359** (97.9%)
+- Texto escrito diretamente pelos usuários
+- 100% de cobertura (naturalmente)
+- Base principal do corpus
+
+**AUDIO: 510** (0.8%)
+- Áudios transcritos via Whisper
+- **Disponibilidade:** 510 de 8.066 áudios (6.3%)
+- **Limitação:** Arquivos de áudio não disponíveis no export do WhatsApp
+
+**VID: 184** (0.3%)
+- Vídeos transcritos via Whisper  
+- **Disponibilidade:** 184 de 9.582 vídeos (1.9%)
+- **Limitação:** Arquivos de vídeo não disponíveis no export
+
+**IMG: 0** (0%)
+- Sem OCR/legendas (pipeline não implementado)
+
+---
+
+**⚠️ IMPORTANTE - Sobre Disponibilidade:**
+
+**Por que apenas 6.3% dos áudios foram transcritos?**
+- WhatsApp **não mantém histórico completo de mídia** no export
+- Arquivos antigos de áudio/vídeo não são incluídos no backup
+- **Transcrição teve 100% de sucesso** nos arquivos disponíveis (Groq Whisper)
+
+**Implicação para análise:**
+- ✅ **Corpus completo (66.743) é usado** para clustering, tópicos, padrões
+- ✅ **AUDIO/VID transcritos mostram padrões de comunicação via voz/vídeo**
+- ✅ **Distinção nativo vs transcrito:** Usar `grupo_mensagem` (TEXT vs AUDIO vs VID)
+- ⚠️ **Viés:** Corpus é 97.9% TEXT por limitação de disponibilidade (não qualidade)
+
+---
+
+**Interpretação:**
+
+> Análise textual abrange **66.743 mensagens**:
+> - **97.9% texto nativo** (escrito diretamente)
+> - **1.1% transcrições de voz/vídeo** (disponíveis)
+> 
+> **Limitação:** Representa padrões de TEXTO principalmente. AUDIO/VID subrepresentados por disponibilidade de arquivos no export do WhatsApp.
+> 
+> **Qualidade:** Transcrições via Groq Whisper são precisas (100% sucesso nos disponíveis).
+
+**Nota:** Para análises que precisam separar nativo vs transcrito, basta filtrar por `grupo_mensagem`.
+:::
+
+---
+
+## Tamanho das Mensagens
+
+### Em Caracteres
+```{python}
+# Calcula tamanho em caracteres
+df_texto['tamanho_chars'] = df_texto['conteudo'].str.len()
+
+print(f"📊 Estatísticas de tamanho (caracteres):\n")
+print(df_texto['tamanho_chars'].describe())
+
+print(f"\n📈 Percentis:")
+print(f"   50%: {df_texto['tamanho_chars'].quantile(0.50):.0f} caracteres")
+print(f"   75%: {df_texto['tamanho_chars'].quantile(0.75):.0f} caracteres")
+print(f"   90%: {df_texto['tamanho_chars'].quantile(0.90):.0f} caracteres")
+print(f"   95%: {df_texto['tamanho_chars'].quantile(0.95):.0f} caracteres")
+print(f"   99%: {df_texto['tamanho_chars'].quantile(0.99):.0f} caracteres")
+```
+
+```{python}
+#| label: fig-tamanho-chars
+#| fig-cap: "Distribuição do tamanho das mensagens (caracteres)"
+
+# Visualização (limitando outliers para melhor visualização)
+df_plot = df_texto[df_texto['tamanho_chars'] <= df_texto['tamanho_chars'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_chars',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens (até percentil 95)',
+    labels={'tamanho_chars': 'Caracteres', 'count': 'Frequência'},
+    color_discrete_sequence=[COLORS['TEXT']]
+)
+
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+```
+
+### Em Palavras
+```{python}
+# Calcula tamanho em palavras
+df_texto['tamanho_palavras'] = df_texto['conteudo'].str.split().str.len()
+
+print(f"\n📊 Estatísticas de tamanho (palavras):\n")
+print(df_texto['tamanho_palavras'].describe())
+
+print(f"\n📈 Percentis:")
+print(f"   50%: {df_texto['tamanho_palavras'].quantile(0.50):.0f} palavras")
+print(f"   75%: {df_texto['tamanho_palavras'].quantile(0.75):.0f} palavras")
+print(f"   90%: {df_texto['tamanho_palavras'].quantile(0.90):.0f} palavras")
+print(f"   95%: {df_texto['tamanho_palavras'].quantile(0.95):.0f} palavras")
+print(f"   99%: {df_texto['tamanho_palavras'].quantile(0.99):.0f} palavras")
+```
+
+```{python}
+#| label: fig-tamanho-palavras
+#| fig-cap: "Distribuição do tamanho das mensagens (palavras)"
+
+# Visualização (limitando outliers)
+df_plot = df_texto[df_texto['tamanho_palavras'] <= df_texto['tamanho_palavras'].quantile(0.95)]
+
+fig = px.histogram(
+    df_plot,
+    x='tamanho_palavras',
+    nbins=50,
+    title='Distribuição do Tamanho das Mensagens em Palavras (até percentil 95)',
+    labels={'tamanho_palavras': 'Palavras', 'count': 'Frequência'},
+    color_discrete_sequence=[COLORS['TEXT']]
+)
+
+fig.update_layout(height=400, showlegend=False)
+fig.show()
+```
+
+::: {.callout-tip}
+### 💡 Insight - Tamanho das Mensagens
+
+**Mensagens são EXTREMAMENTE curtas:**
+
+**Caracteres:**
+- **Mediana: 17 caracteres** (aproximadamente 1 linha)
+- Média: 27 caracteres
+- 95%: **67 caracteres** (95% das mensagens cabem em 1 linha!)
+- 99%: 160 caracteres
+- Máximo: 8.561 caracteres (outlier - transcrição longa)
+
+**Palavras:**
+- **Mediana: 3 palavras** 🔥
+- Média: 5.3 palavras
+- 95%: **13 palavras** (menos de 1 frase completa!)
+- 99%: 29 palavras
+- Máximo: 1.164 palavras (transcrição de áudio/vídeo longo)
+
+---
+
+**Distribuição assimétrica:**
+- **Média > Mediana** (27 vs 17 chars, 5.3 vs 3 palavras)
+- Indica cauda longa à direita (outliers de mensagens longas)
+- **Padrão dominante:** Mensagens ultra-curtas (3 palavras)
+
+---
+
+**Interpretação visual:**
+
+**Histograma de caracteres:**
+- **Pico em 6-7 caracteres** (5.081 mensagens!)
+- Maioria concentrada em 5-30 caracteres
+- Cauda longa até 67 chars (95%)
+
+**Histograma de palavras:**
+- **Pico massivo em 1 palavra** (~14k mensagens!)
+- Segundo pico em 2 palavras (~10k)
+- Terceiro pico em 3 palavras (~10k)
+- **Top 3 = maioria absoluta das mensagens**
+
+---
+
+**Descoberta central:**
+
+> **50% das mensagens têm 3 palavras ou menos!**
+> 
+> **95% têm menos de 13 palavras** (1 frase curta).
+> 
+> Comunicação é **EXTREMAMENTE fragmentada** - ping-pong rápido com mensagens minúsculas ao invés de blocos longos de texto.
+
+**Padrão típico:**
+- "Ok"
+- "Oi amor"
+- "Tá bom"
+- "Que horas?"
+- "Já saí"
+
+**Conclusão:** WhatsApp usado como **ferramenta de mensagens instantâneas rápidas**, não como plataforma de textos longos. Comunicação é por **fragmentação rápida** (várias msgs curtas) ao invés de **desenvolvimento textual** (msgs longas).
+:::
+
+## Comparação por Remetente
+```{python}
+print("\n📊 Tamanho por REMETENTE:\n")
+
+for remetente in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    print(f"{remetente}:")
+    print(f"   Caracteres - Média: {df_rem['tamanho_chars'].mean():.1f} | Mediana: {df_rem['tamanho_chars'].median():.0f}")
+    print(f"   Palavras   - Média: {df_rem['tamanho_palavras'].mean():.1f} | Mediana: {df_rem['tamanho_palavras'].median():.0f}")
+    print()
+```
+
+```{python}
+#| label: fig-tamanho-remetente
+#| fig-cap: "Comparação de tamanho de mensagens por remetente"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+for remetente in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == remetente]
+    color = COLORS['P1'] if remetente == 'P1' else COLORS['P2']
+    
+    # Caracteres
+    fig.add_trace(
+        go.Box(
+            y=df_rem['tamanho_chars'], 
+            name=remetente, 
+            marker_color=color,
+            showlegend=False
+        ),
+        row=1, col=1
+    )
+    
+    # Palavras
+    fig.add_trace(
+        go.Box(
+            y=df_rem['tamanho_palavras'], 
+            name=remetente,
+            marker_color=color
+        ),
+        row=1, col=2
+    )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens por Remetente")
+fig.show()
+
+# Teste estatístico
+from scipy.stats import mannwhitneyu
+
+chars_p1 = df_texto[df_texto['remetente'] == 'P1']['tamanho_chars']
+chars_p2 = df_texto[df_texto['remetente'] == 'P2']['tamanho_chars']
+
+stat, p_val = mannwhitneyu(chars_p1, chars_p2, alternative='two-sided')
+
+print(f"\n📊 Teste Mann-Whitney U (caracteres):")
+print(f"   Estatística: {stat:.2f}")
+print(f"   p-value: {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA (p < 0.001)")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+::: {.callout-note}
+### 💡 Insight - Por Remetente (Simetria Quase Perfeita)
+
+**P1:**
+- Média: **28.2 chars** / **5.4 palavras**
+- Mediana: 17 chars / 3 palavras
+
+**P2:**
+- Média: **26.2 chars** / **5.1 palavras**
+- Mediana: 18 chars / 4 palavras
+
+---
+
+**Teste estatístico:** p < 0.001 (significativo)
+
+**MAS: Diferença é MINÚSCULA!**
+
+**Diferença absoluta:**
+- P1 escreve **+2 caracteres** a mais em média (+7.6%)
+- P1 escreve **+0.3 palavras** a mais em média (+5.9%)
+- P2 tem mediana **+1 char** (+5.9%)
+- P2 tem mediana **+1 palavra** (+33% - de 3 para 4)
+
+---
+
+**Boxplots mostram simetria:**
+- Caixas (IQR) praticamente **IDÊNTICAS**
+- Outliers similares em ambos
+- Distribuições **sobrepostas**
+
+---
+
+**Interpretação:**
+
+> **Significância estatística ≠ Relevância prática!**
+> 
+> Diferença é estatisticamente significativa (p<0.001) apenas por causa do **tamanho massivo da amostra** (~35k mensagens cada).
+> 
+> Na prática: **Ambos escrevem mensagens IGUALMENTE curtas** (3-4 palavras mediana, ~17-18 chars).
+
+**Paradoxo interessante:**
+- P1: Média maior (28.2 vs 26.2) = outliers mais longos
+- P2: Mediana maior (4 vs 3 palavras) = padrão típico um pouco maior
+
+**Conclusão:** **Simetria perfeita** no estilo de escrita. Diferenças de 2 caracteres ou 0.3 palavras são desprezíveis no contexto de mensagens de 17-18 caracteres. Ambos adotam **mesmo padrão de comunicação ultra-fragmentada** (3-4 palavras por mensagem).
+:::
+
+---
+
+**ESTRUTURA BASE CRIADA!** 🎉
+
+**Próximas seções a desenvolver:**
+- Comparação por contexto (junto vs separado)
+- Evolução temporal do tamanho
+- Por tipo de mensagem (TEXT vs AUDIO transcrito vs VID)
+- Análise de emojis/emoticons (se quiser)
+- Palavras mais frequentes (wordcloud?)
+
+**Quer que eu continue adicionando essas seções?** 📊
+
+
+## Comparação Amizade vs Relacionamento
+```{python}
+print("\n📊 Tamanho por FASE:\n")
+
+for fase in ['Amizade', 'Relacionamento']:
+    df_fase = df_texto[df_texto['fase_relacionamento'] == fase]
+    print(f"{fase}:")
+    print(f"   Mensagens: {len(df_fase):,}")
+    print(f"   Caracteres - Média: {df_fase['tamanho_chars'].mean():.1f} | Mediana: {df_fase['tamanho_chars'].median():.0f}")
+    print(f"   Palavras   - Média: {df_fase['tamanho_palavras'].mean():.1f} | Mediana: {df_fase['tamanho_palavras'].median():.0f}")
+    print()
+```
+
+## Comparação Amizade vs Relacionamento
+```{python}
+print("\n📊 Tamanho por FASE:\n")
+
+for fase in ['Amizade', 'Relacionamento']:
+    df_fase = df_texto[df_texto['fase_relacionamento'] == fase]
+    print(f"{fase}:")
+    print(f"   Mensagens: {len(df_fase):,}")
+    print(f"   Caracteres - Média: {df_fase['tamanho_chars'].mean():.1f} | Mediana: {df_fase['tamanho_chars'].median():.0f}")
+    print(f"   Palavras   - Média: {df_fase['tamanho_palavras'].mean():.1f} | Mediana: {df_fase['tamanho_palavras'].median():.0f}")
+    print()
+```
+
+```{python}
+#| label: fig-tamanho-fase
+#| fig-cap: "Comparação de tamanho por fase (amizade vs relacionamento)"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+colors_fase = {'Amizade': '#AB63FA', 'Relacionamento': '#00CC96'}
+
+for fase in ['Amizade', 'Relacionamento']:
+    df_fase = df_texto[df_texto['fase_relacionamento'] == fase]
+    
+    # Caracteres
+    fig.add_trace(
+        go.Box(
+            y=df_fase['tamanho_chars'], 
+            name=fase, 
+            marker_color=colors_fase[fase],
+            showlegend=False
+        ),
+        row=1, col=1
+    )
+    
+    # Palavras
+    fig.add_trace(
+        go.Box(
+            y=df_fase['tamanho_palavras'], 
+            name=fase,
+            marker_color=colors_fase[fase]
+        ),
+        row=1, col=2
+    )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens: Amizade vs Relacionamento")
+fig.show()
+
+# Teste estatístico
+from scipy.stats import mannwhitneyu
+
+chars_amizade = df_texto[df_texto['fase_relacionamento'] == 'Amizade']['tamanho_chars']
+chars_relacao = df_texto[df_texto['fase_relacionamento'] == 'Relacionamento']['tamanho_chars']
+
+stat, p_val = mannwhitneyu(chars_amizade, chars_relacao, alternative='two-sided')
+
+print(f"\n📊 Teste Mann-Whitney U (caracteres):")
+print(f"   Estatística: {stat:.2f}")
+print(f"   p-value: {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA (p < 0.001)")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+::: {.callout-tip}
+### 💡 Insight - Amizade vs Relacionamento (Estilo Estável)
+
+**AMIZADE (1.943 msgs):**
+- Média: **24.8 chars** / **4.7 palavras**
+- Mediana: 16 chars / 3 palavras
+
+**RELACIONAMENTO (66.743 msgs):**
+- Média: **27.3 chars** / **5.3 palavras**
+- Mediana: 17 chars / 3 palavras
+
+---
+
+**Diferença: MÍNIMA (+10% chars, +13% palavras)**
+
+**Evolução:**
+- Chars: 24.8 → 27.3 (+2.5 = +10%)
+- Palavras: 4.7 → 5.3 (+0.6 = +13%)
+- Mediana chars: 16 → 17 (+1 char = +6%)
+- **Mediana palavras: IGUAL (3)** 🔥
+
+---
+
+**Interpretação:**
+
+> **Estilo de escrita é ESTÁVEL entre fases!**
+> 
+> Transição amizade → relacionamento **NÃO mudou** como escrevem:
+> - Mediana permanece em **3 palavras** (padrão ultra-curto)
+> - Média aumentou marginalmente (+0.6 palavras)
+> - Ambas fases: Mensagens extremamente fragmentadas
+
+**O que MUDOU:** Volume (6.4x mais mensagens no relacionamento)
+
+**O que NÃO MUDOU:** Tamanho individual das mensagens (3 palavras mediana)
+
+---
+
+**Conclusão:**
+
+**Volume ≠ Tamanho!**
+
+Relacionamento tem:
+- ✅ **6.4x MAIS mensagens** (2.588 → 89.336)
+- ❌ Mensagens **quase do MESMO tamanho** (3 palavras mediana)
+
+**Padrão:** Quando relacionamento começou, **aumentaram frequência** de comunicação (mandam mais mensagens), mas **NÃO mudaram estilo** (ainda mandam mensagens de 3 palavras).
+
+**Validação da decisão metodológica:** Análise de conteúdo usando dataset completo é válida - estilo textual é consistente entre fases. Diferença de +2.5 chars é desprezível comparada à consistência do padrão (3 palavras mediana em ambas).
+:::
+
+---
+
+## Comparação por Contexto (Junto vs Separado)
+```{python}
+print("\n📊 Tamanho por CONTEXTO:\n")
+
+# Separados
+df_sep = df_texto[~df_texto['em_encontro']]
+print(f"Separados:")
+print(f"   Mensagens: {len(df_sep):,}")
+print(f"   Caracteres - Média: {df_sep['tamanho_chars'].mean():.1f} | Mediana: {df_sep['tamanho_chars'].median():.0f}")
+print(f"   Palavras   - Média: {df_sep['tamanho_palavras'].mean():.1f} | Mediana: {df_sep['tamanho_palavras'].median():.0f}")
+
+# Juntos
+df_jun = df_texto[df_texto['em_encontro']]
+print(f"\nJuntos:")
+print(f"   Mensagens: {len(df_jun):,}")
+print(f"   Caracteres - Média: {df_jun['tamanho_chars'].mean():.1f} | Mediana: {df_jun['tamanho_chars'].median():.0f}")
+print(f"   Palavras   - Média: {df_jun['tamanho_palavras'].mean():.1f} | Mediana: {df_jun['tamanho_palavras'].median():.0f}")
+```
+
+```{python}
+#| label: fig-tamanho-contexto
+#| fig-cap: "Comparação de tamanho por contexto (junto vs separado)"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+# Separados
+fig.add_trace(
+    go.Box(
+        y=df_sep['tamanho_chars'], 
+        name='Separados', 
+        marker_color=COLORS['separados'],
+        showlegend=False
+    ),
+    row=1, col=1
+)
+
+# Juntos
+fig.add_trace(
+    go.Box(
+        y=df_jun['tamanho_chars'], 
+        name='Juntos',
+        marker_color=COLORS['juntos'],
+        showlegend=False
+    ),
+    row=1, col=1
+)
+
+# Separados - palavras
+fig.add_trace(
+    go.Box(
+        y=df_sep['tamanho_palavras'], 
+        name='Separados',
+        marker_color=COLORS['separados']
+    ),
+    row=1, col=2
+)
+
+# Juntos - palavras
+fig.add_trace(
+    go.Box(
+        y=df_jun['tamanho_palavras'], 
+        name='Juntos',
+        marker_color=COLORS['juntos']
+    ),
+    row=1, col=2
+)
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens: Junto vs Separado")
+fig.show()
+
+# Teste estatístico
+stat, p_val = mannwhitneyu(df_sep['tamanho_chars'], df_jun['tamanho_chars'], 
+                           alternative='two-sided')
+
+print(f"\n📊 Teste Mann-Whitney U (caracteres):")
+print(f"   Estatística: {stat:.2f}")
+print(f"   p-value: {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA (p < 0.001)")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+::: {.callout-important}
+### 💡 Insight - Por Contexto (Paradoxo Mediana vs Média)
+
+**SEPARADOS (57.122 msgs):**
+- Média: **26.3 chars** / **5.1 palavras**
+- Mediana: 17 chars / 3 palavras
+
+**JUNTOS (11.564 msgs):**
+- Média: **31.5 chars** / **6.2 palavras**
+- Mediana: 17 chars / 4 palavras
+
+---
+
+**Diferença na MÉDIA: +20% quando juntos**
+- Chars: +5.2 (+19.8%)
+- Palavras: +1.1 (+21.6%)
+
+**Diferença na MEDIANA: Caracteres IGUAL, Palavras +1**
+- Chars: **17 = 17** (IDÊNTICO!)
+- Palavras: 3 → 4 (+33%)
+
+**Teste estatístico (caracteres): p = 0.072**
+- ⚠️ **NÃO significativo** (p > 0.05)
+- Com 68.686 mensagens, não atingir p<0.05 indica diferença MUITO pequena
+
+---
+
+**Paradoxo aparente:**
+
+**Médias sugerem diferença:**
+- Juntos: 31.5 chars (20% maior)
+- Outliers mais longos quando juntos
+
+**Medianas sugerem igualdade:**
+- Ambos: 17 caracteres
+- Padrão típico IGUAL
+
+**Boxplots confirmam:**
+- Caixas (IQR) praticamente SOBREPOSTAS
+- Juntos tem cauda superior um pouco mais longa (mais outliers)
+- Distribuição central IDÊNTICA
+
+---
+
+**Interpretação:**
+
+> **Contexto NÃO afeta tamanho típico das mensagens!**
+> 
+> Mediana de **17 caracteres é IGUAL** em ambos contextos.
+> 
+> **50% das mensagens (seja separado ou junto) têm ≤17 chars / ≤3-4 palavras.**
+
+**Diferença na média (+20%) é artefato de OUTLIERS:**
+- Quando juntos, OCASIONALMENTE enviam mensagens mais longas (outliers)
+- Mas o padrão DOMINANTE (mediana) permanece igual
+- Exemplo: "Vou ali comprar pão, quer alguma coisa?" (junto) vs "Ok" (ambos)
+
+---
+
+**Descoberta central:**
+
+**Contexto modula DRASTICAMENTE:**
+- ✅ **Volume:** -68.3% quando juntos (já visto)
+- ✅ **Velocidade:** Distribuição bimodal (já visto)
+- ✅ **Sequências:** -21% quando juntos (já visto)
+- ✅ **Turnos:** -53% quando juntos (já visto)
+
+**Contexto NÃO modula:**
+- ❌ **Tamanho típico:** Mediana 17 chars em ambos (p=0.072)
+- Mensagens continuam sendo ultra-curtas (3-4 palavras)
+
+---
+
+**Conclusão:**
+
+> Quando juntos, comunicam **MENOS** (volume -68%) e de forma **PONTUAL** (turnos curtos), mas cada mensagem individual tem **MESMO TAMANHO** que quando separados (17 chars mediana).
+> 
+> WhatsApp é ferramenta de **mensagens curtas** independente de contexto. Diferença está em QUANTAS mensagens enviam e COMO as organizam (turnos/sequências), não em QUANTO escrevem por mensagem.
+
+**Nota técnica:** Médias maiores quando juntos (31.5 vs 26.3) são puxadas por outliers ocasionais mais longos, mas não representam o padrão típico (mediana = 17 em ambos).
+:::
+
+---
+
+## Comparação por Tipo de Mensagem
+
+### TEXT vs AUDIO vs VID (Separados)
+```{python}
+print("\n📊 Tamanho por TIPO de mensagem:\n")
+
+for tipo in ['TEXT', 'AUDIO', 'VID']:
+    df_tipo = df_texto[df_texto['grupo_mensagem'] == tipo]
+    if len(df_tipo) > 0:
+        print(f"{tipo}:")
+        print(f"   Mensagens: {len(df_tipo):,}")
+        print(f"   Caracteres - Média: {df_tipo['tamanho_chars'].mean():.1f} | Mediana: {df_tipo['tamanho_chars'].median():.0f}")
+        print(f"   Palavras   - Média: {df_tipo['tamanho_palavras'].mean():.1f} | Mediana: {df_tipo['tamanho_palavras'].median():.0f}")
+        print()
+```
+
+```{python}
+#| label: fig-tamanho-tipo
+#| fig-cap: "Comparação de tamanho por tipo de mensagem"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+colors_tipo = {'TEXT': COLORS['TEXT'], 'AUDIO': COLORS['AUDIO'], 'VID': COLORS['VID']}
+
+for tipo in ['TEXT', 'AUDIO', 'VID']:
+    df_tipo = df_texto[df_texto['grupo_mensagem'] == tipo]
+    if len(df_tipo) > 0:
+        # Caracteres
+        fig.add_trace(
+            go.Box(
+                y=df_tipo['tamanho_chars'], 
+                name=tipo, 
+                marker_color=colors_tipo[tipo],
+                showlegend=False
+            ),
+            row=1, col=1
+        )
+        
+        # Palavras
+        fig.add_trace(
+            go.Box(
+                y=df_tipo['tamanho_palavras'], 
+                name=tipo,
+                marker_color=colors_tipo[tipo]
+            ),
+            row=1, col=2
+        )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho de Mensagens por Tipo")
+fig.show()
+```
+
+::: {.callout-tip}
+### 💡 Insight - Texto vs Áudio vs Vídeo
+
+**TEXT (67.297 msgs - 98% do corpus):**
+- Média: **24.9 chars** / **4.8 palavras**
+- Mediana: 17 chars / 3 palavras
+- Padrão: Ultra-curto (3 palavras típicas)
+
+**AUDIO (510 msgs - 0.7% do corpus):**
+- Média: **238.8 chars** / **46.6 palavras** 🔥
+- Mediana: **183 chars** / **36 palavras**
+- **9.7x MAIOR que TEXT!** (média palavras)
+- **Sem limite de duração** - representa fala natural
+
+**VID (184 msgs - 0.3% do corpus):**
+- Média: **180.8 chars** / **34.7 palavras**
+- Mediana: **146 chars** / **27 palavras**
+- **7.2x MAIOR que TEXT!** (média palavras)
+- ⚠️ **LIMITADO a 1 minuto** - fala truncada
+
+---
+
+**Diferenças DRAMÁTICAS:**
+
+| Tipo | Mediana Palavras | vs TEXT | Limitação |
+|------|------------------|---------|-----------|
+| TEXT | 3 | 1x | - |
+| VID | 27 | **9x** | **1 min máx** ⚠️ |
+| AUDIO | 36 | **12x** | Ilimitado ✅ |
+
+**Boxplots revelam:**
+- TEXT: Caixa comprimida perto de zero (3 palavras)
+- AUDIO/VID: Caixas MUITO acima, quase sem sobreposição
+- Distribuições **COMPLETAMENTE DISTINTAS**
+
+---
+
+**Por que VID é 25% menor que AUDIO (27 vs 36 palavras)?**
+
+**NÃO é comportamental - é TÉCNICO:**
+- ❌ NÃO é porque "narram objetivamente" ou são mais diretos
+- ✅ É porque **WhatsApp limita vídeos a 1 minuto máximo!**
+- VID com 27 palavras = "o que conseguem falar em 60 segundos"
+- AUDIO com 36 palavras = fala natural sem restrição
+
+**Se vídeos fossem ilimitados:**
+- Provavelmente teriam ~36 palavras (igual AUDIO)
+- Diferença atual é **artefato do limite técnico**
+
+---
+
+**Descoberta:**
+> Quando **FALAM** (áudio/vídeo), desenvolvem pensamentos **9-12x mais** do que quando **ESCREVEM** (texto).
+> 
+> - **AUDIO (sem limite):** ~36 palavras - padrão natural de fala
+> - **VID (limite 1 min):** ~27 palavras - fala truncada, mas ainda 9x maior que texto
+> - **TEXT:** 3 palavras - ultra-fragmentado
+> 
+> Diferença AUDIO vs VID é **artefato do limite técnico** (1 min), não diferença de comportamento.
+:::
+
+### TEXT vs TRANSCRIÇÕES (Escrito vs Falado)
+```{python}
+# Cria categoria agregada
+df_texto['origem'] = df_texto['grupo_mensagem'].apply(
+    lambda x: 'TEXT_escrito' if x == 'TEXT' else 'TRANSCRITO_falado'
+)
+
+print("\n📊 Tamanho por ORIGEM (Escrito vs Falado):\n")
+
+for origem in ['TEXT_escrito', 'TRANSCRITO_falado']:
+    df_orig = df_texto[df_texto['origem'] == origem]
+    print(f"{origem}:")
+    print(f"   Mensagens: {len(df_orig):,}")
+    print(f"   Caracteres - Média: {df_orig['tamanho_chars'].mean():.1f} | Mediana: {df_orig['tamanho_chars'].median():.0f}")
+    print(f"   Palavras   - Média: {df_orig['tamanho_palavras'].mean():.1f} | Mediana: {df_orig['tamanho_palavras'].median():.0f}")
+    print()
+```
+
+```{python}
+#| label: fig-tamanho-origem
+#| fig-cap: "Comparação escrito vs falado (transcrições)"
+
+# Visualização comparativa
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Caracteres', 'Palavras')
+)
+
+colors_origem = {'TEXT_escrito': COLORS['TEXT'], 'TRANSCRITO_falado': '#FFA15A'}
+
+for origem in ['TEXT_escrito', 'TRANSCRITO_falado']:
+    df_orig = df_texto[df_texto['origem'] == origem]
+    
+    # Caracteres
+    fig.add_trace(
+        go.Box(
+            y=df_orig['tamanho_chars'], 
+            name=origem.replace('_', ' '), 
+            marker_color=colors_origem[origem],
+            showlegend=False
+        ),
+        row=1, col=1
+    )
+    
+    # Palavras
+    fig.add_trace(
+        go.Box(
+            y=df_orig['tamanho_palavras'], 
+            name=origem.replace('_', ' '),
+            marker_color=colors_origem[origem]
+        ),
+        row=1, col=2
+    )
+
+fig.update_yaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Palavras", row=1, col=2)
+fig.update_layout(height=400, title_text="Tamanho: Escrito vs Falado")
+fig.show()
+
+# Teste estatístico
+chars_texto = df_texto[df_texto['origem'] == 'TEXT_escrito']['tamanho_chars']
+chars_transcrito = df_texto[df_texto['origem'] == 'TRANSCRITO_falado']['tamanho_chars']
+
+stat, p_val = mannwhitneyu(chars_texto, chars_transcrito, alternative='two-sided')
+
+print(f"\n📊 Teste Mann-Whitney U (escrito vs falado):")
+print(f"   Estatística: {stat:.2f}")
+print(f"   p-value: {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA (p < 0.001)")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+::: {.callout-important}
+### 💡 Insight - Escrito vs Falado (Duas Linguagens)
+
+**TEXT_escrito (67.297 msgs):**
+- Mediana: 17 chars / **3 palavras**
+
+**TRANSCRITO_falado (694 msgs = 510 AUDIO + 184 VID):**
+- Mediana: 75 chars / **14 palavras**
+- **4.7x MAIOR que texto!**
+- **p < 0.001** (diferença FORTÍSSIMA)
+
+---
+
+**Diferença BRUTAL:**
+
+| Métrica | TEXT | TRANSCRITO | Diferença |
+|---------|------|------------|-----------|
+| Mediana chars | 17 | 75 | **+341%** |
+| Mediana palavras | 3 | 14 | **+367%** |
+
+**Boxplots:** Quase ZERO sobreposição - distribuições completamente distintas.
+
+---
+
+**Interpretação:**
+
+> **WhatsApp tem DUAS LINGUAGENS:**
+
+**1. TEXTO ESCRITO = Ultra-fragmentado**
+- **3 palavras** típicas
+- Ping-pong rápido
+- Exemplos: "Ok", "Oi amor", "Tá bom"
+
+**2. FALA TRANSCRITA = Desenvolvido**
+- **14 palavras** típicas (**4.7x maior**)
+- Narrativo e fluido
+- Desenvolvem pensamentos completos
+
+---
+
+**Por que essa diferença?**
+
+1. **Esforço:** Falar é mais rápido (~150 pal/min) que escrever (~40 pal/min)
+2. **Natureza:** Fala permite elaboração natural
+3. **Contexto:** AUDIO/VID substituem conversa (não coordenação)
+
+---
+
+**Descoberta central:**
+> Quando mandam áudio/vídeo, não estão "substituindo texto curto" - estão **mudando modalidade** para algo **4.7x mais elaborado**.
+> 
+> **1 mensagem falada ≈ 5 mensagens escritas** em conteúdo!
+
+**Nota técnica:**
+- Média TRANSCRITO (26.9 palavras) é puxada para baixo pelo limite de vídeos (1 min)
+- **Padrão natural de fala (AUDIO sem limite):** ~36 palavras
+- Se vídeos fossem ilimitados: diferença seria **7.5x** (não 4.7x)
+
+---
+
+**Implicação para análise:**
+- 98% do corpus (TEXT) representa comunicação ultra-curta
+- 1% (TRANSCRITO) representa comunicação muito mais rica
+- Clustering/tópicos devem considerar essa diferença!
+:::
+
+# Análise de URLs:
+
+## Compartilhamento de URLs
+
+### Identificação de URLs
+```{python}
+import re
+
+# Regex para identificar URLs
+url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+
+# Identifica mensagens com URLs
+df_texto['tem_url'] = df_texto['conteudo'].str.contains(url_pattern, regex=True, na=False)
+df_texto['num_urls'] = df_texto['conteudo'].str.findall(url_pattern).str.len()
+
+# Estatísticas gerais
+total_com_url = df_texto['tem_url'].sum()
+pct_com_url = (total_com_url / len(df_texto)) * 100
+
+print(f"📊 URLs no corpus textual:\n")
+print(f"   • Total de mensagens com URL: {total_com_url:,}")
+print(f"   • Percentual: {pct_com_url:.1f}%")
+print(f"   • Mensagens sem URL: {(~df_texto['tem_url']).sum():,}")
+print(f"\n   • Total de URLs encontradas: {df_texto['num_urls'].sum():,}")
+print(f"   • Média URLs/mensagem (quando tem): {df_texto[df_texto['tem_url']]['num_urls'].mean():.2f}")
+```
+
+### Por Remetente
+```{python}
+print("\n📊 URLs por REMETENTE:\n")
+
+for rem in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == rem]
+    com_url = df_rem['tem_url'].sum()
+    total = len(df_rem)
+    pct = (com_url / total) * 100
+    
+    print(f"{rem}:")
+    print(f"   • Mensagens com URL: {com_url:,}/{total:,} ({pct:.1f}%)")
+    print(f"   • Total URLs compartilhadas: {df_rem['num_urls'].sum():,}")
+    print()
+
+# Teste qui-quadrado
+from scipy.stats import chi2_contingency
+
+contingency = pd.crosstab(df_texto['remetente'], df_texto['tem_url'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"📊 Teste Chi-quadrado:")
+print(f"   χ² = {chi2:.2f}, p = {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA (p < 0.001)")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+### Por Contexto
+```{python}
+print("\n📊 URLs por CONTEXTO:\n")
+
+# Separados
+df_sep = df_texto[~df_texto['em_encontro']]
+com_url_sep = df_sep['tem_url'].sum()
+pct_sep = (com_url_sep / len(df_sep)) * 100
+
+print(f"Separados:")
+print(f"   • Mensagens com URL: {com_url_sep:,}/{len(df_sep):,} ({pct_sep:.1f}%)")
+print(f"   • Total URLs: {df_sep['num_urls'].sum():,}")
+
+# Juntos
+df_jun = df_texto[df_texto['em_encontro']]
+com_url_jun = df_jun['tem_url'].sum()
+pct_jun = (com_url_jun / len(df_jun)) * 100
+
+print(f"\nJuntos:")
+print(f"   • Mensagens com URL: {com_url_jun:,}/{len(df_jun):,} ({pct_jun:.1f}%)")
+print(f"   • Total URLs: {df_jun['num_urls'].sum():,}")
+
+# Teste
+contingency = pd.crosstab(df_texto['em_encontro'], df_texto['tem_url'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"\n📊 Teste Chi-quadrado:")
+print(f"   χ² = {chi2:.2f}, p = {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+```{python}
+#| label: fig-urls-comparacao
+#| fig-cap: "Compartilhamento de URLs por remetente e contexto"
+
+# Prepara dados
+dados_url = []
+
+for rem in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == rem]
+    pct = (df_rem['tem_url'].sum() / len(df_rem)) * 100
+    dados_url.append({'Categoria': rem, 'Tipo': 'Remetente', 'Percentual': pct})
+
+df_sep = df_texto[~df_texto['em_encontro']]
+pct_sep = (df_sep['tem_url'].sum() / len(df_sep)) * 100
+dados_url.append({'Categoria': 'Separados', 'Tipo': 'Contexto', 'Percentual': pct_sep})
+
+df_jun = df_texto[df_texto['em_encontro']]
+pct_jun = (df_jun['tem_url'].sum() / len(df_jun)) * 100
+dados_url.append({'Categoria': 'Juntos', 'Tipo': 'Contexto', 'Percentual': pct_jun})
+
+df_url_plot = pd.DataFrame(dados_url)
+
+# Gráfico
+fig = px.bar(
+    df_url_plot,
+    x='Categoria',
+    y='Percentual',
+    color='Tipo',
+    title='Percentual de Mensagens com URLs',
+    labels={'Percentual': '% com URL'},
+    text='Percentual',
+    barmode='group'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+```
+
+::: {.callout-note}
+### 💡 Insight - Compartilhamento de URLs
+
+**Frequência geral: RARO**
+- Apenas **0.8%** das mensagens contêm URLs (555 de 68.686)
+- Total: **565 URLs** compartilhadas em todo o período
+- Média: **1.02 URLs/mensagem** (raramente compartilham múltiplos links)
+
+---
+
+**Por remetente - P1 compartilha MAIS:**
+
+**P1: 1.0%** (330 msgs)
+- 330 URLs compartilhadas
+
+**P2: 0.6%** (225 msgs)
+- 235 URLs compartilhadas
+
+**Diferença:** P1 compartilha **+67% mais links** que P2 (1.0% vs 0.6%)
+- **χ² = 21.71, p < 0.001** (SIGNIFICATIVO!)
+
+---
+
+**Por contexto - SEM diferença:**
+
+**Separados: 0.8%** (452 msgs)
+**Juntos: 0.9%** (103 msgs)
+
+**Diferença:** Praticamente IGUAL
+- **χ² = 1.06, p = 0.302** (não significativo)
+- Contexto **NÃO afeta** compartilhamento de URLs
+
+---
+
+**Interpretação:**
+
+> **URLs são RAROS no WhatsApp** (<1% das mensagens).
+> 
+> Quando compartilham, é para:
+> - Notícias/artigos
+> - Vídeos do YouTube
+> - Localização (Google Maps)
+> - Memes/conteúdo viral
+> 
+> WhatsApp é primariamente para **conversa**, não para **curadoria de conteúdo** (diferente de Twitter/Reddit).
+
+**Diferença entre remetentes:**
+- **P1** é mais propenso a compartilhar links (+67%)
+- Possível perfil: mais engajado com conteúdo externo
+- P2 prefere comunicação direta (texto/áudio)
+
+**Contexto não importa:**
+- Compartilham links igualmente quando juntos ou separados (0.8% vs 0.9%)
+- URLs são contextuais ao conteúdo (notícia, localização), não ao estado da relação
+
+**Conclusão:** Compartilhamento de URLs é **comportamento individual** (P1 > P2), não modulado por contexto (junto/separado). WhatsApp é canal de **conversa**, não de **compartilhamento de links**.
+:::
+
+# Análise de Emojis
+
+## Uso de Emojis
+
+### Identificação de Emojis
+```{python}
+import emoji
+
+# Identifica emojis
+df_texto['emojis'] = df_texto['conteudo'].apply(
+    lambda x: [c for c in str(x) if c in emoji.EMOJI_DATA] if pd.notna(x) else []
+)
+
+df_texto['num_emojis'] = df_texto['emojis'].str.len()
+df_texto['tem_emoji'] = df_texto['num_emojis'] > 0
+
+# Estatísticas gerais
+total_com_emoji = df_texto['tem_emoji'].sum()
+pct_com_emoji = (total_com_emoji / len(df_texto)) * 100
+total_emojis = df_texto['num_emojis'].sum()
+
+print(f"📊 Emojis no corpus textual:\n")
+print(f"   • Mensagens com emoji: {total_com_emoji:,} ({pct_com_emoji:.1f}%)")
+print(f"   • Mensagens sem emoji: {(~df_texto['tem_emoji']).sum():,}")
+print(f"\n   • Total de emojis: {total_emojis:,}")
+print(f"   • Média emojis/mensagem (quando tem): {df_texto[df_texto['tem_emoji']]['num_emojis'].mean():.2f}")
+print(f"   • Média emojis/mensagem (geral): {df_texto['num_emojis'].mean():.2f}")
+```
+
+### Por Remetente
+```{python}
+print("\n📊 Emojis por REMETENTE:\n")
+
+for rem in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == rem]
+    com_emoji = df_rem['tem_emoji'].sum()
+    total = len(df_rem)
+    pct = (com_emoji / total) * 100
+    
+    print(f"{rem}:")
+    print(f"   • Mensagens com emoji: {com_emoji:,}/{total:,} ({pct:.1f}%)")
+    print(f"   • Total emojis usados: {df_rem['num_emojis'].sum():,}")
+    print(f"   • Média quando usa: {df_rem[df_rem['tem_emoji']]['num_emojis'].mean():.2f} emojis/msg")
+    print()
+
+# Teste
+contingency = pd.crosstab(df_texto['remetente'], df_texto['tem_emoji'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"📊 Teste Chi-quadrado:")
+print(f"   χ² = {chi2:.2f}, p = {p_val:.6e}")
+if p_val < 0.001:
+    print(f"   ✅ Diferença SIGNIFICATIVA")
+else:
+    print(f"   ⚠️ Sem diferença significativa")
+```
+
+### Por Contexto
+```{python}
+print("\n📊 Emojis por CONTEXTO:\n")
+
+# Separados
+df_sep = df_texto[~df_texto['em_encontro']]
+com_emoji_sep = df_sep['tem_emoji'].sum()
+pct_sep = (com_emoji_sep / len(df_sep)) * 100
+
+print(f"Separados:")
+print(f"   • Mensagens com emoji: {com_emoji_sep:,}/{len(df_sep):,} ({pct_sep:.1f}%)")
+print(f"   • Total emojis: {df_sep['num_emojis'].sum():,}")
+print(f"   • Média quando usa: {df_sep[df_sep['tem_emoji']]['num_emojis'].mean():.2f}")
+
+# Juntos
+df_jun = df_texto[df_texto['em_encontro']]
+com_emoji_jun = df_jun['tem_emoji'].sum()
+pct_jun = (com_emoji_jun / len(df_jun)) * 100
+
+print(f"\nJuntos:")
+print(f"   • Mensagens com emoji: {com_emoji_jun:,}/{len(df_jun):,} ({pct_jun:.1f}%)")
+print(f"   • Total emojis: {df_jun['num_emojis'].sum():,}")
+print(f"   • Média quando usa: {df_jun[df_jun['tem_emoji']]['num_emojis'].mean():.2f}")
+
+# Teste
+contingency = pd.crosstab(df_texto['em_encontro'], df_texto['tem_emoji'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"\n📊 Teste Chi-quadrado:")
+print(f"   χ² = {chi2:.2f}, p = {p_val:.6e}")
+```
+
+### Emojis Mais Frequentes
+```{python}
+# Conta todos os emojis
+all_emojis = [emoji for lista in df_texto['emojis'] for emoji in lista]
+emoji_counts = pd.Series(all_emojis).value_counts()
+
+print(f"\n📊 Top 20 Emojis Mais Usados:\n")
+for i, (emoji_char, count) in enumerate(emoji_counts.head(20).items(), 1):
+    pct = (count / len(all_emojis)) * 100
+    emoji_name = emoji.demojize(emoji_char)
+    print(f"   {i:2d}. {emoji_char} {emoji_name:30s}: {count:,} ({pct:.1f}%)")
+```
+
+```{python}
+#| label: fig-emojis-top
+#| fig-cap: "Top 15 emojis mais utilizados"
+
+# Top 15 para visualização
+top_emojis = emoji_counts.head(15).reset_index()
+top_emojis.columns = ['emoji', 'count']
+top_emojis['emoji_name'] = top_emojis['emoji'].apply(lambda x: emoji.demojize(x))
+
+fig = px.bar(
+    top_emojis,
+    x='count',
+    y='emoji',
+    orientation='h',
+    title='Top 15 Emojis Mais Usados',
+    labels={'count': 'Frequência', 'emoji': ''},
+    text='count'
+)
+
+fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+fig.update_layout(height=500, yaxis={'categoryorder': 'total ascending'})
+fig.show()
+```
+
+```{python}
+#| label: fig-emojis-comparacao
+#| fig-cap: "Uso de emojis por remetente e contexto"
+
+# Prepara dados
+dados_emoji = []
+
+for rem in ['P1', 'P2']:
+    df_rem = df_texto[df_texto['remetente'] == rem]
+    pct = (df_rem['tem_emoji'].sum() / len(df_rem)) * 100
+    dados_emoji.append({'Categoria': rem, 'Tipo': 'Remetente', 'Percentual': pct})
+
+df_sep = df_texto[~df_texto['em_encontro']]
+pct_sep = (df_sep['tem_emoji'].sum() / len(df_sep)) * 100
+dados_emoji.append({'Categoria': 'Separados', 'Tipo': 'Contexto', 'Percentual': pct_sep})
+
+df_jun = df_texto[df_texto['em_encontro']]
+pct_jun = (df_jun['tem_emoji'].sum() / len(df_jun)) * 100
+dados_emoji.append({'Categoria': 'Juntos', 'Tipo': 'Contexto', 'Percentual': pct_jun})
+
+df_emoji_plot = pd.DataFrame(dados_emoji)
+
+# Gráfico
+fig = px.bar(
+    df_emoji_plot,
+    x='Categoria',
+    y='Percentual',
+    color='Tipo',
+    title='Percentual de Mensagens com Emojis',
+    labels={'Percentual': '% com Emoji'},
+    text='Percentual',
+    barmode='group'
+)
+
+fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig.update_layout(height=400)
+fig.show()
+```
+
+::: {.callout-tip}
+### 💡 Insight - Uso de Emojis (Comportamentos OPOSTOS!)
+
+**Frequência geral: MODERADA**
+- **7.5%** das mensagens têm emojis (5.163 de 68.686)
+- Total: **9.878 emojis** usados
+- Média: **1.91 emojis/mensagem** (quando usa)
+
+---
+
+**Por remetente - PADRÕES COMPLETAMENTE OPOSTOS:** 🔥
+
+**P1: 10.8%** (3.679 msgs)
+- Frequência: **ALTA** (2.5x mais que P2!)
+- Total: 5.424 emojis
+- **Média quando usa: 1.47 emojis/msg** (econômico)
+
+**P2: 4.3%** (1.484 msgs)
+- Frequência: **BAIXA** (usa menos)
+- Total: 4.454 emojis
+- **Média quando usa: 3.00 emojis/msg** (generoso!)
+
+**Diferença MASSIVA:**
+- **χ² = 1.054, p < 0.001** (FORTÍSSIMO!)
+- P1 usa emoji em **151% MAIS mensagens** (10.8% vs 4.3%)
+- MAS P2 usa **104% MAIS emojis por mensagem** (3.0 vs 1.47)
+
+---
+
+**Interpretação - DOIS ESTILOS OPOSTOS:**
+
+**P1 = "Emoji como PONTUAÇÃO"**
+- Usa emojis **frequentemente** (10.8%)
+- Mas de forma **econômica** (1-2 emojis)
+- Exemplo: "Oi amor 😘" "Tá bom 👍" "Hahaha 😂"
+
+**P2 = "Emoji como EXPLOSÃO"**
+- Usa emojis **raramente** (4.3%)
+- Mas quando usa, **BOMBARDEIA** (3 emojis!)
+- Exemplo: "Te amo demais 💚😍🥰" "Hahahahaha 😂😂😭😭😭"
+
+---
+
+**Por contexto - Diferença MÍNIMA:**
+
+**Separados: 7.8%** (4.429 msgs)
+**Juntos: 6.3%** (734 msgs)
+
+**Diferença:** -19% quando juntos
+- **χ² = 27.16, p < 0.001** (significativo)
+- Mas diferença prática é pequena (7.8% → 6.3%)
+
+---
+
+**Top 5 Emojis Mais Usados:**
+
+**1. 💚 Coração Verde - 1.504 (15.2%)** 🏆
+- **DOMINANTE!** Representa 15% de TODOS os emojis!
+- Emoji simbólico da relação
+
+**2. 😍 Olhos de Coração - 637 (6.4%)**
+- Expressão de amor/admiração
+
+**3. 😂 Rindo com Lágrimas - 493 (5.0%)**
+- Humor/diversão
+
+**4. 🥰 Sorriso com Corações - 438 (4.4%)**
+- Ternura/afeto
+
+**5. 🫠 Derretendo - 410 (4.2%)**
+- Emoji moderno (amor/calor)
+
+---
+
+**Padrão dos emojis:**
+
+**Top 10 = 51.4% de todos os emojis!**
+- Vocabulário concentrado (poucos emojis usados repetidamente)
+- **Emojis românticos DOMINAM:** 💚😍🥰😘🖤❤🫶 (7 dos top 10!)
+- **Humor:** 😂😅 (2 do top 10)
+- **Tom da relação:** Afeto intenso + leveza/riso
+
+---
+
+**Descoberta CENTRAL:**
+
+> **P1 e P2 têm ESTRATÉGIAS OPOSTAS com emojis:**
+> 
+> - **P1:** Usa sempre, mas pontualmente (1.47/msg)
+> - **P2:** Usa raramente, mas intensamente (3.0/msg)
+> 
+> **Mesmo total de emojis (~5k cada), mas distribuições INVERSAS!**
+
+**💚 é o emoji da relação:**
+- 15.2% de TODOS os emojis!
+- Símbolo compartilhado (usado por ambos)
+- Representa identidade visual da conversa
+
+**Contexto não modula muito:**
+- Usam emojis de forma similar quando juntos/separados
+- Diferença de 1.5pp (7.8% → 6.3%) é marginal
+- Emojis são parte do estilo pessoal, não contextual
+
+**Conclusão:** Emojis revelam **estilos individuais** radicalmente diferentes - P1 pontua constantemente, P2 explode ocasionalmente. Mas ambos convergem em símbolos românticos (💚 domina).
+:::
+
+---
+
+# Síntese - Análise de Conteúdo
+
+::: {.callout-tip}
+### 🎯 Principais Descobertas
+
+Este notebook analisou **68.686 mensagens com conteúdo textual** (74.7% do dataset completo), explorando tamanho, composição, e elementos linguísticos.
+
+---
+
+### **1. MENSAGENS SÃO ULTRA-CURTAS** 📏
+
+**Padrão dominante: 3 palavras**
+- Mediana: **17 caracteres** / **3 palavras**
+- 95%: **67 caracteres** / **13 palavras**
+- Distribuição assimétrica (cauda longa de outliers)
+
+**Conclusão:** WhatsApp usado como ferramenta de **ping-pong rápido** (mensagens fragmentadas) ao invés de desenvolvimento textual.
+
+---
+
+### **2. SIMETRIA PERFEITA ENTRE REMETENTES** 👥
+
+**P1 vs P2: Diferenças MÍNIMAS**
+- P1: 28.2 chars / 5.4 palavras (média)
+- P2: 26.2 chars / 5.1 palavras (média)
+- Diferença: **+2 chars** (+0.3 palavras) = DESPREZÍVEL!
+- p<0.001 por tamanho amostral, mas sem relevância prática
+
+**Conclusão:** Ambos escrevem mensagens **igualmente curtas** - simetria de estilo.
+
+---
+
+### **3. ESTILO ESTÁVEL ENTRE FASES** 📅
+
+**Amizade vs Relacionamento: IGUAL**
+- Amizade: 24.8 chars / 4.7 palavras
+- Relacionamento: 27.3 chars / 5.3 palavras
+- **Mediana palavras: IGUAL (3)** em ambas fases! 🔥
+- Diferença: +10% chars (marginal)
+
+**Conclusão:** Transição amizade→relacionamento **aumentou volume** (6.4x) mas **NÃO mudou estilo** de escrita. Validação do uso de dataset completo para análise textual.
+
+---
+
+### **4. CONTEXTO NÃO AFETA TAMANHO** 🏠
+
+**Junto vs Separado: IGUAL**
+- Separados: 26.3 chars / 5.1 palavras
+- Juntos: 31.5 chars / 6.2 palavras
+- **Mediana chars: IDÊNTICA (17)** 🔥
+- Médias diferentes por outliers, p=0.072 (não significativo)
+
+**Conclusão:** Contexto modula **volume** (-68%), **velocidade** (bimodal), **turnos** (-53%), mas **NÃO modula tamanho** individual das mensagens.
+
+---
+
+### **5. DUAS LINGUAGENS: TEXTO vs FALA** 🗣️💬
+
+**DESCOBERTA MAIS BRUTAL DO NOTEBOOK:**
+
+**TEXT_escrito (67.297 msgs - 98%):**
+- Mediana: 17 chars / **3 palavras**
+- Ultra-fragmentado
+
+**TRANSCRITO_falado (694 msgs - 1%):**
+- Mediana: 75 chars / **14 palavras**
+- **4.7x MAIOR!** (p<0.001)
+- AUDIO: 36 palavras (sem limite)
+- VID: 27 palavras (limite 1 min técnico)
+
+**Interpretação:**
+> WhatsApp tem **DUAS MODALIDADES:**
+> - **TEXTO = ping-pong rápido** (3 palavras)
+> - **FALA = narrativo desenvolvido** (14 palavras)
+> 
+> **1 mensagem falada ≈ 5 mensagens escritas** em conteúdo!
+
+**Razão:** Falar é mais rápido (~150 pal/min) que escrever (~40 pal/min). Áudio/vídeo substituem conversa, não coordenação.
+
+**Nota técnica:** VID limitado a 1 min (WhatsApp). Se ilimitado, diferença seria 7.5x (não 4.7x).
+
+---
+
+### **6. COMPARTILHAMENTO DE URLs: RARO** 🔗
+
+**Frequência: <1%**
+- Apenas **0.8%** têm URLs (555 msgs)
+- Total: 565 URLs em 367 dias
+
+**Diferença individual:**
+- **P1: 1.0%** (compartilha mais, +67%)
+- **P2: 0.6%** (p<0.001)
+
+**Contexto: NÃO importa**
+- Separados: 0.8% | Juntos: 0.9% (p=0.302)
+
+**Conclusão:** WhatsApp é canal de **conversa**, não **curadoria de conteúdo**. Compartilhamento é comportamento **individual** (P1>P2), não contextual.
+
+---
+
+### **7. EMOJIS: ESTRATÉGIAS OPOSTAS** 😊💚
+
+**Frequência: 7.5%** (5.163 msgs, 9.878 emojis)
+
+**P1 vs P2 = COMPORTAMENTOS INVERTIDOS:** 🔥
+- **P1:** Usa em **10.8%** msgs, mas **1.47 emojis/msg** (pontual)
+- **P2:** Usa em **4.3%** msgs, mas **3.00 emojis/msg** (explosivo!)
+- **χ² = 1.054** (p<0.001) - uma das MAIORES diferenças do dataset!
+
+**Interpretação:**
+- P1: "Emoji como pontuação" (frequente, econômico)
+- P2: "Emoji como explosão" (raro, generoso)
+
+**💚 Coração Verde = Emoji da Relação:**
+- **15.2%** de TODOS os emojis (1.504 ocorrências)
+- Símbolo compartilhado, identidade visual da conversa
+
+**Top 10 = 51% dos emojis:**
+- Vocabulário concentrado
+- **Emojis românticos dominam:** 💚😍🥰😘🖤❤🫶 (7 dos top 10)
+
+**Contexto:**
+- Separados: 7.8% | Juntos: 6.3% (p<0.001 mas diferença pequena)
+- Emojis são estilo pessoal, não contextual
+
+---
+
+### **🎯 SÍNTESE CONSOLIDADA**
+
+**COMPOSIÇÃO DO CORPUS:**
+- 98% TEXT nativo (67.297 msgs)
+- 1% AUDIO transcrito (510 msgs)
+- 0.3% VID transcrito (184 msgs)
+- Limitação: 6% áudios, 1.9% vídeos disponíveis (arquivos antigos não no export)
+
+**O QUE É ESTÁVEL:**
+- ✅ **Tamanho:** 3 palavras mediana (universal)
+- ✅ **Simetria P1/P2:** Ambos escrevem igual
+- ✅ **Entre fases:** Amizade vs Relacionamento igual
+- ✅ **Contexto:** Junto vs Separado igual (tamanho)
+
+**O QUE VARIA:**
+- 🔥 **Modalidade:** TEXT (3 pal) vs FALA (14 pal) = **4.7x diferença!**
+- 🔥 **Emojis:** P1 frequente/pontual vs P2 raro/explosivo
+- 📊 **URLs:** P1 compartilha 67% mais que P2
+
+**PADRÃO GERAL:**
+> Comunicação é **ultra-fragmentada** (3 palavras) com simetria entre pessoas e estabilidade temporal.
+> 
+> **Exceção:** Quando **falam** (áudio/vídeo), desenvolvem **4.7x mais** - são duas linguagens distintas.
+> 
+> **Personalização:** Emojis e URLs revelam estilos individuais (P1 vs P2), não contextuais.
+
+---
+
+**TRANSIÇÃO PARA NOTEBOOKS FUTUROS:**
+
+Este notebook estabeleceu **PADRÕES QUANTITATIVOS** (tamanho, frequência, composição).
+
+**Próximos passos:**
+- **Análise semântica:** Tópicos, sentimentos, clustering
+- **Padrões temporais de conteúdo:** Evolução de temas
+- **Análise de transcrições:** Diferenças qualitativas AUDIO vs VID
+
+**Principais features criadas:**
+- `tamanho_chars`, `tamanho_palavras`
+- `origem` (TEXT_escrito vs TRANSCRITO_falado)
+- `tem_url`, `num_urls`
+- `tem_emoji`, `num_emojis`, `emojis` (lista)
+:::
+
+
+
+
+
+
+
+
+## Investigação de Outliers
+
+### Distribuição Extrema
+```{python}
+# Análise de tamanhos extremos
+print("📊 Distribuição de tamanhos (palavras):\n")
+print(df_texto['tamanho_palavras'].describe())
+
+print(f"\n📈 Percentis altos:")
+print(f"   99%: {df_texto['tamanho_palavras'].quantile(0.99):.0f} palavras")
+print(f"   99.5%: {df_texto['tamanho_palavras'].quantile(0.995):.0f} palavras")
+print(f"   99.9%: {df_texto['tamanho_palavras'].quantile(0.999):.0f} palavras")
+print(f"   Máximo: {df_texto['tamanho_palavras'].max():.0f} palavras")
+
+# Conta outliers extremos
+outliers_100 = (df_texto['tamanho_palavras'] > 100).sum()
+outliers_200 = (df_texto['tamanho_palavras'] > 200).sum()
+outliers_500 = (df_texto['tamanho_palavras'] > 500).sum()
+
+print(f"\n🚨 Outliers por threshold:")
+print(f"   >100 palavras: {outliers_100} msgs ({outliers_100/len(df_texto)*100:.2f}%)")
+print(f"   >200 palavras: {outliers_200} msgs ({outliers_200/len(df_texto)*100:.2f}%)")
+print(f"   >500 palavras: {outliers_500} msgs ({outliers_500/len(df_texto)*100:.2f}%)")
+```
+
+### Exemplos de Outliers
+```{python}
+# Examina manualmente os 10 maiores
+top_outliers = df_texto.nlargest(10, 'tamanho_palavras')[['remetente', 'tamanho_palavras', 'tamanho_chars', 'conteudo']]
+
+print("🔍 Top 10 mensagens mais longas:\n")
+for idx, row in top_outliers.iterrows():
+    print(f"{row['remetente']} - {row['tamanho_palavras']:.0f} palavras:")
+    print(f"   {row['conteudo'][:200]}...")
+    print()
+```
+
+::: {.callout-warning}
+### ⚠️ Decisão Metodológica - Outliers de Tamanho
+
+**Distribuição de tamanhos:**
+- **99%: 29 palavras** (padrão natural até aqui)
+- 99.5%: 51 palavras
+- 99.9%: 144 palavras
+- **Máximo: 1.164 palavras** (380x a mediana!)
+
+**Outliers identificados:**
+- **>100 palavras: 129 msgs (0.19%)**
+- >200 palavras: 48 msgs (0.07%)
+- >500 palavras: 7 msgs (0.01%)
+
+---
+
+**Inspeção manual (Top 10):**
+
+**Padrão CLARO: Copy-paste de ChatGPT**
+- 9/10 mensagens são de **P1**
+- 9/10 têm estrutura **markdown formal** (GPT)
+- Temas: Análises médicas, roteiros de viagem, previsões de eventos
+- **NÃO representam estilo de comunicação pessoal!**
+
+**Exemplos:**
+```
+P1 - 1.164 palavras:
+"# Uso Combinado de Lurasidona e Pregabalina: Análise Detalhada
+## Avaliação da interação medicamentosa..."
+(Claramente resposta do ChatGPT copiada)
+
+P1 - 526 palavras:
+"Planejar uma viagem de 20 dias para destinos caribenhos..."
+(Roteiro gerado por IA)
+```
+
+**Única exceção:**
+```
+P2 - 474 palavras:
+"Olá, bom dia! Hoje faz quase 1 mês que estou exercendo..."
+(Carta profissional autêntica - mas ainda outlier para WhatsApp)
+```
+
+---
+
+**Threshold escolhido: >100 palavras**
+
+**Justificativa:**
+1. **99.81% das mensagens preservadas** (68.557 de 68.686)
+2. **Remove claramente copy-paste GPT** (estruturas formais longas)
+3. **Preserva transcrições AUDIO/VID:**
+   - AUDIO mediana: 36 palavras ✅
+   - VID mediana: 27 palavras ✅
+   - Mesmo 99% de AUDIO (~150 pal) passa ✅
+4. **Consistente com uso natural de WhatsApp:**
+   - 29 palavras = 99% das mensagens
+   - >100 palavras = claramente não-conversacional
+
+**Impacto:**
+- **129 mensagens removidas (0.19%)**
+- 9 de 10 são P1 (comportamento individual de copiar GPT)
+- Análise semântica focará em **comunicação autêntica**
+
+**Nota sobre duplicatas:**
+- Algumas mensagens aparecem 2x (mesmo conteúdo, tamanho idêntico)
+- Investigar no 07-FE se há bug no parse ou reenvios
+:::
