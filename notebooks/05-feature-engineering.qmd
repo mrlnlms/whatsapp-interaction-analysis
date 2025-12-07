@@ -1,0 +1,498 @@
+---
+title: "Feature Engineering"
+subtitle: "Consolidação e criação de features para modelagem"
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  warning: false
+  message: false
+---
+
+# Introdução
+
+## Objetivos
+
+Este notebook tem como objetivos:
+
+1. **Documentar** todas as variáveis existentes no dataset
+2. **Consolidar** features criadas nos notebooks de EDA (03-06)
+3. **Limpar** dados para análise semântica (URLs, outliers)
+4. **Criar** features adicionais para modelagem
+5. **Gerar** dataset final otimizado para clustering/tópicos
+6. **Comparar** abordagem metodológica vs exploratória anterior
+
+## Fluxo de Trabalho
+```{mermaid}
+flowchart TD
+    A[Dataset Base] --> B[Dicionário de Variáveis]
+    B --> C[Consolidação de Features]
+    C --> D[Limpeza para Semântica]
+    D --> E[Novas Features]
+    E --> F[Feature Selection]
+    F --> G[Dataset Final]
+    G --> H[Comparação Metodológica]
+```
+
+---
+
+# Setup
+
+## Bibliotecas
+```{python}
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy.stats import chi2_contingency, mannwhitneyu
+import re
+from datetime import datetime, timedelta
+import emoji
+import os
+print(os.getcwd())
+
+# Configurações
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
+```
+
+## Caminhos e Cores
+```{python}
+from pathlib import Path
+
+# Estrutura de diretórios
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
+
+# Arquivos
+INPUT_FILE = DATA_DIR / 'messages_with_context.parquet'
+OUTPUT_FILE = DATA_DIR / 'messages_features.parquet'
+
+# Cores padronizadas
+COLORS = {
+    'P1': '#636EFA',
+    'P2': '#EF553B',
+    'separados': '#636EFA',
+    'juntos': '#00CC96',
+    'TEXT': '#636EFA',
+    'AUDIO': '#EF553B',
+    'VID': '#00CC96',
+    'IMG': '#FFA15A'
+}
+
+print(f"📁 Diretório: {DATA_DIR}")
+print(f"📂 Entrada: {INPUT_FILE.name}")
+print(f"📂 Saída: {OUTPUT_FILE.name}")
+print(f"✅ Entrada existe: {INPUT_FILE.exists()}")
+```
+
+## Carregamento
+```{python}
+# Carrega dataset base
+df = pd.read_parquet(INPUT_FILE)
+
+print(f"📊 Dataset carregado:")
+print(f"   • Mensagens: {len(df):,}")
+print(f"   • Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"   • Colunas: {len(df.columns)}")
+print(f"   • Memória: {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+```
+
+---
+
+# Dicionário de Variáveis
+
+## Variáveis do Dataset Original
+
+::: {.callout-note}
+### 📋 Variáveis Base (do processamento inicial)
+
+Estas variáveis foram criadas no processo de ETL inicial (parsing do WhatsApp + enriquecimento contextual).
+
+**Identificação e Temporal:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `timestamp` | datetime64 | Data/hora da mensagem | 2024-12-16 19:23:45 |
+| `remetente` | object | Quem enviou (P1 ou P2) | P1 |
+| `ano` | int64 | Ano da mensagem | 2024 |
+| `mes` | int64 | Mês da mensagem | 12 |
+| `dia` | int64 | Dia do mês | 16 |
+
+**Conteúdo:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `tipo_mensagem` | object | Tipo específico do WhatsApp | text, audio, video, image, sticker |
+| `grupo_mensagem` | object | Agrupamento por categoria | TEXT, AUDIO, VID, IMG |
+| `conteudo` | object | Texto da mensagem ou transcrição | "Oi amor, tudo bem?" |
+| `midia_path` | object | Caminho do arquivo de mídia (se houver) | /media/audio_123.opus |
+
+**Contexto:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `em_encontro` | bool | Se estavam juntos fisicamente | True |
+| `encontro_id` | float64 | ID do encontro (se em_encontro=True) | 5.0 |
+| `fase_relacionamento` | object | Fase da relação | Relacionamento |
+
+**Estatísticas do Dataset Base:**
+```{python}
+print("📊 Resumo das variáveis base:\n")
+print(f"Tipos de mensagem: {df['tipo_mensagem'].nunique()} únicos")
+print(df['tipo_mensagem'].value_counts())
+print(f"\nGrupos de mensagem: {df['grupo_mensagem'].nunique()} únicos")
+print(df['grupo_mensagem'].value_counts())
+print(f"\nDistribuição remetente:")
+print(df['remetente'].value_counts())
+print(f"\nContexto:")
+print(f"  Em encontro: {df['em_encontro'].sum():,} ({df['em_encontro'].sum()/len(df)*100:.1f}%)")
+print(f"  Separados: {(~df['em_encontro']).sum():,} ({(~df['em_encontro']).sum()/len(df)*100:.1f}%)")
+```
+:::
+
+## Variáveis Criadas nos EDAs
+
+::: {.callout-important}
+### 🔧 Features Criadas em 03-overview.qmd
+
+**Não houve criação de features específicas** - apenas análise descritiva das variáveis base.
+
+**Descobertas principais:**
+- 97.2% Relacionamento vs 2.8% Amizade
+- 85.4% Separados vs 14.6% Juntos
+- Redução de -68.3% no volume quando juntos
+:::
+
+::: {.callout-important}
+### 🔧 Features Criadas em 04-eda-temporal.qmd
+
+**Features temporais derivadas:**
+
+| Variável | Tipo | Descrição | Valores | Criação |
+|----------|------|-----------|---------|---------|
+| `hora` | int64 | Hora do dia (0-23) | 0, 1, ..., 23 | `df['timestamp'].dt.hour` |
+| `dia_semana` | object | Dia da semana | Segunda, Terça, ..., Domingo | `df['timestamp'].dt.day_name()` |
+| `mes` | int64 | Mês (1-12) | 1, 2, ..., 12 | `df['timestamp'].dt.month` |
+| `ano_mes` | object | Ano-Mês para agregação | 2024-12, 2025-01 | `df['timestamp'].dt.to_period('M')` |
+| `fase_temporal` | object | Fase evolutiva (4 fases) | Início, Experimentação, Transição, Consolidação | Regras temporais |
+
+**Regras de fase_temporal:**
+```python
+# Início: Dezembro/2024
+# Experimentação: Janeiro-Maio/2025
+# Transição: Junho-Julho/2025
+# Consolidação: Agosto-Outubro/2025
+```
+
+**Descobertas:**
+- Padrões horários: Separados nocturno (19h), Juntos diurno (12h)
+- Padrões semanais: Monday paradox (27.1% quando juntos)
+- Evolução: TEXT +8.3pp, AUDIO -56%, VID pico em Jan
+:::
+
+::: {.callout-important}
+### 🔧 Features Criadas em 05-eda-interacao.qmd
+
+**Features de interação e sequenciamento:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tempo_desde_ultima` | float64 | Minutos desde mensagem anterior | 0.12, 5.3, 120.0 | Diff de timestamps |
+| `sequencia` | int64 | Contador de msgs consecutivas do mesmo remetente | 1, 2, 3, ..., 54 | Incremental por remetente |
+| `turno_id` | int64 | ID da sessão de conversa (gap >1h) | 0, 1, 2, ..., 1125 | Grupos por gap temporal |
+
+**Features de contexto temporal (relacionamento com encontros):**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `dias_desde_ultimo` | float64 | Dias desde último encontro | 0.5, 5.0, 45.0 | Cálculo baseado em datas de encontros |
+| `dias_ate_proximo` | float64 | Dias até próximo encontro | 0.5, 7.0, 50.0 | Cálculo baseado em datas de encontros |
+
+**Descobertas:**
+- 81% respostas <60s (ultra-rápidas)
+- Sequências: Separados 3.45 msgs vs Juntos 2.73 msgs
+- Turnos: Separados 92.5 msgs vs Juntos 43.7 msgs (-53%)
+- Padrão "U invertido": Volume pico pós-encontro e pré-encontro
+:::
+
+::: {.callout-important}
+### 🔧 Features Criadas em 06-eda-conteudo.qmd
+
+**Features de tamanho textual:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tamanho_chars` | int64 | Número de caracteres | 17, 183, 1164 | `df['conteudo'].str.len()` |
+| `tamanho_palavras` | int64 | Número de palavras | 3, 36, 250 | `df['conteudo'].str.split().str.len()` |
+
+**Features de origem do texto:**
+
+| Variável | Tipo | Descrição | Valores | Criação |
+|----------|------|-----------|---------|---------|
+| `origem` | object | Fonte do conteúdo textual | TEXT_escrito, TRANSCRITO_falado | Baseado em `grupo_mensagem` |
+```python
+# Lógica:
+# 'TEXT_escrito' se grupo_mensagem == 'TEXT'
+# 'TRANSCRITO_falado' se grupo_mensagem in ['AUDIO', 'VID']
+```
+
+**Features de URLs:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tem_url` | bool | Se contém URL | True, False | Regex em `conteudo` |
+| `num_urls` | int64 | Quantidade de URLs | 0, 1, 2 | Contagem via regex |
+
+**Features de Emojis:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tem_emoji` | bool | Se contém emoji | True, False | Biblioteca `emoji` |
+| `num_emojis` | int64 | Quantidade de emojis | 0, 1, 3 | Contagem via `emoji` |
+| `emojis` | object (list) | Lista de emojis da mensagem | ['💚', '😍'] | Extração via `emoji` |
+
+**Descobertas:**
+- Mediana: 3 palavras (ultra-curto)
+- TEXT vs TRANSCRITO: 3 vs 14 palavras (4.7x diferença!)
+- URLs: 0.8% (raro), P1 67% mais que P2
+- Emojis: 7.5%, P1 frequente/pontual vs P2 raro/explosivo
+- 💚 é 15.2% de todos emojis (símbolo da relação)
+:::
+
+## Resumo de Features Disponíveis
+
+### Colunas Reais do Dataset
+```{python}
+print("📊 COLUNAS PRESENTES no dataset base:\n")
+print(f"Total: {len(df.columns)} colunas\n")
+
+# Lista todas com tipo
+for col in df.columns:
+    dtype = df[col].dtype
+    non_null = df[col].notna().sum()
+    pct = (non_null / len(df)) * 100
+    print(f"   • {col:25s} | {str(dtype):15s} | {non_null:,} ({pct:.1f}%)")
+
+print("\n" + "="*70)
+```
+
+### Categorização das Colunas Existentes
+```{python}
+# Agora categoriza APENAS o que existe
+colunas_reais = df.columns.tolist()
+
+# Categorização
+temporais_existentes = [c for c in colunas_reais if c in ['timestamp', 'ano', 'mes', 'dia', 'hora', 'dia_semana', 'ano_mes', 'fase_temporal']]
+contextuais_existentes = [c for c in colunas_reais if c in ['em_encontro', 'encontro_id', 'fase_relacionamento', 'dias_desde_ultimo', 'dias_ate_proximo']]
+conteudo_existentes = [c for c in colunas_reais if c in ['tipo_mensagem', 'grupo_mensagem', 'conteudo', 'midia_path']]
+interacao_existentes = [c for c in colunas_reais if c in ['remetente', 'tempo_desde_ultima', 'sequencia', 'turno_id']]
+
+# Outras não categorizadas
+categorizadas = temporais_existentes + contextuais_existentes + conteudo_existentes + interacao_existentes
+outras = [c for c in colunas_reais if c not in categorizadas]
+
+print("📋 CATEGORIZAÇÃO DAS COLUNAS EXISTENTES:\n")
+
+print(f"⏰ TEMPORAIS ({len(temporais_existentes)}):")
+for col in temporais_existentes:
+    print(f"   ✅ {col}")
+
+print(f"\n🌍 CONTEXTUAIS ({len(contextuais_existentes)}):")
+for col in contextuais_existentes:
+    print(f"   ✅ {col}")
+
+print(f"\n📝 CONTEÚDO ({len(conteudo_existentes)}):")
+for col in conteudo_existentes:
+    print(f"   ✅ {col}")
+
+print(f"\n🔄 INTERAÇÃO ({len(interacao_existentes)}):")
+for col in interacao_existentes:
+    print(f"   ✅ {col}")
+
+if outras:
+    print(f"\n❓ OUTRAS ({len(outras)}):")
+    for col in outras:
+        print(f"   • {col}")
+```
+
+### Features a Serem Criadas
+```{python}
+# Define o que QUEREMOS criar (baseado nas análises dos EDAs)
+features_desejadas = {
+    'TEMPORAIS': ['hora', 'dia_semana', 'mes', 'ano_mes', 'fase_temporal'],
+    'INTERAÇÃO': ['tempo_desde_ultima', 'sequencia', 'turno_id', 'dias_desde_ultimo', 'dias_ate_proximo'],
+    'CONTEÚDO': ['tamanho_chars', 'tamanho_palavras', 'origem'],
+    'ELEMENTOS': ['tem_url', 'num_urls', 'tem_emoji', 'num_emojis', 'emojis']
+}
+
+print("🔧 FEATURES A SEREM CRIADAS:\n")
+
+total_criar = 0
+for categoria, features in features_desejadas.items():
+    # Filtra apenas as que NÃO existem
+    faltantes = [f for f in features if f not in df.columns]
+    if faltantes:
+        print(f"{categoria}:")
+        for feat in faltantes:
+            print(f"   ⚙️ {feat}")
+            total_criar += 1
+
+print(f"\nTotal a criar: {total_criar} features")
+```
+
+::: {.callout-note}
+### 💡 Entendimento do Dataset Base
+
+**Dataset base contém informação PRIMÁRIA:**
+- Dados brutos do WhatsApp (timestamp, remetente, conteudo)
+- Enriquecimento contextual (em_encontro, fase_relacionamento)
+
+**Features DERIVADAS serão criadas aqui:**
+- Extrações temporais (hora, dia_semana de timestamp)
+- Métricas de conteúdo (tamanho de conteudo)
+- Padrões de interação (sequências, turnos)
+- Elementos linguísticos (emojis, URLs)
+
+Estas features **não precisam** estar no dataset base - são calculadas conforme necessário para análise.
+:::
+
+---
+
+### Mapeamento de Nomenclatura
+```{python}
+# Features que existem mas com nomes ligeiramente diferentes
+mapeamento = {
+    'dias_desde_ultimo_encontro': 'dias_desde_ultimo',  # Existe como dias_desde_ultimo_encontro
+    'dias_ate_proximo_encontro': 'dias_ate_proximo',    # Existe como dias_ate_proximo_encontro
+}
+
+print("📋 MAPEAMENTO - Nomenclatura Existente:\n")
+for col_existente, col_esperada in mapeamento.items():
+    if col_existente in df.columns:
+        print(f"   ✅ {col_existente} → (esperava: {col_esperada})")
+        print(f"      Valores: min={df[col_existente].min():.1f}, max={df[col_existente].max():.1f}, média={df[col_existente].mean():.1f}")
+```
+
+### Features Realmente Faltantes
+```{python}
+print("\n🔧 FEATURES QUE REALMENTE FALTAM:\n")
+
+# Apenas mes falta!
+if 'mes' not in df.columns:
+    print("   ⚙️ mes (int) - Mês do ano (1-12)")
+    print("      → Será extraído de timestamp")
+else:
+    print("   ✅ Todas features já presentes!")
+
+print("\n" + "="*70)
+print("\n📊 RESUMO:")
+print(f"   • Total de colunas: {len(df.columns)}")
+print(f"   • Features temporais: ✅ COMPLETAS")
+print(f"   • Features interação: ✅ COMPLETAS")
+print(f"   • Features conteúdo: ✅ COMPLETAS")
+print(f"   • Features elementos: ✅ COMPLETAS")
+print(f"   • Faltando: apenas 'mes' (extração simples)")
+```
+
+::: {.callout-tip}
+### 💡 Dataset Já Consolidado!
+
+**Surpresa agradável:** O dataset `messages_with_context.parquet` **JÁ CONTÉM** praticamente todas as features necessárias!
+
+**Features presentes:**
+- ✅ **Temporais:** hora, dia_semana, ano_mes, fase_temporal
+- ✅ **Interação:** tempo_desde_ultima, sequencia, turno_id
+- ✅ **Conteúdo:** tamanho_chars, tamanho_palavras, origem
+- ✅ **Elementos:** tem_url, num_urls, tem_emoji, num_emojis, emojis
+- ✅ **Contexto encontros:** dias_desde_ultimo_encontro, dias_ate_proximo_encontro
+
+**Diferenças de nomenclatura:**
+- `dias_desde_ultimo_encontro` (não `dias_desde_ultimo`)
+- `dias_ate_proximo_encontro` (não `dias_ate_proximo`)
+
+**Faltando:**
+- ⚙️ Apenas `mes` (mês como int 1-12)
+
+**Implicação para este notebook:**
+O 07-feature-engineering será mais focado em:
+1. **Documentação** das features existentes
+2. **Criação** de `mes` (simples)
+3. **Limpeza** para análise semântica (URLs, outliers)
+4. **Validação** de qualidade
+5. **Comparação** metodológica (se houver dataset anterior)
+:::
+
+
+
+# Consolidação de Features
+
+## Criação de Features Faltantes
+
+### Feature: mes
+```{python}
+# Cria coluna mes (1-12)
+df['mes'] = df['timestamp'].dt.month
+
+print("✅ Feature 'mes' criada!")
+print(f"\n   Valores únicos: {sorted(df['mes'].unique())}")
+print(f"   Distribuição:")
+print(df['mes'].value_counts().sort_index())
+```
+
+## Padronização de Nomenclatura (Opcional)
+
+::: {.callout-note}
+### 💡 Decisão - Manter Nomes Originais
+
+As features de distância temporal existem como:
+- `dias_desde_ultimo_encontro` (em vez de `dias_desde_ultimo`)
+- `dias_ate_proximo_encontro` (em vez de `dias_ate_proximo`)
+
+**Decisão:** Manter nomenclatura original (mais descritiva e clara).
+
+Se preferir padronizar para nomes curtos:
+```python
+# Descomente para renomear:
+# df = df.rename(columns={
+#     'dias_desde_ultimo_encontro': 'dias_desde_ultimo',
+#     'dias_ate_proximo_encontro': 'dias_ate_proximo'
+# })
+```
+:::
+
+## Validação Final
+```{python}
+print("📊 DATASET CONSOLIDADO - Estatísticas Finais:\n")
+print(f"   Total de mensagens: {len(df):,}")
+print(f"   Total de colunas: {len(df.columns)}")
+print(f"   Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"   Memória: {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+
+print("\n✅ FEATURES CONSOLIDADAS POR CATEGORIA:\n")
+
+categorias = {
+    'TEMPORAIS': ['timestamp', 'hora', 'dia_semana', 'mes', 'ano_mes', 'fase_temporal'],
+    'IDENTIFICAÇÃO': ['remetente', 'tipo_mensagem', 'grupo_mensagem'],
+    'CONTEÚDO': ['conteudo', 'arquivo', 'transcricao', 'tamanho_chars', 'tamanho_palavras', 'origem'],
+    'CONTEXTO': ['em_encontro', 'encontro_id', 'encontro_nome', 'fase_relacionamento', 
+                 'dias_desde_ultimo_encontro', 'dias_ate_proximo_encontro'],
+    'INTERAÇÃO': ['tempo_desde_ultima', 'sequencia', 'turno_id'],
+    'ELEMENTOS': ['tem_url', 'num_urls', 'tem_emoji', 'num_emojis', 'emojis'],
+    'TÉCNICAS': ['date_match']
+}
+
+for cat, cols in categorias.items():
+    existentes = [c for c in cols if c in df.columns]
+    print(f"{cat} ({len(existentes)}/{len(cols)}):")
+    for col in existentes:
+        non_null = df[col].notna().sum()
+        pct = (non_null / len(df)) * 100
+        print(f"   ✅ {col:30s} ({pct:5.1f}% preenchido)")
+```
+
+---
