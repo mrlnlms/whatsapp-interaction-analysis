@@ -1,4 +1,4 @@
-"""Testes para src/cleaning.py — pipeline de limpeza de dados WhatsApp."""
+"""Testes para whatsapp/pipeline/cleaning.py — pipeline de limpeza de dados WhatsApp."""
 
 import pytest
 

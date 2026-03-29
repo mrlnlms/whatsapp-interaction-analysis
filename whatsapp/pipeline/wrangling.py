@@ -328,7 +328,7 @@ def transcribe_media_groq(file_path: str, api_key: str = None) -> dict:
             'error': None
         }
         
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         return {
             'transcription': None,
             'status': 'error',
