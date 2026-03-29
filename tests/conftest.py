@@ -1,7 +1,12 @@
 """Fixtures compartilhadas para testes do pipeline WhatsApp."""
 
+import os
 import pytest
 from pathlib import Path
+
+# Define variaveis de ambiente para que whatsapp.pipeline.config carregue sem .env
+os.environ.setdefault("PROJECT_ROOT", str(Path(__file__).parent.parent))
+os.environ.setdefault("DATA_FOLDER", "sample")
 
 
 @pytest.fixture

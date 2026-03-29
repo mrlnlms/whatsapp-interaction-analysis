@@ -2,15 +2,10 @@
 
 import re
 import pytest
-import sys
-from pathlib import Path
 from typer.testing import CliRunner
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from cli import app
-from cli.helpers import validate_steps
+from whatsapp.cli import app
+from whatsapp.cli.helpers import validate_steps
 
 
 def strip_ansi(text: str) -> str:

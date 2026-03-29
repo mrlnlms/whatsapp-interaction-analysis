@@ -1,12 +1,8 @@
 """Testes para src/cleaning.py — pipeline de limpeza de dados WhatsApp."""
 
 import pytest
-from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from cleaning import (
+from whatsapp.pipeline.cleaning import (
     remove_u200e,
     remove_empty_lines,
     normalize_whitespace,
