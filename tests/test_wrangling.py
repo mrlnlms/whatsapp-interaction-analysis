@@ -1,4 +1,4 @@
-"""Testes para src/wrangling.py — parsing, classificacao e enriquecimento."""
+"""Testes para whatsapp/pipeline/wrangling.py — parsing, classificacao e enriquecimento."""
 
 import pytest
 import pandas as pd
