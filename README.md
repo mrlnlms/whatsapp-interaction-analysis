@@ -34,16 +34,25 @@ whatsapp-interaction-analysis/
 ├── _quarto.yml                        # Config Quarto principal
 ├── ROADMAP.md                         # Roadmap e próximos passos
 │
-├── src/                               # Módulos Python
-│   ├── config.py                      # Configurações (lê do .env)
-│   ├── profiling.py                   # Funções de investigação
-│   ├── cleaning.py                    # Pipeline de limpeza (7 etapas)
-│   ├── wrangling.py                   # Pipeline de wrangling (6 etapas)
-│   └── utils/
-│       ├── audit.py                   # Sistema de auditoria
-│       ├── dataframe_helpers.py       # Helpers para DataFrames
-│       ├── file_helpers.py            # Helpers para arquivos
-│       └── text_helpers.py            # Helpers para texto
+├── whatsapp/                          # Pacote principal
+│   ├── __init__.py                    # Versão e metadata
+│   ├── __main__.py                    # python -m whatsapp
+│   ├── cli/                           # CLI (whatsapp-interaction)
+│   │   ├── __init__.py                # App Typer + comando run
+│   │   ├── helpers.py                 # Helpers compartilhados
+│   │   ├── prepare.py                 # Comandos: clean, wrangle, transcribe
+│   │   ├── process.py                 # Comandos: sentiment, embeddings
+│   │   └── _status.py                 # Comando: status
+│   └── pipeline/                      # Módulos do pipeline
+│       ├── config.py                  # Configurações (lê do .env)
+│       ├── profiling.py               # Funções de investigação
+│       ├── cleaning.py                # Pipeline de limpeza (7 etapas)
+│       ├── wrangling.py               # Pipeline de wrangling (6 etapas)
+│       └── utils/                     # Utilitários
+│           ├── audit.py               # Sistema de auditoria
+│           ├── dataframe_helpers.py   # Helpers para DataFrames
+│           ├── file_helpers.py        # Helpers para arquivos
+│           └── text_helpers.py        # Helpers para texto
 │
 ├── scripts/                           # Scripts standalone
 │   ├── transcribe_media.py            # Transcrição via Groq/Whisper
@@ -54,12 +63,6 @@ whatsapp-interaction-analysis/
 │   └── remove_alias_columns.py        # Limpeza de colunas alias
 │
 ├── notebooks/                         # Documentos Quarto (ver tabela abaixo)
-│
-├── cli/                               # CLI (whatsapp-interaction)
-│   ├── __init__.py                    # App Typer + comando run
-│   ├── prepare.py                     # Comandos: clean, wrangle, transcribe
-│   ├── process.py                     # Comandos: sentiment, embeddings
-│   └── _status.py                     # Comando: status
 │
 ├── tests/                             # Testes unitários (pytest)
 │   ├── test_cleaning.py               # Testes do pipeline de limpeza
