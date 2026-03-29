@@ -34,7 +34,6 @@ Output:
     data/processed/embeddings_comparison.json
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -45,11 +44,10 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_har
 from scipy.stats import spearmanr
 import time
 
+from whatsapp.pipeline.config import PATHS
+
 # ========== CONFIGURAÇÕES ==========
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
-
-from config import PATHS  # noqa: E402
 
 # Modelos a comparar
 MODELS = {

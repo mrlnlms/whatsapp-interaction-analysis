@@ -34,11 +34,10 @@ except ImportError:
     subprocess.run([sys.executable, '-m', 'pip', 'install', 'protobuf', '--break-system-packages'])
     print("✅ Protobuf instalado!")
 
+from whatsapp.pipeline.config import PATHS
+
 # ========== CONFIGURAÇÕES ==========
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
-
-from config import PATHS
 
 MODEL_NAME = "cardiffnlp/twitter-xlm-roberta-base-sentiment"
 BATCH_SIZE = 100

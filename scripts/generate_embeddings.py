@@ -27,7 +27,6 @@ Embeddings salvos separadamente:
     - message_embeddings.npy: array (n_mensagens, 384)
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -37,11 +36,10 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
+from whatsapp.pipeline.config import PATHS
+
 # ========== CONFIGURAÇÕES ==========
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
-
-from config import PATHS  # noqa: E402
 
 # Modelo de embeddings
 MODEL_NAME = 'paraphrase-multilingual-mpnet-base-v2'

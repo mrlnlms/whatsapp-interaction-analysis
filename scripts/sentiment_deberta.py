@@ -18,7 +18,6 @@ Colunas adicionadas:
     - sentimento_deberta_score (float): confiança do modelo (0-1)
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import torch
@@ -27,11 +26,10 @@ from tqdm import tqdm
 import time
 import json
 
+from whatsapp.pipeline.config import PATHS
+
 # ========== CONFIGURAÇÕES ==========
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
-
-from config import PATHS  # noqa: E402
 
 # Usando RoBERTa mais recente como "DeBERTa-like"
 # (DeBERTa puro multilingual de sentiment é difícil de achar)

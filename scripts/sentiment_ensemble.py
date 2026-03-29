@@ -25,7 +25,6 @@ Colunas adicionadas:
     - sentimento_ensemble_method (str): unanimous/majority/weighted_tiebreak
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -33,11 +32,10 @@ import time
 import json
 from collections import Counter
 
+from whatsapp.pipeline.config import PATHS
+
 # ========== CONFIGURAÇÕES ==========
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
-
-from config import PATHS  # noqa: E402
 
 # Modelos disponíveis
 MODELS = {

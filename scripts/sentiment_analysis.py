@@ -10,16 +10,13 @@ Input:  data/processed/messages_enriched.parquet
 Output: data/processed/messages_with_models.parquet
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
 
-# Adiciona raiz do projeto ao path
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+from whatsapp.pipeline.config import PATHS
 
-from config import PATHS
+PROJECT_ROOT = Path(__file__).parent.parent
 
 # TODO: Importar suas libs de sentimento aqui
 # from transformers import pipeline
