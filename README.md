@@ -59,8 +59,8 @@ whatsapp-interaction-analysis/
 │   ├── sentiment_*.py                 # Sentiment analysis (RoBERTa, DistilBERT, DeBERTa, ensemble)
 │   ├── generate_embeddings*.py        # Geração de embeddings (mpnet, minilm, distiluse)
 │   ├── compare_embeddings_models.py   # Comparação entre modelos de embeddings
-│   ├── migrate_sentiment_columns.py   # Migração de colunas de sentimento
-│   └── remove_alias_columns.py        # Limpeza de colunas alias
+│   ├── compare_embedding_dimensions.py # Comparação de dimensões de embeddings
+│   └── generate_sample_data.py        # Gerador de dataset sintético para demo
 │
 ├── notebooks/                         # Documentos Quarto (ver tabela abaixo)
 │
