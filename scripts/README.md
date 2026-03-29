@@ -23,7 +23,7 @@ pip install groq python-dotenv
 No arquivo `.env`:
 
 ```properties
-PROJECT_ROOT=/caminho/para/whatsapp-ds-analytics
+PROJECT_ROOT=/caminho/para/whatsapp-interaction-analysis
 DATA_FOLDER=export_2024-10_2025-10
 GROQ_API_KEY=sua_chave_aqui  # opcional, tem fallback no script
 ```

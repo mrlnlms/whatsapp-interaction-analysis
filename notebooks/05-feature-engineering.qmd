@@ -65,7 +65,7 @@ pd.set_option('display.width', None)
 from pathlib import Path
 
 # Estrutura de diretórios
-PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-interaction-analysis'
 DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
 
 # Arquivos
