@@ -6,16 +6,7 @@ import os
 import pandas as pd
 from pathlib import Path
 
-
-def format_bytes(size: int) -> str:
-    """Formata bytes para unidade legível."""
-    if size < 0:
-        return f"-{format_bytes(-size)}"
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size < 1024:
-            return f"{size:.2f} {unit}"
-        size /= 1024
-    return f"{size:.2f} TB"
+from whatsapp.pipeline.utils.file_helpers import format_bytes
 
 
 def get_file_stats(file_path: str) -> dict:

@@ -7,7 +7,7 @@ from .dataframe_helpers import (
     format_file_overview_table,
     format_density_stats_table
 )
-from .file_helpers import get_file_overview, get_file_density_stats
+from .file_helpers import get_file_overview, get_file_density_stats, format_bytes
 from .audit import (
     audit_transformation,
     audit_pipeline,
@@ -15,7 +15,6 @@ from .audit import (
     format_summary_table,
     generate_impact_analysis,
     get_file_stats,
-    format_bytes
 )
 from .text_helpers import format_markdown_lists
 
