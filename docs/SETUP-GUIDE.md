@@ -16,11 +16,11 @@ git clone https://github.com/mrlnlms/whatsapp-ds-analytics.git
 cd whatsapp-ds-analytics
 
 # 2. Crie o ambiente virtual
-python3 -m venv venv
+python3 -m venv .venv
 
 # 3. Ative o ambiente
-source venv/bin/activate  # Linux/Mac
-# ou: venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac
+# ou: .venv\Scripts\activate  # Windows
 
 # 4. Instale as dependências
 pip install -r requirements.txt
@@ -88,7 +88,7 @@ O script detecta automaticamente arquivos já transcritos e continua de onde par
 
 ## 🔧 Uso Diário
 
-Se usar Positron/VS Code com interpretador configurado pro venv:
+Se usar Positron/VS Code com interpretador configurado pro .venv:
 
 ```bash
 quarto preview
@@ -97,7 +97,7 @@ quarto preview
 Se usar terminal avulso:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 quarto preview
 ```
 
@@ -144,10 +144,10 @@ jupyter: whatsapp-ds
 
 ### Erro: `No module named 'nbformat'`
 
-O venv não está ativado:
+O .venv não está ativado:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 quarto preview
 ```
 
@@ -172,10 +172,10 @@ pip install pyarrow
 ## 🔄 Resetar Ambiente
 
 ```bash
-rm -rf venv _site _freeze .quarto *_files
+rm -rf .venv _site _freeze .quarto *_files
 jupyter kernelspec uninstall whatsapp-ds -y
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python -m ipykernel install --user --name=whatsapp-ds --display-name="WhatsApp DS"
 ```
@@ -186,7 +186,7 @@ python -m ipykernel install --user --name=whatsapp-ds --display-name="WhatsApp D
 
 | Pasta | Descrição |
 |-------|-----------|
-| `venv/` | Ambiente virtual |
+| `.venv/` | Ambiente virtual |
 | `.env` | Configurações locais |
 | `data/` | Dados pessoais |
 | `analysis/` | Outputs gerados |
