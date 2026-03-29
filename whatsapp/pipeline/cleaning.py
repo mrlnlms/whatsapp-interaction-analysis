@@ -21,7 +21,7 @@ from whatsapp.pipeline.utils import audit_transformation, audit_pipeline
 # Cada função recebe (input_file, output_file) e retorna dict com métricas
 # =============================================================================
 
-def remove_u200e(input_file, output_file):
+def remove_u200e(input_file: Path, output_file: Path) -> dict:
     """
     Remove todas as ocorrências do caractere invisível U+200E.
     
@@ -41,7 +41,7 @@ def remove_u200e(input_file, output_file):
     return {'caracteres_removidos': total}
 
 
-def remove_empty_timestamps(input_file, output_file):
+def remove_empty_timestamps(input_file: Path, output_file: Path) -> dict:
     """
     Remove timestamps vazios seguidos de múltiplas mídias consecutivas.
 
@@ -82,7 +82,7 @@ def remove_empty_timestamps(input_file, output_file):
     return {'linhas_removidas': len(skip)}
 
 
-def remove_empty_lines(input_file, output_file):
+def remove_empty_lines(input_file: Path, output_file: Path) -> dict:
     """
     Remove linhas completamente vazias.
     
@@ -96,7 +96,7 @@ def remove_empty_lines(input_file, output_file):
     return {'linhas_removidas': len(lines) - len(cleaned)}
 
 
-def normalize_whitespace(input_file, output_file):
+def normalize_whitespace(input_file: Path, output_file: Path) -> dict:
     """
     Normaliza espaços em branco internos, preservando indentação.
     
@@ -123,7 +123,7 @@ def normalize_whitespace(input_file, output_file):
     return {'bytes_economizados': orig_size - clean_size}
 
 
-def anonymize_participants(input_file, output_file):
+def anonymize_participants(input_file: Path, output_file: Path) -> dict:
     """
     Substitui nomes dos participantes por identificadores anônimos.
     
@@ -149,7 +149,7 @@ def anonymize_participants(input_file, output_file):
     return {'substituicoes': counts}
 
 
-def optimize_timestamps(input_file, output_file):
+def optimize_timestamps(input_file: Path, output_file: Path) -> dict:
     """
     Remove delimitadores redundantes do timestamp.
     
@@ -177,7 +177,7 @@ def optimize_timestamps(input_file, output_file):
     return {'timestamps_otimizados': count}
 
 
-def normalize_indentation(input_file, output_file):
+def normalize_indentation(input_file: Path, output_file: Path) -> dict:
     """
     Remove indentação de linhas de continuação.
     
