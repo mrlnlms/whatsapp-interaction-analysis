@@ -237,7 +237,7 @@ O pipeline gera os seguintes arquivos em `data/processed/{export}/`:
 - [Guia de Setup](docs/SETUP-GUIDE.md) — Instalação e configuração
 - [Guia Incremental](docs/INCREMENTAL-GUIDE.md) — Como rodar com novos exports
 - [Dicionário de Dados](docs/data-dictionary.md) — Descrição das variáveis
-- [Scripts](scripts/README.md) — Documentação dos scripts utilitários
+- [Pipeline](docs/pipeline.md) — Mapa de scripts, notebooks e artefatos
 - [Roadmap](ROADMAP.md) — Próximos passos e evolução planejada
 
 ## Privacy
