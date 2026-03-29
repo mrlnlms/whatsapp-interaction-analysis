@@ -143,6 +143,23 @@ cp .env.example .env
 quarto preview
 ```
 
+### Dados de exemplo (sample)
+
+O repo inclui um dataset sintético para testar o pipeline sem dados pessoais:
+
+```bash
+# Configure o .env para usar os dados sample
+echo "PROJECT_ROOT=$(pwd)" > .env
+echo "DATA_FOLDER=sample" >> .env
+
+# Rode o pipeline de preparação
+whatsapp-interaction prepare clean
+whatsapp-interaction prepare wrangle
+whatsapp-interaction status
+```
+
+O dataset sample (200 mensagens, 7 dias) é gerado deterministicamente por `scripts/generate_sample_data.py`.
+
 Ver [Guia de Setup](docs/SETUP-GUIDE.md) completo.
 
 ### CLI
