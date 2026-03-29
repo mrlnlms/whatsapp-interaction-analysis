@@ -34,7 +34,7 @@ website:
     
     tools:
       - icon: github
-        href: https://github.com/mrlnlms/whatsapp-ds-analytics
+        href: https://github.com/mrlnlms/whatsapp-interaction-analysis
 
   sidebar:
     style: "docked"

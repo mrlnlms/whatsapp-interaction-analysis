@@ -68,7 +68,7 @@ COLORS = {
 
 ```{python}
 # Estrutura de diretórios
-PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-ds-analytics'
+PROJECT_ROOT = Path.home() / 'Desktop' / 'whatsapp-interaction-analysis'
 DATA_DIR = PROJECT_ROOT / 'data' / 'processed' / 'export_2024-10_2025-10'
 
 # Arquivo de entrada - DATASET ENRIQUECIDO
@@ -3188,7 +3188,7 @@ dias_sem_msg = [dia.date() for dia in todos_dias if dia.date() not in dias_com_m
 print(f"📅 Dias SEM mensagem no relacionamento ({len(dias_sem_msg)}):\n")
 
 # Carrega encontros (CAMINHO DIRETO)
-encontros = pd.read_csv('/Users/mosx/Desktop/whatsapp-ds-analytics/data/external/encontros.csv')
+encontros = pd.read_csv('/Users/mosx/Desktop/whatsapp-interaction-analysis/data/external/encontros.csv')
 encontros['inicio'] = pd.to_datetime(encontros['inicio'])
 encontros['fim'] = pd.to_datetime(encontros['fim'])
 

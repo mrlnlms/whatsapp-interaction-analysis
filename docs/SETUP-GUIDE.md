@@ -12,8 +12,8 @@
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/mrlnlms/whatsapp-ds-analytics.git
-cd whatsapp-ds-analytics
+git clone https://github.com/mrlnlms/whatsapp-interaction-analysis.git
+cd whatsapp-interaction-analysis
 
 # 2. Crie o ambiente virtual
 python3 -m venv .venv
@@ -43,7 +43,7 @@ quarto check jupyter
 Copie `.env.example` para `.env` e ajuste:
 
 ```bash
-PROJECT_ROOT=/Users/SEU_USUARIO/caminho/para/whatsapp-ds-analytics
+PROJECT_ROOT=/Users/SEU_USUARIO/caminho/para/whatsapp-interaction-analysis
 DATA_FOLDER=export_2024-10_2025-10
 GROQ_API_KEY=sua_chave_aqui
 ```

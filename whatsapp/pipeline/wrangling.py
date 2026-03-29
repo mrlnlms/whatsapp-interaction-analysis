@@ -175,7 +175,13 @@ def extract_filename_from_content(content: str) -> str:
     """Extrai nome do arquivo de uma mensagem com mídia anexada."""
     pattern = r'<attached:\s*(.+?)>'
     match = re.search(pattern, content)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    filename = match.group(1)
+    # Security: prevent path traversal
+    if '..' in filename or filename.startswith('/'):
+        return None
+    return filename
 
 
 def extract_media_type_from_filename(filename: str) -> str:

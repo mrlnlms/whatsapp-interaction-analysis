@@ -42,8 +42,8 @@ OUTPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
 # Helper: converte path absoluto em relativo ao projeto
 def format_relative_path(full_path):
     full_str = str(full_path)
-    if 'whatsapp-ds-analytics' in full_str:
-        idx = full_str.find('whatsapp-ds-analytics')
+    if 'whatsapp-interaction-analysis' in full_str:
+        idx = full_str.find('whatsapp-interaction-analysis')
         return '~/' + full_str[idx:]
     return full_str
 ```

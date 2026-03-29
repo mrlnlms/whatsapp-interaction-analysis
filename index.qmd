@@ -90,7 +90,7 @@ scripts/                      # Executáveis standalone
 # Estrutura do Projeto
 
 ```         
-whatsapp-ds-analytics/
+whatsapp-interaction-analysis/
 ├── index.qmd                 # Este documento
 ├── .env                      # Configuração local (não versionado)
 │
