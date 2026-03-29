@@ -9,7 +9,7 @@ console = Console()
 
 def run_status():
     """Mostra o estado atual dos dados processados."""
-    from cli.helpers import load_config
+    from whatsapp.cli.helpers import load_config
 
     result = load_config()
     if result is None:

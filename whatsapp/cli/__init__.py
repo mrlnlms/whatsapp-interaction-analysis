@@ -14,9 +14,9 @@ app = typer.Typer(
 )
 
 # Registra grupos
-from cli.prepare import prepare_app
-from cli.process import process_app
-from cli._status import run_status
+from whatsapp.cli.prepare import prepare_app
+from whatsapp.cli.process import process_app
+from whatsapp.cli._status import run_status
 
 app.add_typer(prepare_app)
 app.add_typer(process_app)
@@ -34,9 +34,9 @@ def run(
     skip_process: bool = typer.Option(False, "--skip-process", help="Pular sentiment/embeddings."),
 ):
     """Pipeline completo: prepare + process."""
-    from cli.helpers import require_config
-    from cli.prepare import _run_clean, _run_wrangle, _run_transcribe
-    from cli.process import _load_and_run_script, SENTIMENT_SCRIPTS, EMBEDDINGS_SCRIPTS
+    from whatsapp.cli.helpers import require_config
+    from whatsapp.cli.prepare import _run_clean, _run_wrangle, _run_transcribe
+    from whatsapp.cli.process import _load_and_run_script, SENTIMENT_SCRIPTS, EMBEDDINGS_SCRIPTS
 
     PATHS, _ = require_config()
     start = time.time()

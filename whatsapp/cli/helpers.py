@@ -1,17 +1,10 @@
 """Helpers compartilhados do CLI."""
 
-import os
-import sys
 import typer
 from rich.console import Console
 from pathlib import Path
 
 console = Console()
-
-# Garante que src/ está no path
-_src_dir = str(Path(__file__).parent.parent / "src")
-if _src_dir not in sys.path:
-    sys.path.insert(0, _src_dir)
 
 
 def load_config():
@@ -20,7 +13,7 @@ def load_config():
     Retorna (PATHS, PROJECT_ROOT) ou None se falhar.
     """
     try:
-        from config import PATHS, PROJECT_ROOT
+        from whatsapp.pipeline.config import PATHS, PROJECT_ROOT
         return PATHS, PROJECT_ROOT
     except EnvironmentError as e:
         console.print(f"[red]Erro de configuração:[/red] {e}")
