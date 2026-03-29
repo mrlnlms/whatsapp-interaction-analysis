@@ -24,6 +24,3 @@
 
 3. **Testes de integração E2E**
    Testar pipeline completo de ponta a ponta (clean → wrangle → export). Requer dataset sample como fixture. Não testar scripts de ML (dependem de torch/transformers).
-
-4. **CI: instalar dependências via requirements.txt**
-   Atualmente o workflow instala deps hardcoded. Quando os testes começarem a precisar de mais dependências, trocar pra `pip install -r requirements.txt`.
