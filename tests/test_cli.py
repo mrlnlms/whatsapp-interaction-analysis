@@ -1,9 +1,13 @@
 """Testes para o CLI whatsapp-interaction."""
 
+import os
 import pytest
 import sys
 from pathlib import Path
 from typer.testing import CliRunner
+
+# Desabilita cores Rich pra testes
+os.environ["NO_COLOR"] = "1"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -32,11 +36,13 @@ class TestValidateSteps:
         assert validate_steps("a, b, c", valid) == ["a", "b", "c"]
 
 
+runner = CliRunner()
+
+
 class TestCLIHelp:
     """Testa que todos os comandos respondem --help sem crash."""
 
     def test_main_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         assert "prepare" in result.output
@@ -45,7 +51,6 @@ class TestCLIHelp:
         assert "run" in result.output
 
     def test_prepare_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["prepare", "--help"])
         assert result.exit_code == 0
         assert "clean" in result.output
@@ -53,39 +58,33 @@ class TestCLIHelp:
         assert "transcribe" in result.output
 
     def test_process_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["process", "--help"])
         assert result.exit_code == 0
         assert "sentiment" in result.output
         assert "embeddings" in result.output
 
     def test_clean_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["prepare", "clean", "--help"])
         assert result.exit_code == 0
         assert "--steps" in result.output
 
     def test_sentiment_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["process", "sentiment", "--help"])
         assert result.exit_code == 0
         assert "--model" in result.output
 
     def test_embeddings_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["process", "embeddings", "--help"])
         assert result.exit_code == 0
         assert "--model" in result.output
 
     def test_run_help(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "--skip-transcribe" in result.output
         assert "--skip-process" in result.output
 
     def test_status_without_env(self):
-        runner = CliRunner()
         result = runner.invoke(app, ["status"])
         assert result.exit_code == 0
         assert "Status do Pipeline" in result.output
