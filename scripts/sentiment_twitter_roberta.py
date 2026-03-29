@@ -97,7 +97,8 @@ def processar_batch(textos, analyzer):
                 try:
                     result = analyzer(texto)[0]
                     resultados.append(result)
-                except:
+                except (ValueError, RuntimeError, IndexError) as e:
+                    print(f"  ⚠ Erro no texto: {e}")
                     resultados.append({'label': None, 'score': None})
     
     if erros > 0:
