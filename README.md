@@ -1,188 +1,186 @@
-# WhatsApp DS Analytics
+# WhatsApp Interaction Analysis
 
-> Pipeline completo de Data Science para análise de conversas do WhatsApp.
+> End-to-end data science pipeline for WhatsApp conversation analysis — profiling, cleaning, sentiment analysis, embeddings, clustering.
 
-## 📋 Sobre
+## About
 
-Este projeto demonstra um pipeline completo de **Data Science**, desde a investigação inicial de dados brutos até análises avançadas com clustering e visualizações. O caso de estudo é um export do WhatsApp com \~92.000 mensagens ao longo de 1 ano.
+Pipeline completo de Data Science para analise de conversas do WhatsApp. O caso de estudo e um export com ~92.000 mensagens ao longo de 1 ano.
 
-O projeto foi desenvolvido para ser **reprodutível** — permite rodar o pipeline com novos exports e integrar os resultados à base existente.
+O projeto foi desenvolvido para ser **reprodutivel** — permite rodar o pipeline com novos exports e integrar os resultados a base existente.
 
-## 🔄 Pipeline
+## Pipeline
 
 ![](./assets/images/ds-pipeline-to-insight.png)
 
-### Etapas detalhadas
+| Fase | Etapa | Descricao |
+|------|-------|-----------|
+| **Preparation** | Data Discovery | Exploracao inicial do arquivo bruto |
+| | Data Profiling | Investigacao sistematica de padroes |
+| | Data Cleaning | Remocao de caracteres invisiveis, normalizacao |
+| | Data Wrangling | Parsing, vinculacao de midia, transcricao |
+| | Feature Engineering | Criacao de 35+ variaveis derivadas |
+| | Model Features | Sentiment analysis multi-modelo, embeddings |
+| **Analysis** | EDA | Analise exploratoria por dimensao (temporal, interacao, conteudo) |
+| | Advanced Analysis | Clustering semantico, PCA, MCA, N-Grams, TF-IDF |
 
-| Fase | Etapa | Descrição |
-|------------------|---------------------|---------------------------------|
-| **Preparation** | Data Discovery | Exploração inicial do arquivo bruto |
-|  | Data Profiling | Investigação sistemática de padrões |
-|  | Data Cleaning | Remoção de caracteres invisíveis, normalização |
-|  | Data Wrangling | Parsing, vinculação de mídia, transcrição |
-|  | Feature Engineering | Criação de 35+ variáveis derivadas |
-|  | Model Features | Features de ML: sentimento, embeddings (opcional) |
-| **Analysis** | EDA | Análise exploratória e distribuições |
-|  | Advanced Analysis | Clustering, PCA, MCA, radar charts |
+## Structure
 
-## 📁 Estrutura
-
-```         
-whatsapp-ds-analytics/
+```
+whatsapp-interaction-analysis/
 │
-├── .env.example                 # Template de configuração
-├── index.qmd                    # Documento principal (overview)
+├── index.qmd                         # Documento principal (overview)
+├── .env.example                       # Template de configuracao
+├── requirements.txt                   # Dependencias Python
+├── _quarto.yml                        # Config Quarto principal
 │
-├── assets/                      # Recursos estáticos
-│   └── images/                  # Diagramas, screenshots
-│
-├── src/                         # Módulos Python
-│   ├── config.py                # Configurações (lê do .env)
-│   ├── profiling.py             # Funções de investigação
-│   ├── cleaning.py              # Pipeline de limpeza (7 etapas)
-│   ├── wrangling.py             # Pipeline de wrangling (6 etapas)
-│   ├── features.py              # Feature engineering
+├── src/                               # Modulos Python
+│   ├── config.py                      # Configuracoes (le do .env)
+│   ├── profiling.py                   # Funcoes de investigacao
+│   ├── cleaning.py                    # Pipeline de limpeza (7 etapas)
+│   ├── wrangling.py                   # Pipeline de wrangling (6 etapas)
+│   ├── features.py                    # Feature engineering
 │   └── utils/
-│       ├── __init__.py
-│       └── audit.py             # Sistema de auditoria
+│       ├── audit.py                   # Sistema de auditoria
+│       ├── dataframe_helpers.py       # Helpers para DataFrames
+│       ├── file_helpers.py            # Helpers para arquivos
+│       └── text_helpers.py            # Helpers para texto
 │
-├── scripts/                     # Scripts standalone
-│   ├── README.md                # Documentação dos scripts
-│   └── transcribe_media.py      # Transcrição via Groq/Whisper
+├── scripts/                           # Scripts standalone
+│   ├── transcribe_media.py            # Transcricao via Groq/Whisper
+│   ├── sentiment_*.py                 # Sentiment analysis (RoBERTa, DistilBERT, DeBERTa, ensemble)
+│   ├── generate_embeddings*.py        # Geracao de embeddings (mpnet, minilm, distiluse)
+│   ├── compare_embeddings_models.py   # Comparacao entre modelos de embeddings
+│   ├── migrate_sentiment_columns.py   # Migracao de colunas de sentimento
+│   └── remove_alias_columns.py        # Limpeza de colunas alias
 │
-├── notebooks/                   # Documentos Quarto
-│   ├── 00-data-discovery.qmd
-│   ├── 00-data-profiling.qmd
-│   ├── 01-data-cleaning.qmd
-│   ├── 02-data-wrangling.qmd
-│   ├── 03-feature-engineering.qmd
-│   ├── 04-model-features.qmd
-│   ├── 05-eda.qmd
-│   └── 06-advanced-analysis.qmd
+├── notebooks/                         # Documentos Quarto (ver tabela abaixo)
 │
-├── data/                        # 🚫 Não versionado
-│   ├── raw/                     # Exports brutos por período
-│   ├── interim/                 # Arquivos intermediários
-│   ├── processed/               # DataFrames por execução
-│   └── integrated/              # Base consolidada
+├── data/                              # Nao versionado (dados pessoais)
+│   ├── raw/                           # Exports brutos por periodo
+│   ├── interim/                       # Arquivos intermediarios
+│   ├── processed/                     # DataFrames por execucao
+│   ├── external/                      # Dados de contexto externo
+│   └── integrated/                    # Base consolidada
 │
-├── analysis/                    # 🚫 Não versionado
+├── docs/
+│   ├── SETUP-GUIDE.md                 # Guia de instalacao
+│   ├── INCREMENTAL-GUIDE.md           # Guia para novos exports
+│   └── data-dictionary.md             # Dicionario de dados
 │
-└── docs/
-    ├── SETUP-GUIDE.md           # Guia de instalação
-    └── data-dictionary.md       # Dicionário de dados
+└── analysis/                          # Nao versionado (outputs)
 ```
 
-## 🚀 Quick Start
+## Notebooks
 
-``` bash
-# Clone e configure
-git clone https://github.com/mrlnlms/whatsapp-ds-analytics.git
-cd whatsapp-ds-analytics
+### Preparation
 
-# Setup do ambiente
+| # | Notebook | Descricao |
+|---|---------|-----------|
+| 00 | [Data Discovery](notebooks/00-data-discovery.qmd) | Exploracao inicial do arquivo |
+| 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigacao sistematica |
+| 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalizacao |
+| 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, midia, transcricao |
+| 03 | [Feature Engineering](notebooks/03-feature-engineering.qmd) | Criacao de 35+ variaveis |
+
+### Model Features (opcional)
+
+| # | Notebook | Descricao |
+|---|---------|-----------|
+| 04 | [Model Features](notebooks/04-model-features.qmd) | Overview das features de ML |
+| 04a | [Sentiment — RoBERTa](notebooks/04a-sentiment-roberta.qmd) | Twitter-RoBERTa sentiment |
+| 04b | [Sentiment — DistilBERT](notebooks/04b-sentiment-distilbert.qmd) | DistilBERT sentiment |
+| 04c | [Sentiment — DeBERTa](notebooks/04c-sentiment-deberta.qmd) | DeBERTa sentiment |
+| 04d | [Sentiment — Comparison](notebooks/04d-sentiment-comparison.qmd) | Comparacao entre modelos |
+| 04e | [Sentiment — Ensemble](notebooks/04e-sentiment-ensemble.qmd) | Ensemble dos 3 modelos |
+| 04f | [Embeddings — mpnet](notebooks/04f-embeddings-mpnet.qmd) | all-mpnet-base-v2 |
+| 04g | [Embeddings — MiniLM](notebooks/04g-embeddings-minilm.qmd) | all-MiniLM-L6-v2 |
+| 04h | [Embeddings — DistilUSE](notebooks/04h-embeddings-distiluse.qmd) | distiluse-base-multilingual |
+| 04i | [Embeddings — Comparison](notebooks/04i-embeddings-comparison.qmd) | Comparacao entre modelos |
+
+### Analysis
+
+| # | Notebook | Descricao |
+|---|---------|-----------|
+| 02.1 | [EDA — Data Wrangling](notebooks/02.1-EDA-data-wrangling.qmd) | EDA pos-wrangling |
+| 02.2 | [Contexto Externo](notebooks/02.2-adicionar-contexto-externo.qmd) | Integracao de dados externos |
+| 02.3 | [EDA — Conteudo e Interacao](notebooks/02.3-EDA-conteudo-interacao.qmd) | Analise de conteudo |
+| 03 | [Contexto Externo](notebooks/03-contexto-externo.qmd) | Pipeline de contexto |
+| 04 | [EDA — Overview](notebooks/04-eda-overview.qmd) | Visao geral da EDA |
+| 04.1 | [EDA — Temporal](notebooks/04.1-eda-temporal.qmd) | Padroes temporais |
+| 04.2 | [EDA — Interacao](notebooks/04.2-eda-interacao.qmd) | Dinamicas de interacao |
+| 04.3 | [EDA — Conteudo](notebooks/04.3-eda-conteudo.qmd) | Analise de conteudo |
+| 05 | [EDA](notebooks/05-eda.qmd) | Analise exploratoria geral |
+| 05 | [Feature Engineering](notebooks/05-feature-engineering.qmd) | Feature engineering final |
+| 06 | [Advanced Analysis](notebooks/06-advanced-analysis.qmd) | Clustering semantico, N-Grams, TF-IDF |
+
+## Quick Start
+
+```bash
+git clone https://github.com/mrlnlms/whatsapp-interaction-analysis.git
+cd whatsapp-interaction-analysis
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python -m ipykernel install --user --name=whatsapp-ds --display-name="WhatsApp DS"
 
-# Configure seus paths
 cp .env.example .env
 # Edite o .env com seus paths
 
-# Rode o projeto
 quarto preview
 ```
 
-Veja o [Guia de Setup](docs/SETUP-GUIDE.md) completo para mais detalhes.
+Ver [Guia de Setup](docs/SETUP-GUIDE.md) completo.
 
-### 🎙️ Transcrição de Áudios (Opcional)
+### Transcricao de audios (opcional)
 
-Para transcrever áudios e vídeos do WhatsApp:
-
-``` bash
+```bash
 # Adicione sua API key no .env
 echo "GROQ_API_KEY=sua_chave_aqui" >> .env
 
-# Execute o script de transcrição (~40 min para ~700 arquivos)
+# Execute o script de transcricao (~40 min para ~700 arquivos)
 python scripts/transcribe_media.py
 
-# Rode o notebook de wrangling novamente
+# Re-rode o wrangling
 quarto render notebooks/02-data-wrangling.qmd
 ```
 
-O script detecta automaticamente arquivos já transcritos e continua de onde parou.
+O script detecta automaticamente arquivos ja transcritos e continua de onde parou.
 
-## 🛠️ Tecnologias
+## Tech Stack
 
--   **Python 3.11+**
--   **Quarto** — Documentação reprodutível
+**Core**: Python 3.11+, Quarto
 
-### Data Manipulation
+**Data**: Pandas, NumPy, PyArrow
 
--   **Pandas / NumPy** — Manipulação e análise de dados
--   **PyArrow** — Export otimizado em Parquet
+**Visualization**: Matplotlib, Seaborn, Plotly, WordCloud
 
-### Visualization
+**ML/Statistics**: Scikit-learn, Prince (MCA), SciPy
 
--   **Matplotlib / Seaborn / Plotly** — Gráficos e visualizações
--   **WordCloud** — Nuvens de palavras
+**NLP**: Transformers/PyTorch (sentiment — RoBERTa, DistilBERT, DeBERTa), Sentence-Transformers (embeddings — mpnet, MiniLM, DistilUSE), Groq API/Whisper (transcricao)
 
-### Machine Learning & Statistics
+## Outputs
 
--   **Scikit-learn** — Clustering, PCA, métricas
--   **Prince** — Análise de Correspondência Múltipla (MCA)
--   **SciPy** — Estatística
+O pipeline gera os seguintes arquivos em `data/processed/{export}/`:
 
-### NLP & Sentiment Analysis
+| Arquivo | Colunas | Descricao |
+|---------|---------|-----------|
+| `messages.csv` | 8 | Dataset principal para analise |
+| `messages.parquet` | 8 | Mesmo conteudo, ~3x menor |
+| `messages_full.csv` | 17 | Versao completa para debug |
+| `chat_complete.txt` | — | Chat com transcricoes |
+| `corpus_*.txt` | — | Textos para NLP |
 
--   **Transformers / PyTorch** — Análise de sentimento (BERT)
--   **Groq API (Whisper)** — Transcrição de áudios/vídeos
+## Documentation
 
-## 📦 Outputs do Pipeline
+- [Guia de Setup](docs/SETUP-GUIDE.md) — Instalacao e configuracao
+- [Guia Incremental](docs/INCREMENTAL-GUIDE.md) — Como rodar com novos exports
+- [Dicionario de Dados](docs/data-dictionary.md) — Descricao das variaveis
+- [Scripts](scripts/README.md) — Documentacao dos scripts utilitarios
 
-O pipeline gera os seguintes arquivos em `data/processed/{DATA_FOLDER}/`:
+## Privacy
 
-| Arquivo             | Colunas | Descrição                          |
-|---------------------|---------|------------------------------------|
-| `messages.csv`      | 8       | **Dataset principal para análise** |
-| `messages.parquet`  | 8       | Mesmo conteúdo, \~3x menor         |
-| `messages_full.csv` | 17      | Versão completa para debug         |
-| `chat_complete.txt` | —       | Chat com transcrições              |
-| `corpus_*.txt`      | —       | Textos para NLP                    |
+Os dados (`data/` e `analysis/`) nao sao versionados por conterem informacoes pessoais.
 
-## 📝 Documentação
+---
 
--   [Guia de Setup](docs/SETUP-GUIDE.md) — Instalação e configuração
--   [Dicionário de Dados](docs/data-dictionary.md) — Descrição das variáveis
--   [Scripts](scripts/README.md) — Documentação dos scripts utilitários
-
-### Notebooks
-
-| \# | Notebook | Descrição |
-|-----|--------------------------|------------------------------|
-| 00 | [Data Discovery](notebooks/00-data-discovery.qmd) | Exploração inicial do arquivo |
-| 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação sistemática |
-| 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
-| 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, mídia, transcrição |
-| 03 | [Feature Engineering](notebooks/03-feature-engineering.qmd) | Criação de 35+ variáveis |
-| 04 | [Model Features](notebooks/04-model-features.qmd) | Features de ML (opcional) |
-| 05 | [EDA](notebooks/05-eda.qmd) | Análise exploratória |
-| 06 | [Advanced Analysis](notebooks/06-advanced-analysis.qmd) | Clustering, MCA, PCA |
-
-## 📌 Highlights
-
--   **Pipeline reprodutível** — rode com novos exports e integre à base
--   **Arquitetura modular** — lógica em `src/`, apresentação em `notebooks/`
--   **Configuração via `.env`** — um só lugar pra ajustar paths
--   **Transcrição automática** de áudios/vídeos via Groq API
--   **Export otimizado** — CSV para compatibilidade, Parquet para performance
--   **Sistema de auditoria** — métricas de cada transformação
-
-## 🔒 Privacidade
-
-Os dados (`data/` e `analysis/`) **não são versionados** por conterem informações pessoais.
-
-------------------------------------------------------------------------
-
-*Desenvolvido por [\@mrlnlms](https://github.com/mrlnlms)*
+*Desenvolvido por [@mrlnlms](https://github.com/mrlnlms)*
