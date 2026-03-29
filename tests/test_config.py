@@ -48,15 +48,14 @@ class TestProjectRoot:
         """Recarrega config sem PROJECT_ROOT e espera EnvironmentError."""
         env = os.environ.copy()
         env.pop("PROJECT_ROOT", None)
-        with patch.dict(os.environ, env, clear=True):
-            # Remove modulo do cache para forcar re-execucao
+        with patch.dict(os.environ, env, clear=True), \
+             patch("dotenv.load_dotenv"):
             mod_name = "whatsapp.pipeline.config"
             saved = sys.modules.pop(mod_name, None)
             try:
                 with pytest.raises(EnvironmentError, match="PROJECT_ROOT nao definido"):
                     importlib.import_module(mod_name)
             finally:
-                # Restaura modulo original
                 sys.modules.pop(mod_name, None)
                 if saved is not None:
                     sys.modules[mod_name] = saved
@@ -90,9 +89,9 @@ class TestDataFolder:
         """Recarrega config sem DATA_FOLDER e espera EnvironmentError."""
         env = os.environ.copy()
         env.pop("DATA_FOLDER", None)
-        # PROJECT_ROOT precisa existir para passar a primeira validacao
         env["PROJECT_ROOT"] = str(tmp_path)
-        with patch.dict(os.environ, env, clear=True):
+        with patch.dict(os.environ, env, clear=True), \
+             patch("dotenv.load_dotenv"):
             mod_name = "whatsapp.pipeline.config"
             saved = sys.modules.pop(mod_name, None)
             try:
