@@ -21,6 +21,32 @@ from datetime import datetime
 
 
 # =============================================================================
+# SCHEMA: colunas requeridas por cada stage do pipeline
+# =============================================================================
+
+REQUIRED_COLUMNS = {
+    'classify': {'data', 'hora', 'remetente', 'conteudo'},
+    'media': {'conteudo', 'tipo_mensagem'},
+    'transcriptions': {'tipo_mensagem'},
+    'enrich': {'conteudo', 'tipo_mensagem'},
+    'export': {'timestamp', 'remetente', 'conteudo'},
+}
+
+
+def _validate_schema(df: pd.DataFrame, step_id: str) -> None:
+    """Valida que o DataFrame tem as colunas requeridas para o stage."""
+    required = REQUIRED_COLUMNS.get(step_id)
+    if required is None:
+        return
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Stage '{step_id}' requer colunas {missing} que não existem no DataFrame. "
+            f"Colunas disponíveis: {list(df.columns)}"
+        )
+
+
+# =============================================================================
 # FASE 1: PARSING - TXT → DataFrame
 # =============================================================================
 
@@ -856,6 +882,10 @@ def run_wrangling_pipeline(
         if show_progress:
             print(f"   {step_num}. {step['name']}...", end=' ')
         
+        # Valida schema antes de executar (exceto parse que cria o df)
+        if step_id != 'parse' and df is not None:
+            _validate_schema(df, step_id)
+
         # Executa etapa
         if step_id == 'parse':
             df = parse_to_dataframe(input_file)

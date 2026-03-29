@@ -10,7 +10,9 @@ from whatsapp.pipeline.wrangling import (
     extract_filename_from_content,
     extract_media_type_from_filename,
     enrich_content,
+    _validate_schema,
     COLUMNS_CORE,
+    REQUIRED_COLUMNS,
 )
 
 
@@ -232,3 +234,27 @@ class TestEnrichContent:
         original_cols = list(df.columns)
         enrich_content(df)
         assert list(df.columns) == original_cols
+
+
+class TestValidateSchema:
+    """Testa validação de schema entre stages do pipeline."""
+
+    def test_passes_with_required_columns(self):
+        df = pd.DataFrame({'data': [], 'hora': [], 'remetente': [], 'conteudo': []})
+        _validate_schema(df, 'classify')  # não deve levantar
+
+    def test_fails_missing_columns(self):
+        df = pd.DataFrame({'data': [], 'hora': []})
+        with pytest.raises(ValueError, match="requer colunas"):
+            _validate_schema(df, 'classify')
+
+    def test_skips_unknown_step(self):
+        df = pd.DataFrame({'x': []})
+        _validate_schema(df, 'parse')  # parse não tem schema, não deve levantar
+
+    def test_all_stages_have_valid_columns(self):
+        """Verifica que as colunas requeridas são strings não vazias."""
+        for step_id, cols in REQUIRED_COLUMNS.items():
+            assert isinstance(cols, set)
+            for col in cols:
+                assert isinstance(col, str) and len(col) > 0
