@@ -44,3 +44,6 @@ python-dotenv
 
 # Utilitários
 python-dateutil
+
+# CLI
+typer[all]>=0.9.0

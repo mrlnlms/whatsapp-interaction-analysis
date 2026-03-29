@@ -55,9 +55,16 @@ whatsapp-interaction-analysis/
 │
 ├── notebooks/                         # Documentos Quarto (ver tabela abaixo)
 │
+├── cli/                               # CLI (whatsapp-interaction)
+│   ├── __init__.py                    # App Typer + comando run
+│   ├── prepare.py                     # Comandos: clean, wrangle, transcribe
+│   ├── process.py                     # Comandos: sentiment, embeddings
+│   └── _status.py                     # Comando: status
+│
 ├── tests/                             # Testes unitários (pytest)
 │   ├── test_cleaning.py               # Testes do pipeline de limpeza
-│   └── test_wrangling.py              # Testes de parsing e classificação
+│   ├── test_wrangling.py              # Testes de parsing e classificação
+│   └── test_cli.py                    # Testes do CLI
 │
 ├── data/                              # Não versionado (dados pessoais)
 │   ├── raw/                           # Exports brutos por período
@@ -138,6 +145,25 @@ quarto preview
 
 Ver [Guia de Setup](docs/SETUP-GUIDE.md) completo.
 
+### CLI
+
+```bash
+pip install -e .
+
+# Pipeline completo
+whatsapp-interaction run
+
+# Só preparação (clean → wrangle → transcribe)
+whatsapp-interaction prepare
+
+# Etapas individuais
+whatsapp-interaction prepare clean --steps u200e,anonymize
+whatsapp-interaction process sentiment --model deberta
+
+# Ver estado atual
+whatsapp-interaction status
+```
+
 ### Transcrição de áudios (opcional)
 
 ```bash
@@ -160,7 +186,7 @@ pip install pytest
 pytest tests/ -v
 ```
 
-63 testes cobrindo o pipeline de limpeza (cleaning.py) e parsing/classificação (wrangling.py). CI roda automaticamente via GitHub Actions em Python 3.11 e 3.12.
+75 testes cobrindo o pipeline de limpeza (cleaning.py), parsing/classificação (wrangling.py) e CLI. CI roda automaticamente via GitHub Actions em Python 3.11 e 3.12.
 
 ## Tech Stack
 
