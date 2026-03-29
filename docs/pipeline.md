@@ -1,6 +1,6 @@
-# Scripts
+# Pipeline — Scripts e Notebooks
 
-Scripts standalone para processamento de dados. Todos requerem o pacote instalado (`pip install -e .`).
+Mapa completo dos scripts standalone, seus artefatos, e a relação com os notebooks Quarto. Todos os scripts requerem o pacote instalado (`pip install -e .`).
 
 ## Visão geral
 
