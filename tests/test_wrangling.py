@@ -58,11 +58,9 @@ class TestParseToDataframe:
 
     def test_empty_file(self, tmp_file):
         inp, _ = tmp_file("")
-        # Arquivo vazio gera DataFrame vazio, mas parse_to_dataframe
-        # faz crash no pd.to_datetime com DF sem colunas — bug conhecido (edge case)
-        # O teste documenta o comportamento atual
-        with pytest.raises(KeyError):
-            parse_to_dataframe(inp)
+        df = parse_to_dataframe(inp)
+        assert len(df) == 0
+        assert "timestamp" in df.columns
 
     def test_single_message(self, tmp_file):
         inp, _ = tmp_file("24/11/24 15:30:05 P1: Oi\n")

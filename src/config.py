@@ -14,11 +14,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =============================================================================
-# 🔧 PATHS (lidos do .env)
+# PATHS (lidos do .env)
 # =============================================================================
 
-PROJECT_ROOT = Path(os.getenv('PROJECT_ROOT'))
+_project_root = os.getenv('PROJECT_ROOT')
+if not _project_root:
+    raise EnvironmentError(
+        "PROJECT_ROOT nao definido. Crie um arquivo .env na raiz do projeto "
+        "com: PROJECT_ROOT=/caminho/para/seu/projeto\n"
+        "Veja .env.example para referencia."
+    )
+
+PROJECT_ROOT = Path(_project_root)
+if not PROJECT_ROOT.exists():
+    raise EnvironmentError(
+        f"PROJECT_ROOT nao encontrado: {PROJECT_ROOT}\n"
+        "Verifique o caminho no arquivo .env"
+    )
+
 DATA_FOLDER = os.getenv('DATA_FOLDER')
+if not DATA_FOLDER:
+    raise EnvironmentError(
+        "DATA_FOLDER nao definido. Adicione ao .env: DATA_FOLDER=nome_da_pasta\n"
+        "Veja .env.example para referencia."
+    )
 
 # =============================================================================
 # PATHS DERIVADOS (não precisa mexer)
