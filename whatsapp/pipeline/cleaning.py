@@ -13,7 +13,7 @@ Uso:
 
 import re
 from pathlib import Path
-from utils import audit_transformation, audit_pipeline
+from whatsapp.pipeline.utils import audit_transformation, audit_pipeline
 
 
 # =============================================================================

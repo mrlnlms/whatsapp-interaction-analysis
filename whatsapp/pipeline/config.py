@@ -44,7 +44,6 @@ if not DATA_FOLDER:
 # =============================================================================
 
 PATHS = {
-    'src': PROJECT_ROOT / 'src',
     'raw': PROJECT_ROOT / 'data' / 'raw' / DATA_FOLDER / 'raw-data.txt',
     'media': PROJECT_ROOT / 'data' / 'raw' / DATA_FOLDER / 'media',
     'interim': PROJECT_ROOT / 'data' / 'interim' / DATA_FOLDER,
