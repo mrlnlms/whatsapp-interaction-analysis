@@ -26,8 +26,11 @@ tqdm
 groq
 
 # Análise de sentimento
-transformers
-torch
+transformers>=4.30.0
+torch>=2.0.0
+
+# Embeddings semânticos
+sentence-transformers>=2.2.0
 
 # Estatística e Machine Learning
 scipy>=1.10.0
