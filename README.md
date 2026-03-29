@@ -32,7 +32,7 @@ whatsapp-interaction-analysis/
 ├── .env.example                       # Template de configuração
 ├── requirements.txt                   # Dependências Python
 ├── _quarto.yml                        # Config Quarto principal
-├── ROADMAP.md                         # Roadmap e próximos passos
+├── docs/ROADMAP.md                    # Roadmap e próximos passos
 │
 ├── whatsapp/                          # Pacote principal
 │   ├── __init__.py                    # Versão e metadata
@@ -238,7 +238,7 @@ O pipeline gera os seguintes arquivos em `data/processed/{export}/`:
 - [Guia Incremental](docs/INCREMENTAL-GUIDE.md) — Como rodar com novos exports
 - [Dicionário de Dados](docs/data-dictionary.md) — Descrição das variáveis
 - [Pipeline](docs/pipeline.md) — Mapa de scripts, notebooks e artefatos
-- [Roadmap](ROADMAP.md) — Próximos passos e evolução planejada
+- [Roadmap](docs/ROADMAP.md) — Próximos passos e evolução planejada
 
 ## Privacy
 
