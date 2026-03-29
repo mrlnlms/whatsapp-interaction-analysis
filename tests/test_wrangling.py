@@ -2,12 +2,8 @@
 
 import pytest
 import pandas as pd
-from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from wrangling import (
+from whatsapp.pipeline.wrangling import (
     parse_to_dataframe,
     classify_message_type,
     add_message_classification,
