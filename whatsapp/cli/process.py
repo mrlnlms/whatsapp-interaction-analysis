@@ -5,7 +5,6 @@ import typer
 from enum import Enum
 from rich.console import Console
 import importlib.util
-from pathlib import Path
 
 console = Console()
 
@@ -46,7 +45,7 @@ process_app = typer.Typer(
 
 def _load_and_run_script(script_name: str):
     """Importa um script de scripts/ e chama main()."""
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     _, PROJECT_ROOT = require_config()
 
     script_path = PROJECT_ROOT / "scripts" / script_name
@@ -62,7 +61,7 @@ def _load_and_run_script(script_name: str):
 
 def _require_processed_data():
     """Valida que messages.parquet existe."""
-    from cli.helpers import require_config, require_file
+    from whatsapp.cli.helpers import require_config, require_file
     PATHS, _ = require_config()
     parquet = PATHS["processed"] / "messages.parquet"
     require_file(parquet, "Dados processados (messages.parquet)", "Rode primeiro: whatsapp-interaction prepare")

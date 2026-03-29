@@ -20,7 +20,7 @@ def prepare_all(ctx: typer.Context):
     if ctx.invoked_subcommand is not None:
         return
 
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     PATHS, _ = require_config()
 
     start = time.time()
@@ -50,7 +50,7 @@ def clean(
     ),
 ):
     """Pipeline de limpeza (7 etapas)."""
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     PATHS, _ = require_config()
     _run_clean(PATHS, steps)
 
@@ -63,7 +63,7 @@ def wrangle(
     ),
 ):
     """Parsing, classificação, mídia, transcrição, enriquecimento, export."""
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     PATHS, _ = require_config()
     _run_wrangle(PATHS, steps)
 
@@ -71,15 +71,15 @@ def wrangle(
 @prepare_app.command()
 def transcribe():
     """Transcrição de áudios/vídeos via Groq/Whisper."""
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     PATHS, _ = require_config()
     _run_transcribe(PATHS)
 
 
 def _run_clean(PATHS: dict, steps: Optional[str]):
     """Executa pipeline de limpeza."""
-    from cli.helpers import require_file, validate_steps
-    from cleaning import run_pipeline, CLEANING_STEPS
+    from whatsapp.cli.helpers import require_file, validate_steps
+    from whatsapp.pipeline.cleaning import run_pipeline, CLEANING_STEPS
 
     default_order = [
         "u200e", "anonymize", "timestamps", "indentation",
@@ -96,7 +96,7 @@ def _run_clean(PATHS: dict, steps: Optional[str]):
 
 def _run_wrangle(PATHS: dict, steps: Optional[str]):
     """Executa pipeline de wrangling."""
-    from cli.helpers import require_file, validate_steps
+    from whatsapp.cli.helpers import require_file, validate_steps
 
     default_order = ["parse", "classify", "media", "transcriptions", "enrich", "export"]
     order = validate_steps(steps or "", default_order)
@@ -104,7 +104,7 @@ def _run_wrangle(PATHS: dict, steps: Optional[str]):
     input_file = PATHS["interim"] / "raw-data_cln7.txt"
     require_file(input_file, "Arquivo limpo (cln7)", "Rode primeiro: whatsapp-interaction prepare clean")
 
-    from wrangling import run_wrangling_pipeline
+    from whatsapp.pipeline.wrangling import run_wrangling_pipeline
 
     result = run_wrangling_pipeline(
         order=order,
@@ -127,7 +127,7 @@ def _run_transcribe(PATHS: dict):
         console.print("[yellow]Adicione: GROQ_API_KEY=sua_chave_aqui ao arquivo .env[/yellow]")
         raise typer.Exit(1)
 
-    from cli.helpers import require_config
+    from whatsapp.cli.helpers import require_config
     _, PROJECT_ROOT = require_config()
 
     script_path = PROJECT_ROOT / "scripts" / "transcribe_media.py"
