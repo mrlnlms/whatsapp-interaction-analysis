@@ -10,7 +10,6 @@ Gera embeddings com diferentes dimensionalidades e compara:
 Dimensões testadas: 768 (original), 384, 256, 128
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -19,10 +18,9 @@ from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+from whatsapp.pipeline.config import PATHS
 
-from config import PATHS
+PROJECT_ROOT = Path(__file__).parent.parent
 
 # Dimensionalidades para testar
 DIMENSIONS = [768, 384, 256, 128]
