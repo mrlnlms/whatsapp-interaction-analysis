@@ -7,8 +7,9 @@
 - Embeddings (mpnet, MiniLM, DistilUSE)
 - EDA por dimensão (temporal, interação, conteúdo)
 - Advanced analysis (clustering semântico, N-Grams, TF-IDF)
-- Testes unitários (63 testes, cleaning + wrangling)
+- Testes unitários (75 testes, cleaning + wrangling + CLI)
 - CI/CD com GitHub Actions
+- CLI unificado (`whatsapp-interaction`) — [#3](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/3)
 
 ## Próximo
 
@@ -20,8 +21,5 @@
 
 ## Futuro
 
-3. **CLI unificado** — [#3](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/3)
-   Scripts viram ferramenta de linha de comando.
-
-4. **DVC para dados processados** — [#4](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/4)
+3. **DVC para dados processados** — [#4](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/4)
    Avaliar quando houver múltiplos exports.
