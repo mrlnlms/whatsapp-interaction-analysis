@@ -23,7 +23,9 @@ source .venv/bin/activate  # Linux/Mac
 # ou: .venv\Scripts\activate  # Windows
 
 # 4. Instale as dependências
-pip install -r requirements.txt
+pip install -e .[all]
+# Groups disponíveis: ml, viz, jupyter, transcription, analysis, test, all
+# Exemplo mínimo: pip install -e .[viz,jupyter]
 
 # 5. Registre o kernel Jupyter
 python -m ipykernel install --user --name=whatsapp-ds --display-name="WhatsApp DS"
@@ -176,7 +178,7 @@ rm -rf .venv _site _freeze .quarto *_files
 jupyter kernelspec uninstall whatsapp-ds -y
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .[all]
 python -m ipykernel install --user --name=whatsapp-ds --display-name="WhatsApp DS"
 ```
 

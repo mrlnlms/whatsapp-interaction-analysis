@@ -30,7 +30,7 @@ whatsapp-interaction-analysis/
 │
 ├── index.qmd                         # Documento principal (overview)
 ├── .env.example                       # Template de configuração
-├── requirements.txt                   # Dependências Python
+├── pyproject.toml                     # Packaging e dependências
 ├── _quarto.yml                        # Config Quarto principal
 ├── docs/ROADMAP.md                    # Roadmap e próximos passos
 │
@@ -138,7 +138,8 @@ cd whatsapp-interaction-analysis
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .[all]     # todas as dependências
+# ou: pip install -e .   # só o core (CLI + pipeline)
 
 cp .env.example .env
 # Edite o .env com seus paths
