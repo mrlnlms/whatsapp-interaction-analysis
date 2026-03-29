@@ -15,14 +15,12 @@ Depois:
     sentimento_label, sentimento_score                   (aliases mantidos)
 """
 
-import sys
 from pathlib import Path
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+from whatsapp.pipeline.config import PATHS
 
-from config import PATHS
+PROJECT_ROOT = Path(__file__).parent.parent
 
 def migrate_columns():
     print("="*80)
