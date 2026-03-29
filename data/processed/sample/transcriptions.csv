@@ -1,0 +1,17 @@
+file_path,transcription,transcription_status,is_synthetic
+data/raw/sample/media/AUD-20250120-WA0001.opus,Oi tudo bem? Acabei de chegar,completed,False
+data/raw/sample/media/AUD-20250120-WA0002.opus,"Vou sair daqui a pouco, te aviso quando tiver saindo",completed,False
+data/raw/sample/media/AUD-20250120-WA0003.opus,"Então, sobre aquele assunto que a gente conversou ontem, acho que a melhor opção é esperar",completed,False
+data/raw/sample/media/AUD-20250121-WA0004.opus,"Bom dia, tô indo pro trabalho agora",completed,False
+data/raw/sample/media/AUD-20250121-WA0005.opus,"Esqueci de falar, amanhã não vou poder ir",completed,False
+data/raw/sample/media/AUD-20250121-WA0006.opus,"Tá bom, combinado então, a gente se fala depois",completed,False
+data/raw/sample/media/AUD-20250121-WA0007.opus,"Comprei aquelas coisas que você pediu, tô voltando pra casa",completed,False
+data/raw/sample/media/AUD-20250122-WA0008.opus,"Acabou a reunião, foi bem, depois te conto os detalhes",completed,False
+data/raw/sample/media/AUD-20250122-WA0009.opus,Oi tudo bem? Acabei de chegar,completed,False
+data/raw/sample/media/AUD-20250122-WA0010.opus,"Vou sair daqui a pouco, te aviso quando tiver saindo",completed,False
+data/raw/sample/media/AUD-20250123-WA0011.opus,"Então, sobre aquele assunto que a gente conversou ontem, acho que a melhor opção é esperar",completed,False
+data/raw/sample/media/AUD-20250124-WA0012.opus,"Bom dia, tô indo pro trabalho agora",completed,False
+data/raw/sample/media/AUD-20250124-WA0013.opus,"Esqueci de falar, amanhã não vou poder ir",completed,False
+data/raw/sample/media/AUD-20250125-WA0014.opus,"Tá bom, combinado então, a gente se fala depois",completed,False
+data/raw/sample/media/AUD-20250125-WA0015.opus,"Comprei aquelas coisas que você pediu, tô voltando pra casa",completed,False
+data/raw/sample/media/AUD-20250126-WA0016.opus,"Acabou a reunião, foi bem, depois te conto os detalhes",completed,False

@@ -5,6 +5,9 @@ data/
 !data/interim/.gitkeep
 !data/processed/.gitkeep
 !data/integrated/.gitkeep
+!data/raw/sample/
+!data/processed/sample/
+!data/interim/sample/
 
 # Analysis placeholders
 analysis/
