@@ -21,8 +21,10 @@ from collections import Counter
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-PROJECT_ROOT = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+from dotenv import load_dotenv
+import os
+load_dotenv()
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
 
 from config import PATHS  # noqa: E402
 ```

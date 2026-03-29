@@ -69,15 +69,20 @@ def parse_to_dataframe(input_file: Path) -> pd.DataFrame:
     # Última mensagem
     if current_message:
         messages.append(current_message)
-    
+
+    if not messages:
+        return pd.DataFrame(columns=[
+            'linha_original', 'data', 'hora', 'remetente', 'conteudo', 'timestamp'
+        ])
+
     df = pd.DataFrame(messages)
-    
+
     # Cria timestamp datetime
     df['timestamp'] = pd.to_datetime(
         df['data'] + ' ' + df['hora'],
         format='%d/%m/%y %H:%M:%S'
     )
-    
+
     return df
 
 
