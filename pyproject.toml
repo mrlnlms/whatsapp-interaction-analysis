@@ -5,4 +5,11 @@ description = "End-to-end data science pipeline for WhatsApp conversation analys
 requires-python = ">=3.11"
 
 [project.scripts]
-whatsapp-interaction = "src.cli:app"
+whatsapp-interaction = "whatsapp.cli:app"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["whatsapp*"]
