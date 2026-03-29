@@ -566,27 +566,6 @@ def export_corpus_files(df: pd.DataFrame, output_dir: Path, use_enriched: bool =
 # COLUNAS PARA EXPORTAÇÃO
 # =============================================================================
 
-# Todas as colunas (debug/auditoria)
-COLUMNS_FULL = [
-    'linha_original',
-    'data',
-    'hora',
-    'timestamp',
-    'remetente',
-    'conteudo',
-    'tipo_mensagem',
-    'arquivo',
-    'arquivo_existe',
-    'extensao',
-    'tipo_arquivo',
-    'arquivo_path',
-    'tem_transcricao',
-    'transcricao',
-    'transcription_status',
-    'is_synthetic',
-    'conteudo_enriquecido',
-]
-
 # Colunas essenciais para análise
 COLUMNS_CORE = [
     'timestamp',
