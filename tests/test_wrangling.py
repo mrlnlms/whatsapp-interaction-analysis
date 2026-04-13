@@ -3,6 +3,9 @@
 import pytest
 import pandas as pd
 
+from pathlib import Path
+from unittest.mock import patch
+
 from whatsapp.pipeline.wrangling import (
     parse_to_dataframe,
     classify_message_type,
@@ -10,6 +13,7 @@ from whatsapp.pipeline.wrangling import (
     extract_filename_from_content,
     extract_media_type_from_filename,
     enrich_content,
+    link_media_to_messages,
     _validate_schema,
     COLUMNS_CORE,
     REQUIRED_COLUMNS,
@@ -258,3 +262,34 @@ class TestValidateSchema:
             assert isinstance(cols, set)
             for col in cols:
                 assert isinstance(col, str) and len(col) > 0
+
+
+# =============================================================================
+# link_media_to_messages
+# =============================================================================
+
+
+class TestLinkMediaToMessages:
+    """Testes para vinculação de mídia com tratamento de NaN."""
+
+    @patch("whatsapp.pipeline.wrangling.inventory_media_files")
+    def test_nan_arquivo_does_not_raise(self, mock_inventory):
+        """NaN no campo arquivo não deve causar TypeError."""
+        mock_inventory.return_value = pd.DataFrame(columns=["filename", "size", "extension"])
+        df = pd.DataFrame({
+            "conteudo": ["<attached: foto.jpg>", "texto normal", None],
+        })
+        result = link_media_to_messages(df, Path("/fake/media"))
+        assert "extensao" in result.columns
+        assert pd.isna(result.loc[1, "extensao"])
+        assert pd.isna(result.loc[2, "extensao"])
+
+    @patch("whatsapp.pipeline.wrangling.inventory_media_files")
+    def test_valid_arquivo_gets_extension(self, mock_inventory):
+        """Arquivo válido deve ter extensão extraída."""
+        mock_inventory.return_value = pd.DataFrame(columns=["filename", "size", "extension"])
+        df = pd.DataFrame({
+            "conteudo": ["<attached: IMG-20250101.jpg>"],
+        })
+        result = link_media_to_messages(df, Path("/fake/media"))
+        assert result.loc[0, "extensao"] == ".jpg"

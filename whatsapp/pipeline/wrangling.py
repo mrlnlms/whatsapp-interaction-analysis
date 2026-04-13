@@ -199,6 +199,8 @@ def add_message_classification(df: pd.DataFrame) -> pd.DataFrame:
 
 def extract_filename_from_content(content: str) -> str:
     """Extrai nome do arquivo de uma mensagem com mídia anexada."""
+    if not isinstance(content, str):
+        return None
     pattern = r'<attached:\s*(.+?)>'
     match = re.search(pattern, content)
     if not match:
@@ -266,11 +268,11 @@ def link_media_to_messages(df: pd.DataFrame, media_dir: Path) -> pd.DataFrame:
     existing_files = set(df_inventory['filename'].values) if not df_inventory.empty else set()
     
     # Verifica existência
-    df['arquivo_existe'] = df['arquivo'].apply(lambda x: x in existing_files if x else False)
-    
+    df['arquivo_existe'] = df['arquivo'].apply(lambda x: x in existing_files if pd.notna(x) and x else False)
+
     # Extrai metadados
-    df['extensao'] = df['arquivo'].apply(lambda x: Path(x).suffix.lower() if x else None)
-    df['tipo_arquivo'] = df['arquivo'].apply(extract_media_type_from_filename)
+    df['extensao'] = df['arquivo'].apply(lambda x: Path(x).suffix.lower() if pd.notna(x) and x else None)
+    df['tipo_arquivo'] = df['arquivo'].apply(lambda x: extract_media_type_from_filename(x) if pd.notna(x) and x else None)
     
     # Path completo
     df['arquivo_path'] = df.apply(
