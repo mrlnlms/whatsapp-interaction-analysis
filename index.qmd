@@ -31,6 +31,12 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 
 ------------------------------------------------------------------------
 
+# Timeline: Um Ano em Dados
+
+![Timeline Ultimate — volume de mensagens por pessoa e tipo de mídia, com viagens marcadas e % de dias juntos por mês.](./assets/images/timeline-ultimate.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
 # Navegação
 
 ## Pipeline Principal
