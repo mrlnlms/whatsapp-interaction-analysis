@@ -50,18 +50,9 @@ flowchart TD
 
 import pandas as pd
 import numpy as np
-import os
-import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente
-load_dotenv()
-
-# Adiciona src ao path
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PROJECT_ROOT, PATHS
+from whatsapp.pipeline.config import PROJECT_ROOT, PATHS
 
 PATHS['external'] = PROJECT_ROOT / 'data' / 'external'
 PATHS['external'].mkdir(parents=True, exist_ok=True)

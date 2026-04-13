@@ -18,19 +18,12 @@ execute:
 #| label: setup
 #| code-fold: false
 
-import sys
-import os
 import pandas as pd
-from dotenv import load_dotenv
 from pathlib import Path
 
-# Carrega .env e adiciona src ao path
-load_dotenv()
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PROJECT_ROOT, PATHS
-from cleaning import run_pipeline, CLEANING_STEPS
-from utils import format_audit_table, format_summary_table, generate_impact_analysis, format_markdown_lists
+from whatsapp.pipeline.config import PROJECT_ROOT, PATHS
+from whatsapp.pipeline.cleaning import run_pipeline, CLEANING_STEPS
+from whatsapp.pipeline.utils import format_audit_table, format_summary_table, generate_impact_analysis, format_markdown_lists
 
 # Define arquivos
 RAW_FILE = PATHS['raw']

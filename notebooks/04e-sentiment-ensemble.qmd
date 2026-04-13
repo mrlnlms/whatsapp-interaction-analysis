@@ -12,7 +12,6 @@ execute:
 #| label: setup
 #| include: false
 
-import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -21,12 +20,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from collections import Counter
 
-from dotenv import load_dotenv
-import os
-load_dotenv()
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PATHS  # noqa: E402
+from whatsapp.pipeline.config import PATHS
 ```
 
 ------------------------------------------------------------------------

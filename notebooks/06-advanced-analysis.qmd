@@ -21,10 +21,7 @@ execute:
 
 import pandas as pd
 import numpy as np
-import os
-import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
 # Visualização
 import matplotlib.pyplot as plt
@@ -39,13 +36,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score, silhouette_samples
 from sklearn.decomposition import PCA
 
-# Carrega variáveis de ambiente
-load_dotenv()
-
-# Adiciona src ao path
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PROJECT_ROOT, PATHS, PARTICIPANTES
+from whatsapp.pipeline.config import PROJECT_ROOT, PATHS, PARTICIPANTES
 
 # Arquivos de entrada
 FILE_ENRICHED = PATHS['processed'] / 'messages_enriched.parquet'
