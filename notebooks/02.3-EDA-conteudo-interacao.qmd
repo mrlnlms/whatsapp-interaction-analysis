@@ -31,7 +31,7 @@ Este notebook realiza a **análise exploratória DEFINITIVA** dos dados, integra
 - Identificar padrões finais para Feature Engineering
 - Consolidar aprendizados antes de criar features derivadas
 
----
+***
 
 # Setup
 
@@ -91,7 +91,7 @@ for i, col in enumerate(df.columns, 1):
     print(f"   {i:2d}. {col}")
 ```
 
----
+***
 
 # Visão Geral do Dataset
 
@@ -165,7 +165,7 @@ print(f"{'Máximo':<20} {junto_stats.max():<15.0f} {separado_stats.max():<15.0f}
 **Confirmação:** Presença física reduz drasticamente comunicação digital, mas não elimina.
 :::
 
----
+***
 
 # Distribuição de Remetentes
 
@@ -251,7 +251,7 @@ print(pivot)
 - 🎯 Comportamento sincronizado se mantém também no contexto externo
 :::
 
----
+***
 
 # Tipos de Mensagem
 
@@ -637,7 +637,7 @@ fig.show()
 
 **MUDANÇA DRAMÁTICA ao longo do ano - Relacionamento amadureceu:**
 
----
+***
 
 #### **1. ÁUDIO em QUEDA LIVRE (71% de redução)**
 
@@ -661,7 +661,7 @@ fig.show()
 - Evolução: Comunicação ficou mais eficiente (texto é mais rápido)
 - Relacionamento amadureceu: Menos necessidade de "ouvir a voz"
 
----
+***
 
 #### **2. TEXTO CRESCENTE (+12pp ao longo do ano)**
 
@@ -686,7 +686,7 @@ fig.show()
 - Relacionamento ficou mais "econômico" na comunicação
 - Quando juntos, texto domina (coordenação rápida)
 
----
+***
 
 #### **3. VÍDEO teve "ERA DOURADA" (Jan-Mai/2025)**
 
@@ -717,7 +717,7 @@ fig.show()
 - VID = mídia rica, mas "cara" (tempo para gravar/assistir)
 - Relacionamento testou VID, mas voltou para texto (mais eficiente)
 
----
+***
 
 #### **4. IMAGEM relativamente estável**
 
@@ -729,7 +729,7 @@ fig.show()
 - Separados: 3-7% (estável)
 - Juntos: Pico Mai/2025 (7.5%) - fotos de momentos juntos?
 
----
+***
 
 #### **Padrões Identificados - Ciclo de Maturação**
 
@@ -755,7 +755,7 @@ fig.show()
 - VID abandono (4.4%)
 - **Relacionamento "amadurecido" = comunicação eficiente**
 
----
+***
 
 #### **Sincronização P1 vs P2 PERFEITA**
 
@@ -770,7 +770,7 @@ fig.show()
 
 **Conclusão:** P1 e P2 não só sincronizam comportamento, mas também EVOLUEM juntos.
 
----
+***
 
 #### **Implicações para FE**
 
@@ -1025,7 +1025,7 @@ fig.show()
 - ✅ **Mudança acontece INDEPENDENTE do contexto**
 - **Conclusão:** Mudança é TEMPORAL, não por estar junto/separado
 
----
+***
 
 ###### **Interpretação dos Resultados**
 
@@ -1062,7 +1062,7 @@ fig.show()
 - Descobriram que texto funciona melhor (crescimento constante)
 - ✅ Mais provável: COMBINAÇÃO de fatores
 
----
+***
 
 ###### **Padrão Temporal Identificado**
 
@@ -1088,7 +1088,7 @@ fig.show()
 
 **Interpretação:** Relacionamento passou por ciclo de **experimentação → teste → consolidação**
 
----
+***
 
 ###### **Conclusão Final**
 
@@ -1108,7 +1108,7 @@ fig.show()
 Sem dados externos (mudança de trabalho, eventos específicos, etc), não podemos distinguir completamente entre "maturação", "hábito" ou "rotina". Mas sabemos que NÃO é contexto de proximidade física.
 :::
 
----
+***
 
 # 📊 Código Completo - Evolução Temporal (REFATORADO - Só Relacionamento)
 ```{python}
@@ -1133,7 +1133,7 @@ print("="*80)
 ## Distribuição por Mês
 
 ```{python}
-#| label: fig-tipos-mes
+#| label: fig-tipos-mes-refatorado
 #| fig-cap: "Evolução temporal dos tipos de mensagem (relacionamento)"
 
 # Agrupa por mês e grupo
@@ -1185,7 +1185,7 @@ for grupo in grupos_principais:
 ## Composição ao Longo do Tempo
 
 ```{python}
-#| label: fig-tipos-area
+#| label: fig-tipos-area-refatorado
 #| fig-cap: "Composição de tipos de mensagem (área empilhada) - Relacionamento"
 
 # Visualização - Área empilhada
@@ -1275,7 +1275,7 @@ print(pivot_fase)
 ## Evolução por Remetente
 
 ```{python}
-#| label: fig-tipos-remetente-tempo
+#| label: fig-tipos-remetente-tempo-refatorado
 #| fig-cap: "Evolução temporal por remetente (relacionamento)"
 
 # Cria subplots
@@ -1327,7 +1327,7 @@ fig.show()
 ## Tipos × Tempo × Contexto
 
 ```{python}
-#| label: fig-tipos-tempo-contexto
+#| label: fig-tipos-tempo-contexto-refatorado
 #| fig-cap: "Evolução temporal considerando contexto (relacionamento)"
 
 # Agrupa por mês, tipo e contexto (df_rel já filtrado)
@@ -1386,11 +1386,11 @@ fig.show()
 
 **NOTA METODOLÓGICA:** Análise restrita ao período de relacionamento (pós 16/dez/2024, N=89.336). Período de amizade excluído para evitar mistura de contextos.
 
----
+***
 
 **MUDANÇA DRAMÁTICA durante relacionamento - Comunicação evoluiu em 10 meses:**
 
----
+***
 
 #### **1. ÁUDIO em QUEDA (-56% de redução)**
 
@@ -1421,7 +1421,7 @@ fig.show()
 - **Jan-Mai/2025:** Texto vence por eficiência
 - **Jun-Out/2025:** Leve retorno (11%) = áudio se reposiciona como "afeto especial", não rotina
 
----
+***
 
 #### **2. TEXTO CRESCENTE (+8.3pp, +12%)**
 
@@ -1452,7 +1452,7 @@ fig.show()
 - Relacionamento "amadureceu" = comunicação econômica
 - **Modo coordenação** (juntos) é quase 90% texto
 
----
+***
 
 #### **3. VÍDEO teve "ERA DOURADA" confirmada (Jan-Mai/2025) 🔥**
 
@@ -1509,7 +1509,7 @@ fig.show()
 - VID reposicionado: Não rotina, mas "momentos especiais"
 - Uso ocasional (5.6%) vs rotineiro (18%)
 
----
+***
 
 #### **4. IMAGEM estável (3-5%)**
 
@@ -1519,7 +1519,7 @@ fig.show()
 - **P2:** Uso marginal (~2-3%)
 - Diferença persistente - preferência pessoal de P1
 
----
+***
 
 #### **Fases do Relacionamento - Maturação em 4 Etapas:**
 
@@ -1536,7 +1536,7 @@ fig.show()
 3. **Transição:** Ajustando mix de mídias
 4. **Consolidação:** Texto vence = eficiência
 
----
+***
 
 #### **Sincronização P1 vs P2 é ABSOLUTA:**
 
@@ -1552,7 +1552,7 @@ fig.show()
 
 **Conclusão:** P1 e P2 têm **TRAJETÓRIA COMPARTILHADA** - evoluem juntos, não separadamente.
 
----
+***
 
 #### **Validação: Temporal vs Contextual**
 
@@ -1569,7 +1569,7 @@ fig.show()
 - Mudanças acontecem INDEPENDENTE de estar junto/separado
 - **Não é contexto**, é **evolução do relacionamento**
 
----
+***
 
 #### **Comparação: Antes vs Depois do Filtro**
 
@@ -1587,7 +1587,7 @@ fig.show()
 - ✅ Padrões evolutivos ficaram CLAROS
 - ✅ Fases fazem SENTIDO narrativo
 
----
+***
 
 #### **Implicações para Feature Engineering:**
 
@@ -2023,7 +2023,7 @@ print("="*80)
 
 **Metodologia:** 4 validações estatísticas cruzando tipos de mensagem com variáveis contextuais.
 
----
+***
 
 #### **VALIDAÇÃO 1: AUDIO vs Distância de Encontros ✅ APROVADA**
 
@@ -2042,7 +2042,7 @@ print("="*80)
 - Dezembro (4 dias longe): 15.1% AUDIO (ALTO apesar de perto!)
 - Padrão é temporal: Dez=15% → Jan=6.5% → Abr=3.9%
 
----
+***
 
 #### **VALIDAÇÃO 2: VID vs % Tempo Separado ⚠️ PARCIALMENTE REPROVADA**
 
@@ -2072,7 +2072,7 @@ print("="*80)
 **Padrão identificado:**
 > VID serve para **compensar distância**, mas relacionamento **amadureceu** e abandonou (preferiu eficiência do texto).
 
----
+***
 
 #### **VALIDAÇÃO 3: TEXTO vs Volume Total ⚠️ PARCIALMENTE REPROVADA**
 
@@ -2102,7 +2102,7 @@ print("="*80)
 - Jun/2025: 14.020 msgs → 68.3% TEXTO (espaço para mídia)
 - Set/2025: 3.253 msgs → 84.4% TEXTO (eficiência máxima)
 
----
+***
 
 #### **VALIDAÇÃO 4: AUDIO por Contexto ✅ APROVADA**
 
@@ -2127,7 +2127,7 @@ print("="*80)
 - Validação 4: -53.9% quando separados
 - **Dupla confirmação:** AUDIO é temporal pura!
 
----
+***
 
 #### **📊 SÍNTESE DAS 4 VALIDAÇÕES**
 
@@ -2140,7 +2140,7 @@ print("="*80)
 
 **Score: 2/4 aprovadas** (50%)
 
----
+***
 
 #### **🎯 CONCLUSÃO FINAL - Padrão HÍBRIDO**
 
@@ -2167,7 +2167,7 @@ print("="*80)
   1. Amadurecimento = preferência por texto
   2. Volume baixo = comunicação mais direta (texto)
 
----
+***
 
 #### **💡 Descoberta CRÍTICA - Não é Binário!**
 
@@ -2186,7 +2186,7 @@ print("="*80)
 > - Features contextuais: `em_encontro`, `dias_desde/ate`, `volume_mes`
 > - **Interações:** `tipo × mes`, `tipo × em_encontro`, `tipo × volume`
 
----
+***
 
 #### **🔍 Por que VID e TEXTO são Mistas?**
 
@@ -2203,7 +2203,7 @@ print("="*80)
 - **Exemplo:** Set/2025 (3k msgs, 84% texto) vs Jun/2025 (14k msgs, 68% texto)
 - **Conclusão:** TEXTO domina quando: (1) Relacionamento maduro + (2) Volume baixo
 
----
+***
 
 #### **📈 Implicação para Feature Engineering**
 
@@ -2230,7 +2230,7 @@ print("="*80)
 - ❌ `tipo × dias_desde` - AUDIO não correlaciona (r=-0.020)
 - ⚠️ Usar `tipo` sozinho sem temporal/contextual = perda de poder
 
----
+***
 
 #### **🎓 Lições Metodológicas**
 
@@ -2314,7 +2314,7 @@ for _, row in trans_por_tipo.head(5).iterrows():
 :::
 
 
----
+***
 
 
 # Análise de Conteúdo
@@ -2470,7 +2470,7 @@ fig.show()
 :::
 
 
----
+***
 
 ## Distribuição por Dia da Semana
 
@@ -2616,7 +2616,7 @@ fig.show()
 - 🎯 Dia da semana sozinho tem poder ZERO sem contexto (já provamos p=0.96)
 :::
 
----
+***
 
 ## Heatmap: Hora × Dia da Semana
 
@@ -2691,7 +2691,7 @@ fig.show()
 
 **Padrão identificado:** Hora × Dia são **INDEPENDENTES** (sem interação)
 
----
+***
 
 **Quando JUNTOS (verde direita):**
 - **Segunda DOMINA:** Blocos intensos ao longo de TODO o dia (10h-13h, 18h-21h)
@@ -2701,7 +2701,7 @@ fig.show()
 
 **Padrão identificado:** Hora × Dia **INTERAGEM** fortemente
 
----
+***
 
 **Comparação lado a lado:**
 
@@ -2723,7 +2723,7 @@ fig.show()
 - 🎯 Relacionamento muda ESTRUTURALMENTE quando juntos (não é só volume)
 :::
 
----
+***
 
 
 
@@ -2735,6 +2735,7 @@ fig.show()
 # Calcula tempo entre mensagens consecutivas
 df_sorted = df.sort_values('timestamp').copy()
 df_sorted['tempo_desde_ultima'] = df_sorted['timestamp'].diff().dt.total_seconds()
+df_sorted['contexto'] = df_sorted['em_encontro'].map({True: 'Juntos', False: 'Separados'})
 
 # Remove primeira mensagem (NaN)
 tempo_entre_msgs = df_sorted['tempo_desde_ultima'].dropna()
@@ -3067,7 +3068,7 @@ fig.show()
 
 **Padrão identificado:** Relacionamento tem comunicação de **alta frequência e baixa latência**.
 
----
+***
 
 **POR CONTEXTO - Descoberta CONTRA-INTUITIVA:**
 
@@ -3262,11 +3263,10 @@ elif sem_msg_separados == total_sem_msg:
 - Feature `em_encontro` é ESSENCIAL - sem ela, modelo não entende ausência de mensagens
 :::
 
----
-Verificar todas as analises acima que são afetadas por esses outliers quando se trata em padrão de troca de mensagem, depois pode voltar com o conteúdo? 
+::: {.callout-note}
+Verificar todas as analises acima que são afetadas por esses outliers quando se trata em padrão de troca de mensagem, depois pode voltar com o conteúdo?
 Todas as analises daqui para baixo consideram isso.?
-
----
+:::
 
 ## Tempo entre Mensagens (Refatorado)
 
@@ -3599,7 +3599,7 @@ print("="*80)
 
 **Conclusão:** No relacionamento, comunicação tem **alta frequência e baixa latência** - raramente ficam >1h sem trocar mensagens.
 
----
+***
 
 **POR CONTEXTO - Descoberta CONTRA-INTUITIVA:**
 
@@ -3655,7 +3655,7 @@ print("="*80)
 - Significa: Passam períodos SEM celular (aproveitando presença física)
 - Gaps quando juntos são **INTENCIONAIS** (convívio presencial), não ausência de comunicação
 
----
+***
 
 **Impacto do filtro de relacionamento:**
 
@@ -3671,7 +3671,7 @@ print("="*80)
 
 **Conclusão:** Gaps de >3 dias eram do período de amizade. No relacionamento, NUNCA ficam >3 dias sem mensagem (exceto durante encontros).
 
----
+***
 
 **Integração com análises anteriores:**
 
@@ -3826,7 +3826,7 @@ print("="*80)
 
 
 
----
+***
 
 ## Sequências de Mensagens
 
@@ -4018,7 +4018,7 @@ print("="*80)
 
 **Conclusão:** Comunicação é **altamente fragmentada** - raramente mandam rajadas longas, preferem mensagens curtas e alternadas.
 
----
+***
 
 **POR CONTEXTO - Confirma padrão de coordenação vs conversa:**
 
@@ -4058,7 +4058,7 @@ print("="*80)
 - Separados = Conversa (mais desenvolvida, explicações, narrativas)
 - Mediana igual (2) mostra que AMBOS fragmentam, mas separados estendem mais
 
----
+***
 
 **POR REMETENTE - Simetria mantida:**
 
@@ -4074,7 +4074,7 @@ print("="*80)
 - Mas diferença é marginal (0.36 msgs)
 - **Quem mandou 54 msgs?** P1 (provavelmente contando algo importante!)
 
----
+***
 
 **Integração com análises anteriores:**
 
@@ -4351,7 +4351,7 @@ print("="*80)
 
 **Conclusão:** Turnos são majoritariamente MÉDIOS (15 msgs, 45min), mas alguns são MARATONAS (>100 msgs, >6h).
 
----
+***
 
 **POR CONTEXTO - Diferença DRAMÁTICA:**
 
@@ -4395,7 +4395,7 @@ print("="*80)
 - Juntos: 304 turnos em ~122 dias = **2.5 turnos/dia**
 - Separados iniciam conversas 36% MAIS frequentemente
 
----
+***
 
 **Integração com análises anteriores - TUDO se encaixa:**
 
@@ -4423,7 +4423,7 @@ print("="*80)
 - ✅ Separados: 290 msgs/dia em 3.4 turnos = 85 msgs/turno (bate!)
 - ✅ Juntos: 118 msgs/dia em 2.5 turnos = 47 msgs/turno (bate!)
 
----
+***
 
 **SÍNTESE - Dois protocolos COMPLETAMENTE diferentes:**
 
@@ -4458,7 +4458,7 @@ print("="*80)
 :::
 
 
----
+***
 
 
 # Efeito da Distância Temporal
@@ -4587,7 +4587,7 @@ if len(df_antecipacao) > 0:
 - Com o tempo, **adaptam-se à distância** (normalização)
 - Não é "quanto mais tempo separados, mais saudade" - é o oposto!
 
----
+***
 
 **2. Dias ATÉ próximo encontro (correlação: -0.91):**
 - **Longe do encontro (40-60 dias):** Volume ALTO (~2.000-3.000 msgs)
@@ -4600,7 +4600,7 @@ if len(df_antecipacao) > 0:
 - Volume cai porque sabem que logo estarão juntos (menos urgência)
 - Última semana: Comunicação mínima (expectativa de presença física iminente)
 
----
+***
 
 **Padrão identificado - "Ciclo de Separação":**
 ```
@@ -4613,7 +4613,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 2. **Normalização:** Médio-alto (adaptados à distância)
 3. **Pré-encontro:** Baixo (preparação, menos urgência)
 
----
+***
 
 **Correlações fortíssimas:**
 - `dias_desde_ultimo_encontro`: **-0.84** (muito forte)
@@ -4632,7 +4632,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - **Próximo ao encontro:** Preparação/expectativa → volume baixo
 - **Durante encontro:** Presença física → volume muito baixo (já sabíamos)
 
----
+***
 
 **Implicação para FE:**
 - ✅ Feature `dias_desde_ultimo_encontro` é **ALTAMENTE PREDITIVA** (r=-0.84)
@@ -4644,7 +4644,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - 🎯 Relacionamento tem "curva de adaptação" clara e previsível
 :::
 
----
+***
 
 # Síntese Final para Feature Engineering
 
@@ -4657,7 +4657,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - Padrões temporais mudam RADICALMENTE por contexto
 - P1 e P2 mantêm sincronização perfeita em TODOS os contextos
 
----
+***
 
 ### **Padrões Identificados**
 
@@ -4723,7 +4723,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 3. **Fase 3 - Transição** (Jun-Jul/2025): Equilíbrio, áudio ressurge (10.2%)
 4. **Fase 4 - Consolidação** (Ago-Out/2025): Texto domina (76.4%), VID abandonado (4.4%)
 
----
+***
 
 ### **Features ESSENCIAIS para FE**
 
@@ -4762,7 +4762,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - ❌ `grupo_mensagem × remetente × em_encontro` - sincronização se mantém
 - ❌ `eh_marco_especial` / `marco_nome` - amostra muito pequena (N=3)
 
----
+***
 
 ### **Conclusão Crítica**
 
@@ -4790,7 +4790,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - Juntos: WhatsApp = Canal secundário (logístico)
 - Relacionamento à distância com encontros regulares tem dinâmica PRÓPRIA
 
----
+***
 
 ### **Implicação para Modelagem**
 
@@ -4811,7 +4811,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 - Correlações fortíssimas (-0.84 e -0.91)
 - Podem ser os preditores mais poderosos do dataset
 
----
+***
 
 **Próximo passo:** Feature Engineering (03-feature-engineering.qmd) integrando features de contexto externo
 :::

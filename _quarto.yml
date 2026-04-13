@@ -1,6 +1,11 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - "*.qmd"
+    - "notebooks/*.qmd"
+    - "docs/*.md"
+    - "!docs/archive/**"
 
 website:
   title: "WhatsApp DS Analytics"
