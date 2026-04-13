@@ -17,7 +17,6 @@ analysis/
 
 # Quarto gerados
 _site/
-_freeze/
 _output/
 *_files/
 *.html
