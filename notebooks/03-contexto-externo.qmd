@@ -14,6 +14,7 @@ format:
 execute:
   warning: false
   message: false
+  freeze: true
 ---
 
 # Introdução

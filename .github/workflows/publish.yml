@@ -35,6 +35,11 @@ jobs:
           pip install -e ".[test]" jupyter ipykernel
           python -m ipykernel install --user --name whatsapp-ds
 
+      - name: Setup environment
+        run: |
+          echo "PROJECT_ROOT=${{ github.workspace }}" > .env
+          echo "DATA_FOLDER=sample" >> .env
+
       - name: Render
         run: quarto render
 
