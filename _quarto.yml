@@ -3,15 +3,10 @@ project:
   output-dir: _site
   render:
     - "*.qmd"
+    - "notebooks/*.qmd"
     - "docs/*.md"
     - "!docs/archive/**"
-    - "notebooks/00-data-discovery.qmd"
-    - "notebooks/00-data-profiling.qmd"
-    - "notebooks/01-data-cleaning.qmd"
-    - "notebooks/02-data-wrangling.qmd"
-    - "notebooks/02.1-EDA-data-wrangling.qmd"
-    - "notebooks/02.3-EDA-conteudo-interacao.qmd"
-    - "notebooks/03-contexto-externo.qmd"
+    - "!notebooks/archive/**"
 
 website:
   title: "WhatsApp DS Analytics"
@@ -147,6 +142,7 @@ format:
 
 execute:
   freeze: true
+  error: true
   warning: false
   message: false
   echo: true
