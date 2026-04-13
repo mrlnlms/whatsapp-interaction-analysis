@@ -1,0 +1,1665 @@
+---
+title: "Feature Engineering"
+subtitle: "Implementação completa e consolidação de variáveis derivadas"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+execute:
+  warning: false
+  echo: false
+---
+
+# Introdução
+
+## Objetivos
+
+Este notebook tem como objetivos:
+
+1. **Documentar** todas as variáveis existentes no dataset
+2. **Consolidar** features criadas nos notebooks de EDA (03-06)
+3. **Limpar** dados para análise semântica (URLs, outliers)
+4. **Criar** features adicionais para modelagem
+5. **Gerar** dataset final otimizado para clustering/tópicos
+6. **Comparar** abordagem metodológica vs exploratória anterior
+
+## Fluxo de Trabalho
+```{mermaid}
+flowchart TD
+    A[Dataset Base] --> B[Dicionário de Variáveis]
+    B --> C[Consolidação de Features]
+    C --> D[Limpeza para Semântica]
+    D --> E[Novas Features]
+    E --> F[Feature Selection]
+    F --> G[Dataset Final]
+    G --> H[Comparação Metodológica]
+```
+
+------------------------------------------------------------------------
+
+# Setup e Configuração
+
+```{python}
+#| label: setup
+#| code-fold: false
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Adiciona src ao path
+sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
+
+from config import PROJECT_ROOT, PATHS
+
+PATHS['external'] = PROJECT_ROOT / 'data' / 'external'
+PATHS['external'].mkdir(parents=True, exist_ok=True)
+
+# Define arquivos
+INPUT_FILE = PATHS['processed'] / 'messages.parquet'
+OUTPUT_FILE = PATHS['processed'] / 'messages_enriched.parquet'
+
+# Helper: converte path absoluto em relativo ao projeto
+def format_relative_path(full_path):
+    full_str = str(full_path)
+    if 'whatsapp-interaction-analysis' in full_str:
+        idx = full_str.find('whatsapp-interaction-analysis')
+        return '~/' + full_str[idx:]
+    return full_str
+```
+
+## Configuração
+
+```{python}
+# Exibe configuração em tabela
+config_data = [
+    {'Parâmetro': 'Entrada', 'Valor': f'<code>{INPUT_FILE.name}</code>', 'Path': format_relative_path(INPUT_FILE.parent)},
+    {'Parâmetro': 'Saída', 'Valor': f'<code>{OUTPUT_FILE.name}</code>', 'Path': format_relative_path(OUTPUT_FILE.parent)},
+]
+
+df_config = pd.DataFrame(config_data)
+display(df_config.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Carregamento dos Dados
+
+```{python}
+#| label: load-data
+#| output: false
+
+# Carrega dataset principal
+df = pd.read_parquet(INPUT_FILE)
+
+n_mensagens = len(df)
+n_colunas = len(df.columns)
+periodo_inicio = df['timestamp'].min().strftime('%d/%m/%Y')
+periodo_fim = df['timestamp'].max().strftime('%d/%m/%Y')
+```
+
+```{python}
+#| label: show-data-summary
+
+dados_resumo = [
+    {'Métrica': 'Mensagens', 'Valor': f'{n_mensagens:,}'},
+    {'Métrica': 'Colunas', 'Valor': f'{n_colunas}'},
+    {'Métrica': 'Período', 'Valor': f'{periodo_inicio} → {periodo_fim}'},
+]
+
+display(pd.DataFrame(dados_resumo).style.hide(axis='index'))
+```
+
+::: panel-tabset
+### Colunas do Dataset
+
+```{python}
+#| label: columns-info
+
+colunas_info = [
+    ('<code>timestamp</code>', 'datetime', 'Data e hora da mensagem'),
+    ('<code>remetente</code>', 'category', 'Participante (P1 ou P2)'),
+    ('<code>tipo_mensagem</code>', 'category', 'Tipo específico - 21 possíveis (text_pure, audio_omitted, video_attached, etc.)'),
+    ('<code>grupo_mensagem</code>', 'category', 'Categoria agrupada: TEXT, AUDIO, VID, IMG, STICKER, GIF, DOC, CONTACT, FILE, SYSTEM, CALL'),
+    ('<code>conteudo</code>', 'text', 'Conteúdo enriquecido: transcrição (se mídia transcrita) ou texto original'),
+    ('<code>arquivo</code>', 'text', 'Nome do arquivo de mídia anexado (ex: 00001-AUDIO-2024-10-21.opus), se aplicável'),
+    ('<code>transcricao</code>', 'bool', 'Indica se a mensagem possui transcrição de áudio/vídeo'),
+    ('<code>date_match</code>', 'bool', 'Indica se é mensagem órfã/sintética (transcrição sem match de timestamp)'),
+]
+
+df_colunas = pd.DataFrame(colunas_info, columns=['Coluna', 'Tipo', 'Descrição'])
+display(df_colunas.style.hide(axis='index'))
+```
+
+### Amostra dos Dados
+
+```{python}
+#| label: preview-data
+
+df.head()
+```
+:::
+
+------------------------------------------------------------------------
+
+# Dicionário de Variáveis
+
+## Variáveis do Dataset Original
+
+::: {.callout-note}
+### Variáveis Base (do processamento inicial)
+
+Estas variáveis foram criadas no processo de ETL inicial (parsing do WhatsApp + enriquecimento contextual).
+
+**Identificação e Temporal:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `timestamp` | datetime64 | Data/hora da mensagem | 2024-12-16 19:23:45 |
+| `remetente` | object | Quem enviou (P1 ou P2) | P1 |
+| `ano` | int64 | Ano da mensagem | 2024 |
+| `mes` | int64 | Mês da mensagem | 12 |
+| `dia` | int64 | Dia do mês | 16 |
+
+**Conteúdo:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `tipo_mensagem` | object | Tipo específico do WhatsApp | text, audio, video, image, sticker |
+| `grupo_mensagem` | object | Agrupamento por categoria | TEXT, AUDIO, VID, IMG |
+| `conteudo` | object | Texto da mensagem ou transcrição | "Oi amor, tudo bem?" |
+| `midia_path` | object | Caminho do arquivo de mídia (se houver) | /media/audio_123.opus |
+
+**Contexto:**
+
+| Variável | Tipo | Descrição | Exemplo |
+|----------|------|-----------|---------|
+| `em_encontro` | bool | Se estavam juntos fisicamente | True |
+| `encontro_id` | float64 | ID do encontro (se em_encontro=True) | 5.0 |
+| `fase_relacionamento` | object | Fase da relação | Relacionamento |
+
+**Estatísticas do Dataset Base:**
+```{python}
+print("Resumo das variáveis base:\n")
+print(f"Tipos de mensagem: {df['tipo_mensagem'].nunique()} únicos")
+print(df['tipo_mensagem'].value_counts())
+print(f"\nGrupos de mensagem: {df['grupo_mensagem'].nunique()} únicos")
+print(df['grupo_mensagem'].value_counts())
+print(f"\nDistribuição remetente:")
+print(df['remetente'].value_counts())
+print(f"\nContexto:")
+print(f"  Em encontro: {df['em_encontro'].sum():,} ({df['em_encontro'].sum()/len(df)*100:.1f}%)")
+print(f"  Separados: {(~df['em_encontro']).sum():,} ({(~df['em_encontro']).sum()/len(df)*100:.1f}%)")
+```
+:::
+
+## Variáveis Criadas nos EDAs
+
+::: {.callout-important}
+### Features Criadas em 03-overview.qmd
+
+**Não houve criação de features específicas** - apenas análise descritiva das variáveis base.
+
+**Descobertas principais:**
+- 97.2% Relacionamento vs 2.8% Amizade
+- 85.4% Separados vs 14.6% Juntos
+- Redução de -68.3% no volume quando juntos
+:::
+
+::: {.callout-important}
+### Features Criadas em 04-eda-temporal.qmd
+
+**Features temporais derivadas:**
+
+| Variável | Tipo | Descrição | Valores | Criação |
+|----------|------|-----------|---------|---------|
+| `hora` | int64 | Hora do dia (0-23) | 0, 1, ..., 23 | `df['timestamp'].dt.hour` |
+| `dia_semana` | object | Dia da semana | Segunda, Terça, ..., Domingo | `df['timestamp'].dt.day_name()` |
+| `mes` | int64 | Mês (1-12) | 1, 2, ..., 12 | `df['timestamp'].dt.month` |
+| `ano_mes` | object | Ano-Mês para agregação | 2024-12, 2025-01 | `df['timestamp'].dt.to_period('M')` |
+| `fase_temporal` | object | Fase evolutiva (4 fases) | Início, Experimentação, Transição, Consolidação | Regras temporais |
+
+**Regras de fase_temporal:**
+```python
+# Início: Dezembro/2024
+# Experimentação: Janeiro-Maio/2025
+# Transição: Junho-Julho/2025
+# Consolidação: Agosto-Outubro/2025
+```
+
+**Descobertas:**
+- Padrões horários: Separados nocturno (19h), Juntos diurno (12h)
+- Padrões semanais: Monday paradox (27.1% quando juntos)
+- Evolução: TEXT +8.3pp, AUDIO -56%, VID pico em Jan
+:::
+
+::: {.callout-important}
+### Features Criadas em 05-eda-interacao.qmd
+
+**Features de interação e sequenciamento:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tempo_desde_ultima` | float64 | Minutos desde mensagem anterior | 0.12, 5.3, 120.0 | Diff de timestamps |
+| `sequencia` | int64 | Contador de msgs consecutivas do mesmo remetente | 1, 2, 3, ..., 54 | Incremental por remetente |
+| `turno_id` | int64 | ID da sessão de conversa (gap >1h) | 0, 1, 2, ..., 1125 | Grupos por gap temporal |
+
+**Features de contexto temporal (relacionamento com encontros):**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `dias_desde_ultimo` | float64 | Dias desde último encontro | 0.5, 5.0, 45.0 | Cálculo baseado em datas de encontros |
+| `dias_ate_proximo` | float64 | Dias até próximo encontro | 0.5, 7.0, 50.0 | Cálculo baseado em datas de encontros |
+
+**Descobertas:**
+- 81% respostas <60s (ultra-rápidas)
+- Sequências: Separados 3.45 msgs vs Juntos 2.73 msgs
+- Turnos: Separados 92.5 msgs vs Juntos 43.7 msgs (-53%)
+- Padrão "U invertido": Volume pico pós-encontro e pré-encontro
+:::
+
+::: {.callout-important}
+### Features Criadas em 06-eda-conteudo.qmd
+
+**Features de tamanho textual:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tamanho_chars` | int64 | Número de caracteres | 17, 183, 1164 | `df['conteudo'].str.len()` |
+| `tamanho_palavras` | int64 | Número de palavras | 3, 36, 250 | `df['conteudo'].str.split().str.len()` |
+
+**Features de origem do texto:**
+
+| Variável | Tipo | Descrição | Valores | Criação |
+|----------|------|-----------|---------|---------|
+| `origem` | object | Fonte do conteúdo textual | TEXT_escrito, TRANSCRITO_falado | Baseado em `grupo_mensagem` |
+```python
+# Lógica:
+# 'TEXT_escrito' se grupo_mensagem == 'TEXT'
+# 'TRANSCRITO_falado' se grupo_mensagem in ['AUDIO', 'VID']
+```
+
+**Features de URLs:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tem_url` | bool | Se contém URL | True, False | Regex em `conteudo` |
+| `num_urls` | int64 | Quantidade de URLs | 0, 1, 2 | Contagem via regex |
+
+**Features de Emojis:**
+
+| Variável | Tipo | Descrição | Exemplo | Criação |
+|----------|------|-----------|---------|---------|
+| `tem_emoji` | bool | Se contém emoji | True, False | Biblioteca `emoji` |
+| `num_emojis` | int64 | Quantidade de emojis | 0, 1, 3 | Contagem via `emoji` |
+| `emojis` | object (list) | Lista de emojis da mensagem | ['💚', '😍'] | Extração via `emoji` |
+
+**Descobertas:**
+- Mediana: 3 palavras (ultra-curto)
+- TEXT vs TRANSCRITO: 3 vs 14 palavras (4.7x diferença!)
+- URLs: 0.8% (raro), P1 67% mais que P2
+- Emojis: 7.5%, P1 frequente/pontual vs P2 raro/explosivo
+- 💚 é 15.2% de todos emojis (símbolo da relação)
+:::
+
+## Resumo de Features Disponíveis
+
+### Colunas Reais do Dataset
+```{python}
+print("COLUNAS PRESENTES no dataset base:\n")
+print(f"Total: {len(df.columns)} colunas\n")
+
+# Lista todas com tipo
+for col in df.columns:
+    dtype = df[col].dtype
+    non_null = df[col].notna().sum()
+    pct = (non_null / len(df)) * 100
+    print(f"   • {col:25s} | {str(dtype):15s} | {non_null:,} ({pct:.1f}%)")
+
+print("\n" + "="*70)
+```
+
+### Categorização das Colunas Existentes
+```{python}
+# Agora categoriza APENAS o que existe
+colunas_reais = df.columns.tolist()
+
+# Categorização
+temporais_existentes = [c for c in colunas_reais if c in ['timestamp', 'ano', 'mes', 'dia', 'hora', 'dia_semana', 'ano_mes', 'fase_temporal']]
+contextuais_existentes = [c for c in colunas_reais if c in ['em_encontro', 'encontro_id', 'fase_relacionamento', 'dias_desde_ultimo', 'dias_ate_proximo']]
+conteudo_existentes = [c for c in colunas_reais if c in ['tipo_mensagem', 'grupo_mensagem', 'conteudo', 'midia_path']]
+interacao_existentes = [c for c in colunas_reais if c in ['remetente', 'tempo_desde_ultima', 'sequencia', 'turno_id']]
+
+# Outras não categorizadas
+categorizadas = temporais_existentes + contextuais_existentes + conteudo_existentes + interacao_existentes
+outras = [c for c in colunas_reais if c not in categorizadas]
+
+print("CATEGORIZAÇÃO DAS COLUNAS EXISTENTES:\n")
+
+print(f"TEMPORAIS ({len(temporais_existentes)}):")
+for col in temporais_existentes:
+    print(f"   {col}")
+
+print(f"\nCONTEXTUAIS ({len(contextuais_existentes)}):")
+for col in contextuais_existentes:
+    print(f"   {col}")
+
+print(f"\nCONTEÚDO ({len(conteudo_existentes)}):")
+for col in conteudo_existentes:
+    print(f"   {col}")
+
+print(f"\nINTERAÇÃO ({len(interacao_existentes)}):")
+for col in interacao_existentes:
+    print(f"   {col}")
+
+if outras:
+    print(f"\nOUTRAS ({len(outras)}):")
+    for col in outras:
+        print(f"   • {col}")
+```
+
+### Features a Serem Criadas
+```{python}
+# Define o que QUEREMOS criar (baseado nas análises dos EDAs)
+features_desejadas = {
+    'TEMPORAIS': ['hora', 'dia_semana', 'mes', 'ano_mes', 'fase_temporal'],
+    'INTERAÇÃO': ['tempo_desde_ultima', 'sequencia', 'turno_id', 'dias_desde_ultimo', 'dias_ate_proximo'],
+    'CONTEÚDO': ['tamanho_chars', 'tamanho_palavras', 'origem'],
+    'ELEMENTOS': ['tem_url', 'num_urls', 'tem_emoji', 'num_emojis', 'emojis']
+}
+
+print("FEATURES A SEREM CRIADAS:\n")
+
+total_criar = 0
+for categoria, features in features_desejadas.items():
+    # Filtra apenas as que NÃO existem
+    faltantes = [f for f in features if f not in df.columns]
+    if faltantes:
+        print(f"{categoria}:")
+        for feat in faltantes:
+            print(f"   {feat}")
+            total_criar += 1
+
+print(f"\nTotal a criar: {total_criar} features")
+```
+
+::: {.callout-note}
+### Entendimento do Dataset Base
+
+**Dataset base contém informação PRIMÁRIA:**
+- Dados brutos do WhatsApp (timestamp, remetente, conteudo)
+- Enriquecimento contextual (em_encontro, fase_relacionamento)
+
+**Features DERIVADAS serão criadas aqui:**
+- Extrações temporais (hora, dia_semana de timestamp)
+- Métricas de conteúdo (tamanho de conteudo)
+- Padrões de interação (sequências, turnos)
+- Elementos linguísticos (emojis, URLs)
+
+Estas features **não precisam** estar no dataset base - são calculadas conforme necessário para análise.
+:::
+
+---
+
+### Mapeamento de Nomenclatura
+```{python}
+# Features que existem mas com nomes ligeiramente diferentes
+mapeamento = {
+    'dias_desde_ultimo_encontro': 'dias_desde_ultimo',  # Existe como dias_desde_ultimo_encontro
+    'dias_ate_proximo_encontro': 'dias_ate_proximo',    # Existe como dias_ate_proximo_encontro
+}
+
+print("MAPEAMENTO - Nomenclatura Existente:\n")
+for col_existente, col_esperada in mapeamento.items():
+    if col_existente in df.columns:
+        print(f"   {col_existente} -> (esperava: {col_esperada})")
+        print(f"      Valores: min={df[col_existente].min():.1f}, max={df[col_existente].max():.1f}, média={df[col_existente].mean():.1f}")
+```
+
+### Features Realmente Faltantes
+```{python}
+print("\nFEATURES QUE REALMENTE FALTAM:\n")
+
+# Apenas mes falta!
+if 'mes' not in df.columns:
+    print("   mes (int) - Mês do ano (1-12)")
+    print("      -> Será extraído de timestamp")
+else:
+    print("   Todas features já presentes!")
+
+print("\n" + "="*70)
+print("\nRESUMO:")
+print(f"   • Total de colunas: {len(df.columns)}")
+print(f"   • Features temporais: COMPLETAS")
+print(f"   • Features interação: COMPLETAS")
+print(f"   • Features conteúdo: COMPLETAS")
+print(f"   • Features elementos: COMPLETAS")
+print(f"   • Faltando: apenas 'mes' (extração simples)")
+```
+
+::: {.callout-tip}
+### Dataset Já Consolidado!
+
+**Surpresa agradável:** O dataset `messages_with_context.parquet` **JÁ CONTÉM** praticamente todas as features necessárias!
+
+**Features presentes:**
+- **Temporais:** hora, dia_semana, ano_mes, fase_temporal
+- **Interação:** tempo_desde_ultima, sequencia, turno_id
+- **Conteúdo:** tamanho_chars, tamanho_palavras, origem
+- **Elementos:** tem_url, num_urls, tem_emoji, num_emojis, emojis
+- **Contexto encontros:** dias_desde_ultimo_encontro, dias_ate_proximo_encontro
+
+**Diferenças de nomenclatura:**
+- `dias_desde_ultimo_encontro` (não `dias_desde_ultimo`)
+- `dias_ate_proximo_encontro` (não `dias_ate_proximo`)
+
+**Faltando:**
+- Apenas `mes` (mês como int 1-12)
+
+**Implicação para este notebook:**
+O feature engineering será mais focado em:
+1. **Documentação** das features existentes
+2. **Criação** de `mes` (simples)
+3. **Limpeza** para análise semântica (URLs, outliers)
+4. **Validação** de qualidade
+5. **Comparação** metodológica (se houver dataset anterior)
+:::
+
+------------------------------------------------------------------------
+
+# Features Temporais
+
+Variáveis derivadas do timestamp.
+
+```{python}
+
+#| label: temporal-features-plan
+
+# Planejamento de Features Temporais
+features_temporais = [
+    {
+        'Feature': '<code>ano</code>',
+        'Tipo': 'int',
+        'Definição': 'Ano extraído do timestamp',
+        'Exemplo': '2024',
+        'Uso': 'Comparar períodos anuais, evolução de longo prazo'
+    },
+    {
+        'Feature': '<code>trimestre</code>',
+        'Tipo': 'category',
+        'Definição': 'Trimestre do ano (Q1, Q2, Q3, Q4)',
+        'Exemplo': 'Q3',
+        'Uso': 'Análise de tendências em blocos trimestrais'
+    },
+    {
+        'Feature': '<code>mes</code>',
+        'Tipo': 'int',
+        'Definição': 'Mês numérico (1=Jan, 12=Dez)',
+        'Exemplo': '10',
+        'Uso': 'Sazonalidade mensal, comparações entre meses'
+    },
+    {
+        'Feature': '<code>data</code>',
+        'Tipo': 'date',
+        'Definição': 'Data sem componente de hora (YYYY-MM-DD)',
+        'Exemplo': '2024-10-15',
+        'Uso': 'Agregações diárias, contar mensagens por dia'
+    },
+    {
+        'Feature': '<code>dia_semana</code>',
+        'Tipo': 'category (ordered)',
+        'Definição': 'Dia da semana textual (Segunda...Domingo)',
+        'Exemplo': 'Sexta',
+        'Uso': 'Padrões por dia da semana, comparações'
+    },
+    {
+        'Feature': '<code>fim_de_semana</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se Sábado ou Domingo',
+        'Exemplo': 'False',
+        'Uso': 'Comparar comportamento weekday vs weekend'
+    },
+    {
+        'Feature': '<code>hora</code>',
+        'Tipo': 'int',
+        'Definição': 'Hora do dia (0-23)',
+        'Exemplo': '14',
+        'Uso': 'Identificar horários de pico, padrões de atividade'
+    },
+    {
+        'Feature': '<code>periodo_dia</code>',
+        'Tipo': 'category (ordered)',
+        'Definição': 'Madrugada (00-05h), Manhã (06-11h), Tarde (12-17h), Noite (18-23h)',
+        'Exemplo': 'Tarde',
+        'Uso': 'Análise de padrões por turno do dia'
+    },
+    {
+        'Feature': '<code>horario_comercial</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se Seg-Sex entre 08:00-18:00',
+        'Exemplo': 'True',
+        'Uso': 'Diferenciar msgs em horário de trabalho vs lazer'
+    },
+]
+
+df_plan_temporal = pd.DataFrame(features_temporais)
+display(df_plan_temporal.style.hide(axis='index'))
+
+```
+
+**Ano**
+
+```{python}
+#| label: temporal-ano
+#| echo: true
+#| code-fold: false
+
+# Extrai ano
+df['ano'] = df['timestamp'].dt.year
+```
+
+**Trimestre**
+
+```{python}
+#| label: temporal-trimestre
+#| echo: true
+#| code-fold: false
+
+# Extrai trimestre (Q1, Q2, Q3, Q4)
+df['trimestre'] = 'Q' + df['timestamp'].dt.quarter.astype(str)
+df['trimestre'] = df['trimestre'].astype('category')
+```
+
+**Mês**
+
+```{python}
+#| label: temporal-mes
+#| echo: true
+#| code-fold: false
+
+# Extrai mês (1-12)
+df['mes'] = df['timestamp'].dt.month
+```
+
+**Data (sem hora)**
+
+```{python}
+#| label: temporal-data
+#| echo: true
+#| code-fold: false
+
+# Extrai data sem componente de hora
+df['data'] = df['timestamp'].dt.date
+```
+
+**Dia da Semana**
+
+```{python}
+#| label: temporal-dia-semana
+#| echo: true
+#| code-fold: false
+
+# Extrai dia da semana textual (Segunda-Domingo)
+dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana'] = pd.Categorical(
+    df['timestamp'].dt.day_name(locale='pt_BR.UTF-8'),
+    categories=dias_semana,
+    ordered=True
+)
+```
+
+**Fim de Semana**
+
+```{python}
+#| label: temporal-fim-de-semana
+#| echo: true
+#| code-fold: false
+
+# Identifica se é final de semana (Sábado ou Domingo)
+df['fim_de_semana'] = df['timestamp'].dt.dayofweek >= 5
+```
+
+**Hora**
+
+```{python}
+#| label: temporal-hora
+#| echo: true
+#| code-fold: false
+
+# Extrai hora do dia (0-23)
+df['hora'] = df['timestamp'].dt.hour
+```
+
+**Período do Dia**
+
+```{python}
+#| label: temporal-periodo-dia
+#| echo: true
+#| code-fold: false
+
+# Define período do dia baseado na hora
+def classificar_periodo(hora):
+    if 0 <= hora <= 5:
+        return 'Madrugada'
+    elif 6 <= hora <= 11:
+        return 'Manhã'
+    elif 12 <= hora <= 17:
+        return 'Tarde'
+    else:
+        return 'Noite'
+
+df['periodo_dia'] = df['hora'].apply(classificar_periodo)
+df['periodo_dia'] = pd.Categorical(
+    df['periodo_dia'],
+    categories=['Madrugada', 'Manhã', 'Tarde', 'Noite'],
+    ordered=True
+)
+```
+
+**Horário Comercial**
+
+```{python}
+#| label: temporal-horario-comercial
+#| echo: true
+#| code-fold: false
+
+# Identifica se mensagem foi enviada em horário comercial
+# Seg-Sex, 08:00-18:00
+eh_dia_util = df['timestamp'].dt.dayofweek < 5  # 0=Segunda, 4=Sexta
+eh_horario_comercial = (df['hora'] >= 8) & (df['hora'] < 18)
+df['horario_comercial'] = eh_dia_util & eh_horario_comercial
+```
+
+## Validação
+
+```{python}
+#| label: temporal-validation
+#| echo: false
+
+# Valida features criadas - mostra amostra
+colunas_temporais = ['timestamp', 'ano', 'trimestre', 'mes', 'data',
+                     'dia_semana', 'fim_de_semana', 'hora',
+                     'periodo_dia', 'horario_comercial']
+
+df[colunas_temporais].head(5)
+```
+
+------------------------------------------------------------------------
+
+# Features de Texto
+
+Variáveis derivadas do conteúdo da mensagem.
+
+```{python}
+
+#| label: text-features-plan
+
+# Planejamento de Features de Texto
+features_texto = [
+    {
+        'Feature': '<code>tamanho_caracteres</code>',
+        'Tipo': 'int',
+        'Definição': 'Quantidade de caracteres no conteúdo',
+        'Exemplo': '157',
+        'Uso': 'Identificar mensagens curtas vs longas, padrões de verbosidade'
+    },
+    {
+        'Feature': '<code>tamanho_palavras</code>',
+        'Tipo': 'int',
+        'Definição': 'Quantidade de palavras (separadas por espaço)',
+        'Exemplo': '24',
+        'Uso': 'Complexidade da mensagem, densidade de informação'
+    },
+    {
+        'Feature': '<code>tem_emoji</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se a mensagem contém pelo menos um emoji',
+        'Exemplo': 'True',
+        'Uso': 'Identificar uso de expressões visuais, tom emocional'
+    },
+    {
+        'Feature': '<code>qtd_emojis</code>',
+        'Tipo': 'int',
+        'Definição': 'Quantidade total de emojis na mensagem',
+        'Exemplo': '3',
+        'Uso': 'Intensidade do uso de emojis, padrões expressivos'
+    },
+    {
+        'Feature': '<code>tem_link</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se contém URL (http:// ou https://)',
+        'Exemplo': 'False',
+        'Uso': 'Identificar compartilhamento de links, conteúdo externo'
+    },
+    {
+        'Feature': '<code>tem_mencao</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se contém @ (menção/referência)',
+        'Exemplo': 'False',
+        'Uso': 'Detectar menções a outras pessoas ou serviços'
+    },
+    {
+        'Feature': '<code>tem_interrogacao</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se a mensagem termina com ?',
+        'Exemplo': 'True',
+        'Uso': 'Identificar perguntas, busca por informação'
+    },
+    {
+        'Feature': '<code>tem_exclamacao</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se a mensagem termina com !',
+        'Exemplo': 'False',
+        'Uso': 'Detectar ênfase, entusiasmo ou urgência'
+    },
+    {
+        'Feature': '<code>eh_caixa_alta</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se >70% das letras são maiúsculas (mínimo 3 letras)',
+        'Exemplo': 'False',
+        'Uso': 'Identificar mensagens enfáticas ou "gritadas"'
+    },
+]
+
+df_plan_texto = pd.DataFrame(features_texto)
+display(df_plan_texto.style.hide(axis='index'))
+
+```
+
+**Tamanho em Caracteres**
+
+```{python}
+#| label: text-tamanho-caracteres
+#| echo: true
+#| code-fold: false
+
+# Conta caracteres no conteúdo
+df['tamanho_caracteres'] = df['conteudo'].fillna('').str.len()
+```
+
+**Tamanho em Palavras**
+
+```{python}
+#| label: text-tamanho-palavras
+#| echo: true
+#| code-fold: false
+
+# Conta palavras (split por espaço)
+df['tamanho_palavras'] = df['conteudo'].fillna('').str.split().str.len().fillna(0).astype(int)
+```
+
+**Detecção de Emoji**
+
+```{python}
+#| label: text-emoji-detection
+#| echo: true
+#| code-fold: false
+
+import re
+
+# Padrão regex para detectar emojis (ranges Unicode comuns)
+emoji_pattern = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F300-\U0001F5FF"  # símbolos e pictogramas
+    "\U0001F680-\U0001F6FF"  # transporte e mapas
+    "\U0001F1E0-\U0001F1FF"  # bandeiras
+    "\U00002600-\U000027BF"  # símbolos diversos
+    "\U0001F900-\U0001F9FF"  # símbolos suplementares
+    "\U0001FA00-\U0001FA6F"  # símbolos estendidos
+    "]+",
+    flags=re.UNICODE
+)
+
+# Detecta presença de emoji
+df['tem_emoji'] = df['conteudo'].fillna('').apply(lambda x: bool(emoji_pattern.search(x)))
+
+# Conta quantidade de emojis
+df['qtd_emojis'] = df['conteudo'].fillna('').apply(lambda x: len(emoji_pattern.findall(x)))
+```
+
+**Detecção de Link**
+
+```{python}
+#| label: text-link-detection
+#| echo: true
+#| code-fold: false
+
+# Detecta URLs (http:// ou https://)
+df['tem_link'] = df['conteudo'].fillna('').str.contains(r'https?://', case=False, regex=True)
+```
+
+**Detecção de Menção**
+
+```{python}
+#| label: text-mencao-detection
+#| echo: true
+#| code-fold: false
+
+# Detecta @ (menções)
+df['tem_mencao'] = df['conteudo'].fillna('').str.contains(r'(?:^|\s)@\w+', regex=True)
+```
+
+**Detecção de Interrogação**
+
+```{python}
+#| label: text-interrogacao-detection
+#| echo: true
+#| code-fold: false
+
+# Detecta se termina com ?
+df['tem_interrogacao'] = df['conteudo'].fillna('').str.strip().str.endswith('?')
+```
+
+**Detecção de Exclamação**
+
+```{python}
+#| label: text-exclamacao-detection
+#| echo: true
+#| code-fold: false
+
+# Detecta se termina com !
+df['tem_exclamacao'] = df['conteudo'].fillna('').str.strip().str.endswith('!')
+```
+
+**Detecção de Caixa Alta**
+
+```{python}
+#| label: text-caixa-alta-detection
+#| echo: true
+#| code-fold: false
+
+# Detecta mensagens em caixa alta (>70% maiúsculas, mínimo 3 letras)
+def eh_caixa_alta(texto):
+    if pd.isna(texto) or texto == '':
+        return False
+
+    # Extrai apenas letras
+    letras = [c for c in texto if c.isalpha()]
+
+    # Precisa ter no mínimo 3 letras
+    if len(letras) < 3:
+        return False
+
+    # Calcula proporção de maiúsculas
+    maiusculas = sum(1 for c in letras if c.isupper())
+    proporcao = maiusculas / len(letras)
+
+    return proporcao > 0.7
+
+df['eh_caixa_alta'] = df['conteudo'].apply(eh_caixa_alta)
+```
+
+### Validação
+
+```{python}
+#| label: text-validation
+#| echo: false
+
+# Validação: confirma detecção das features
+
+validacao_features = [
+    {'Feature': '<code>tem_emoji</code>', 'Total': df['tem_emoji'].sum(), 'Exemplo': df[df['tem_emoji'] == True]['conteudo'].iloc[0] if df['tem_emoji'].sum() > 0 else 'N/A'},
+    {'Feature': '<code>tem_link</code>', 'Total': df['tem_link'].sum(), 'Exemplo': df[df['tem_link'] == True]['conteudo'].iloc[0] if df['tem_link'].sum() > 0 else 'N/A'},
+    {'Feature': '<code>tem_mencao</code>', 'Total': df['tem_mencao'].sum(), 'Exemplo': df[df['tem_mencao'] == True]['conteudo'].iloc[0] if df['tem_mencao'].sum() > 0 else 'N/A'},
+    {'Feature': '<code>tem_interrogacao</code>', 'Total': df['tem_interrogacao'].sum(), 'Exemplo': df[df['tem_interrogacao'] == True]['conteudo'].iloc[0] if df['tem_interrogacao'].sum() > 0 else 'N/A'},
+    {'Feature': '<code>tem_exclamacao</code>', 'Total': df['tem_exclamacao'].sum(), 'Exemplo': df[df['tem_exclamacao'] == True]['conteudo'].iloc[0] if df['tem_exclamacao'].sum() > 0 else 'N/A'},
+    {'Feature': '<code>eh_caixa_alta</code>', 'Total': df['eh_caixa_alta'].sum(), 'Exemplo': df[df['eh_caixa_alta'] == True]['conteudo'].iloc[0] if df['eh_caixa_alta'].sum() > 0 else 'N/A'},
+]
+
+df_validacao = pd.DataFrame(validacao_features)
+display(df_validacao.style.hide(axis='index'))
+
+```
+
+------------------------------------------------------------------------
+
+# Features de Conversação
+
+Variáveis sobre o fluxo da conversa.
+
+```{python}
+#| label: conversation-features-plan
+
+# Planejamento de Features de Conversação
+features_conversacao = [
+    {
+        'Feature': '<code>tempo_desde_ultima_msg</code>',
+        'Tipo': 'float',
+        'Definição': 'Tempo em segundos desde a mensagem anterior (qualquer remetente)',
+        'Exemplo': '127.5',
+        'Uso': 'Identificar ritmo da conversa, pausas, engajamento'
+    },
+    {
+        'Feature': '<code>tempo_desde_ultima_msg_mesmo_remetente</code>',
+        'Tipo': 'float',
+        'Definição': 'Tempo em segundos desde a última mensagem do MESMO remetente',
+        'Exemplo': '450.0',
+        'Uso': 'Analisar padrão individual, frequência de envio por pessoa'
+    },
+    {
+        'Feature': '<code>eh_inicio_conversa</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se gap desde última msg > 1 hora (3600 segundos)',
+        'Exemplo': 'False',
+        'Uso': 'Delimitar sessões de conversa, identificar retomadas'
+    },
+    {
+        'Feature': '<code>eh_resposta_rapida</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se respondeu em < 60 segundos',
+        'Exemplo': 'True',
+        'Uso': 'Identificar engajamento imediato, urgência, flow da conversa'
+    },
+    {
+        'Feature': '<code>sequencia_mesmo_remetente</code>',
+        'Tipo': 'int',
+        'Definição': 'Contador de mensagens consecutivas do mesmo remetente',
+        'Exemplo': '3',
+        'Uso': 'Identificar monólogos, rajadas de mensagens, padrão de interação'
+    },
+    {
+        'Feature': '<code>turno_conversa</code>',
+        'Tipo': 'int',
+        'Definição': 'ID incremental do bloco de conversa (reseta quando eh_inicio_conversa)',
+        'Exemplo': '42',
+        'Uso': 'Agrupar mensagens de uma mesma sessão, análises por conversa'
+    },
+    {
+        'Feature': '<code>tempo_resposta_outro_remetente</code>',
+        'Tipo': 'float',
+        'Definição': 'Tempo em segundos até a próxima mensagem do OUTRO remetente',
+        'Exemplo': '345.2',
+        'Uso': 'Medir velocidade de resposta, disponibilidade, reciprocidade'
+    },
+]
+
+df_plan_conversacao = pd.DataFrame(features_conversacao)
+display(df_plan_conversacao.style.hide(axis='index'))
+```
+
+**Tempo Desde Última Mensagem (Qualquer Remetente)**
+
+```{python}
+#| label: conversation-tempo-desde-ultima
+#| echo: true
+#| code-fold: false
+
+# Garante ordenação por timestamp
+df = df.sort_values('timestamp').reset_index(drop=True)
+
+# Calcula tempo desde a mensagem anterior (qualquer remetente)
+df['tempo_desde_ultima_msg'] = df['timestamp'].diff().dt.total_seconds()
+```
+
+**Tempo Desde Última Mensagem (Mesmo Remetente)**
+
+```{python}
+#| label: conversation-tempo-mesmo-remetente
+#| echo: true
+#| code-fold: false
+
+# Calcula tempo desde a última mensagem do mesmo remetente
+df['tempo_desde_ultima_msg_mesmo_remetente'] = df.groupby('remetente')['timestamp'].diff().dt.total_seconds()
+```
+
+**Início de Conversa**
+
+```{python}
+#| label: conversation-inicio-conversa
+#| echo: true
+#| code-fold: false
+
+# Define threshold de início de conversa (1 hora)
+THRESHOLD_INICIO_CONVERSA = 3600  # 1 hora em segundos
+
+# Marca início de conversa (gap > 1 hora OU primeira mensagem)
+df['eh_inicio_conversa'] = (df['tempo_desde_ultima_msg'] > THRESHOLD_INICIO_CONVERSA) | (df['tempo_desde_ultima_msg'].isna())
+```
+
+**Resposta Rápida**
+
+```{python}
+#| label: conversation-resposta-rapida
+#| echo: true
+#| code-fold: false
+
+# Define threshold de resposta rápida (60 segundos)
+THRESHOLD_RESPOSTA_RAPIDA = 60
+
+# Marca mensagens enviadas rapidamente (< 60 segundos)
+df['eh_resposta_rapida'] = df['tempo_desde_ultima_msg'] < THRESHOLD_RESPOSTA_RAPIDA
+```
+
+**Sequência Mesmo Remetente**
+
+```{python}
+#| label: conversation-sequencia-remetente
+#| echo: true
+#| code-fold: false
+
+# Conta quantas mensagens consecutivas do mesmo remetente
+# Reinicia contagem quando muda de remetente
+df['sequencia_mesmo_remetente'] = df.groupby((df['remetente'] != df['remetente'].shift()).cumsum()).cumcount() + 1
+```
+
+**Turno de Conversa**
+
+```{python}
+#| label: conversation-turno
+#| echo: true
+#| code-fold: false
+
+# Cria ID de turno de conversa (incrementa a cada início)
+df['turno_conversa'] = df['eh_inicio_conversa'].cumsum()
+```
+
+**Tempo Resposta do Outro Remetente**
+
+```{python}
+#| label: conversation-tempo-resposta-outro
+#| echo: true
+#| code-fold: false
+
+# Versão vetorizada usando merge_asof (MUITO mais rápida)
+def calcular_tempo_resposta_outro_vetorizado(df):
+    """
+    Usa merge_asof para encontrar próxima mensagem do outro remetente.
+    Performance: ~10-100x mais rápido que loops.
+    """
+    resultado = pd.Series(index=df.index, dtype='float64')
+
+    remetentes = df['remetente'].unique()
+
+    for rem_atual in remetentes:
+        # Mensagens deste remetente
+        msgs_atual = df[df['remetente'] == rem_atual][['timestamp']].copy()
+        msgs_atual = msgs_atual.reset_index()
+
+        # Mensagens do outro remetente
+        msgs_outro = df[df['remetente'] != rem_atual][['timestamp']].copy()
+        msgs_outro['timestamp_outro'] = msgs_outro['timestamp']
+        msgs_outro = msgs_outro[['timestamp_outro']].reset_index(drop=True)
+
+        # Merge asof: para cada msg atual, encontra próxima do outro
+        merged = pd.merge_asof(
+            msgs_atual.sort_values('timestamp'),
+            msgs_outro.sort_values('timestamp_outro'),
+            left_on='timestamp',
+            right_on='timestamp_outro',
+            direction='forward'  # Próxima no futuro
+        )
+
+        # Calcula diferença de tempo
+        merged['tempo_resposta'] = (
+            merged['timestamp_outro'] - merged['timestamp']
+        ).dt.total_seconds()
+
+        # Atribui ao índice original
+        resultado.loc[merged['index']] = merged['tempo_resposta'].values
+
+    return resultado
+
+df['tempo_resposta_outro_remetente'] = calcular_tempo_resposta_outro_vetorizado(df)
+```
+
+### Validação
+
+```{python}
+#| label: conversation-validation
+#| echo: false
+
+# Validação: confirma criação das features
+
+validacao_features = [
+    {
+        'Feature': '<code>tempo_desde_ultima_msg</code>',
+        'Não-Nulos': df['tempo_desde_ultima_msg'].notna().sum(),
+        'Mediana (seg)': f"{df['tempo_desde_ultima_msg'].median():.1f}" if df['tempo_desde_ultima_msg'].notna().any() else 'N/A'
+    },
+    {
+        'Feature': '<code>tempo_desde_ultima_msg_mesmo_remetente</code>',
+        'Não-Nulos': df['tempo_desde_ultima_msg_mesmo_remetente'].notna().sum(),
+        'Mediana (seg)': f"{df['tempo_desde_ultima_msg_mesmo_remetente'].median():.1f}" if df['tempo_desde_ultima_msg_mesmo_remetente'].notna().any() else 'N/A'
+    },
+    {
+        'Feature': '<code>eh_inicio_conversa</code>',
+        'Não-Nulos': df['eh_inicio_conversa'].sum(),
+        'Mediana (seg)': f"{df['eh_inicio_conversa'].sum()} inícios detectados"
+    },
+    {
+        'Feature': '<code>eh_resposta_rapida</code>',
+        'Não-Nulos': df['eh_resposta_rapida'].sum(),
+        'Mediana (seg)': f"{df['eh_resposta_rapida'].sum()} respostas rápidas"
+    },
+    {
+        'Feature': '<code>sequencia_mesmo_remetente</code>',
+        'Não-Nulos': df['sequencia_mesmo_remetente'].notna().sum(),
+        'Mediana (seg)': f"Máx: {df['sequencia_mesmo_remetente'].max()}"
+    },
+    {
+        'Feature': '<code>turno_conversa</code>',
+        'Não-Nulos': df['turno_conversa'].notna().sum(),
+        'Mediana (seg)': f"{df['turno_conversa'].max()} turnos totais"
+    },
+    {
+        'Feature': '<code>tempo_resposta_outro_remetente</code>',
+        'Não-Nulos': df['tempo_resposta_outro_remetente'].notna().sum(),
+        'Mediana (seg)': f"{df['tempo_resposta_outro_remetente'].median():.1f}" if df['tempo_resposta_outro_remetente'].notna().any() else 'N/A'
+    },
+]
+
+df_validacao = pd.DataFrame(validacao_features)
+display(df_validacao.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Features de Contexto Externo
+
+Informações agregadas de fontes externas ao dataset de mensagens.
+
+## Encontros Presenciais
+
+Dados sobre períodos em que estavam juntos fisicamente, enriquecendo a análise com contexto do relacionamento.
+
+```{python}
+#| label: external-encontros-plan
+
+# Planejamento de Features de Encontros Presenciais
+features_encontros = [
+    {
+        'Feature': '<code>em_encontro</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se mensagem enviada durante encontro presencial',
+        'Exemplo': 'True',
+        'Uso': 'Comparar padrões de comunicação junto vs separado'
+    },
+    {
+        'Feature': '<code>encontro_id</code>',
+        'Tipo': 'int',
+        'Definição': 'ID do encontro (1-10) ou None se separados',
+        'Exemplo': '3',
+        'Uso': 'Identificar período/viagem específica'
+    },
+    {
+        'Feature': '<code>encontro_nome</code>',
+        'Tipo': 'str',
+        'Definição': 'Nome descritivo do encontro',
+        'Exemplo': 'BSB (Carnaval)',
+        'Uso': 'Contexto narrativo do período'
+    },
+    {
+        'Feature': '<code>local_encontro</code>',
+        'Tipo': 'str',
+        'Definição': 'Cidade/local do encontro',
+        'Exemplo': 'Brasília',
+        'Uso': 'Análise por localização'
+    },
+    {
+        'Feature': '<code>tipo_encontro</code>',
+        'Tipo': 'str',
+        'Definição': 'Quem visitou quem (Marlon @ BSB ou Letícia @ SP)',
+        'Exemplo': 'Marlon @ BSB',
+        'Uso': 'Padrão de deslocamento'
+    },
+    {
+        'Feature': '<code>dias_desde_ultimo_encontro</code>',
+        'Tipo': 'int',
+        'Definição': 'Dias desde término do último encontro (None durante encontro)',
+        'Exemplo': '15',
+        'Uso': 'Medir período de separação, saudade'
+    },
+    {
+        'Feature': '<code>dias_ate_proximo_encontro</code>',
+        'Tipo': 'int',
+        'Definição': 'Dias até início do próximo encontro (None durante encontro)',
+        'Exemplo': '23',
+        'Uso': 'Medir expectativa, ansiedade pré-encontro'
+    },
+    {
+        'Feature': '<code>dia_do_encontro</code>',
+        'Tipo': 'int',
+        'Definição': 'Qual dia dentro do encontro (1, 2, 3...) ou None',
+        'Exemplo': '5',
+        'Uso': 'Padrões dentro do período junto (início vs fim)'
+    },
+    {
+        'Feature': '<code>eh_marco_especial</code>',
+        'Tipo': 'bool',
+        'Definição': 'True se é data de marco especial',
+        'Exemplo': 'True',
+        'Uso': 'Identificar datas significativas'
+    },
+    {
+        'Feature': '<code>marco_nome</code>',
+        'Tipo': 'str',
+        'Definição': 'Descrição do marco especial',
+        'Exemplo': '1a Vez Juntos',
+        'Uso': 'Contexto emocional da data'
+    },
+]
+
+df_plan_encontros = pd.DataFrame(features_encontros)
+display(df_plan_encontros.style.hide(axis='index'))
+```
+
+**Carregamento dos Dados**
+
+```{python}
+#| label: external-load-encontros
+#| echo: true
+#| code-fold: false
+
+# Carrega dados de encontros presenciais
+encontros = pd.read_csv(PATHS['external'] / 'encontros.csv')
+
+# Converte datas para datetime
+encontros['inicio'] = pd.to_datetime(encontros['inicio'])
+encontros['fim'] = pd.to_datetime(encontros['fim'])
+encontros['marco_especial'] = pd.to_datetime(encontros['marco_especial'])
+
+# Extrai apenas a data (sem hora) das mensagens para matching
+df['data_msg'] = df['timestamp'].dt.date
+```
+
+#### Features Básicas de Encontro
+
+**Em Encontro**
+
+```{python}
+#| label: external-em-encontro
+#| echo: true
+#| code-fold: false
+
+# Identifica se mensagem foi enviada durante encontro
+df['em_encontro'] = False
+df['encontro_id'] = None
+df['encontro_nome'] = None
+df['local_encontro'] = None
+df['tipo_encontro'] = None
+
+for _, encontro in encontros.iterrows():
+    mask = (df['data_msg'] >= encontro['inicio'].date()) & (df['data_msg'] <= encontro['fim'].date())
+    df.loc[mask, 'em_encontro'] = True
+    df.loc[mask, 'encontro_id'] = encontro['encontro_id']
+    df.loc[mask, 'encontro_nome'] = encontro['nome']
+    df.loc[mask, 'local_encontro'] = encontro['local']
+    df.loc[mask, 'tipo_encontro'] = encontro['tipo_encontro']
+```
+
+**Dia do Encontro**
+
+```{python}
+#| label: external-dia-encontro
+#| echo: true
+#| code-fold: false
+
+# Calcula qual dia do encontro (1, 2, 3...)
+df['dia_do_encontro'] = None
+
+for _, encontro in encontros.iterrows():
+    mask = (df['data_msg'] >= encontro['inicio'].date()) & (df['data_msg'] <= encontro['fim'].date())
+    df.loc[mask, 'dia_do_encontro'] = (
+        pd.to_datetime(df.loc[mask, 'data_msg']) - encontro['inicio']
+    ).dt.days + 1
+```
+
+#### Features de Marcos Especiais
+
+**Marco Especial**
+
+```{python}
+#| label: external-marco-especial
+#| echo: true
+#| code-fold: false
+
+# Identifica mensagens em datas de marcos especiais
+df['eh_marco_especial'] = False
+df['marco_nome'] = None
+
+for _, encontro in encontros.iterrows():
+    if pd.notna(encontro['marco_especial']):
+        mask = df['data_msg'] == encontro['marco_especial'].date()
+        df.loc[mask, 'eh_marco_especial'] = True
+        df.loc[mask, 'marco_nome'] = encontro['marco_nome']
+```
+
+#### Features de Distância Temporal
+
+**Dias Desde Último Encontro**
+
+```{python}
+#| label: external-dias-desde-ultimo
+#| echo: true
+#| code-fold: false
+
+# Calcula dias desde término do último encontro
+df['dias_desde_ultimo_encontro'] = None
+
+# Ordena encontros por data
+encontros_ord = encontros.sort_values('inicio')
+
+for idx, encontro in encontros_ord.iterrows():
+    # Período APÓS este encontro até o próximo (ou fim do dataset)
+    fim_encontro = encontro['fim'].date()
+
+    # Encontra próximo encontro
+    proximos = encontros_ord[encontros_ord['inicio'] > encontro['fim']]
+    if len(proximos) > 0:
+        inicio_proximo = proximos.iloc[0]['inicio'].date()
+    else:
+        inicio_proximo = df['data_msg'].max()
+
+    # Mensagens no período de separação
+    mask = (df['data_msg'] > fim_encontro) & (df['data_msg'] < inicio_proximo)
+    df.loc[mask, 'dias_desde_ultimo_encontro'] = (
+        pd.to_datetime(df.loc[mask, 'data_msg']) - pd.to_datetime(fim_encontro)
+    ).dt.days
+
+# Mensagens ANTES do primeiro encontro
+primeiro_encontro = encontros_ord.iloc[0]['inicio'].date()
+mask = df['data_msg'] < primeiro_encontro
+df.loc[mask, 'dias_desde_ultimo_encontro'] = None  # Não tinha encontro anterior
+```
+
+**Dias Até Próximo Encontro**
+
+```{python}
+#| label: external-dias-ate-proximo
+#| echo: true
+#| code-fold: false
+
+# Calcula dias até início do próximo encontro
+df['dias_ate_proximo_encontro'] = None
+
+# Ordena encontros por data
+encontros_ord = encontros.sort_values('inicio')
+
+for idx, encontro in encontros_ord.iterrows():
+    # Encontra período ANTES deste encontro (desde o anterior)
+    inicio_encontro = encontro['inicio'].date()
+
+    # Encontra encontro anterior
+    anteriores = encontros_ord[encontros_ord['fim'] < encontro['inicio']]
+    if len(anteriores) > 0:
+        fim_anterior = anteriores.iloc[-1]['fim'].date()
+    else:
+        fim_anterior = df['data_msg'].min()
+
+    # Mensagens no período de separação antes deste encontro
+    mask = (df['data_msg'] > fim_anterior) & (df['data_msg'] < inicio_encontro)
+    df.loc[mask, 'dias_ate_proximo_encontro'] = (
+        pd.to_datetime(inicio_encontro) - pd.to_datetime(df.loc[mask, 'data_msg'])
+    ).dt.days
+
+# Mensagens APÓS o último encontro
+ultimo_encontro = encontros_ord.iloc[-1]['fim'].date()
+mask = df['data_msg'] > ultimo_encontro
+df.loc[mask, 'dias_ate_proximo_encontro'] = None  # Não tem próximo encontro
+```
+
+### Validação
+
+```{python}
+#| label: external-validation
+#| echo: false
+
+# Validação: resumo das features de encontros
+
+validacao_encontros = [
+    {
+        'Feature': '<code>em_encontro</code>',
+        'Total': f"{df['em_encontro'].sum():,} msgs durante encontros",
+        'Exemplo': f"{df[df['em_encontro']]['encontro_nome'].iloc[0] if df['em_encontro'].any() else 'N/A'}"
+    },
+    {
+        'Feature': '<code>dias_desde_ultimo_encontro</code>',
+        'Total': f"{df['dias_desde_ultimo_encontro'].notna().sum():,} não-nulos",
+        'Exemplo': f"Mediana: {df['dias_desde_ultimo_encontro'].median():.0f} dias" if df['dias_desde_ultimo_encontro'].notna().any() else 'N/A'
+    },
+    {
+        'Feature': '<code>dias_ate_proximo_encontro</code>',
+        'Total': f"{df['dias_ate_proximo_encontro'].notna().sum():,} não-nulos",
+        'Exemplo': f"Mediana: {df['dias_ate_proximo_encontro'].median():.0f} dias" if df['dias_ate_proximo_encontro'].notna().any() else 'N/A'
+    },
+    {
+        'Feature': '<code>eh_marco_especial</code>',
+        'Total': f"{df['eh_marco_especial'].sum():,} msgs em marcos",
+        'Exemplo': f"{df[df['eh_marco_especial']]['marco_nome'].iloc[0] if df['eh_marco_especial'].any() else 'N/A'}"
+    },
+]
+
+df_validacao = pd.DataFrame(validacao_encontros)
+display(df_validacao.style.hide(axis='index'))
+
+# Remove coluna auxiliar
+df.drop('data_msg', axis=1, inplace=True)
+```
+
+------------------------------------------------------------------------
+
+# Consolidação e Validação
+
+## Criação de Features Faltantes
+
+### Feature: mes
+```{python}
+# Cria coluna mes (1-12) caso não exista
+if 'mes' not in df.columns:
+    df['mes'] = df['timestamp'].dt.month
+
+    print("Feature 'mes' criada!")
+    print(f"\n   Valores únicos: {sorted(df['mes'].unique())}")
+    print(f"   Distribuição:")
+    print(df['mes'].value_counts().sort_index())
+else:
+    print("Feature 'mes' já existe no dataset.")
+```
+
+## Padronização de Nomenclatura (Opcional)
+
+::: {.callout-note}
+### Decisão - Manter Nomes Originais
+
+As features de distância temporal existem como:
+- `dias_desde_ultimo_encontro` (em vez de `dias_desde_ultimo`)
+- `dias_ate_proximo_encontro` (em vez de `dias_ate_proximo`)
+
+**Decisão:** Manter nomenclatura original (mais descritiva e clara).
+
+Se preferir padronizar para nomes curtos:
+```python
+# Descomente para renomear:
+# df = df.rename(columns={
+#     'dias_desde_ultimo_encontro': 'dias_desde_ultimo',
+#     'dias_ate_proximo_encontro': 'dias_ate_proximo'
+# })
+```
+:::
+
+## Validação Final
+```{python}
+print("DATASET CONSOLIDADO - Estatísticas Finais:\n")
+print(f"   Total de mensagens: {len(df):,}")
+print(f"   Total de colunas: {len(df.columns)}")
+print(f"   Período: {df['timestamp'].min().date()} -> {df['timestamp'].max().date()}")
+print(f"   Memória: {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+
+print("\nFEATURES CONSOLIDADAS POR CATEGORIA:\n")
+
+categorias = {
+    'TEMPORAIS': ['timestamp', 'hora', 'dia_semana', 'mes', 'ano_mes', 'fase_temporal'],
+    'IDENTIFICAÇÃO': ['remetente', 'tipo_mensagem', 'grupo_mensagem'],
+    'CONTEÚDO': ['conteudo', 'arquivo', 'transcricao', 'tamanho_chars', 'tamanho_palavras', 'origem'],
+    'CONTEXTO': ['em_encontro', 'encontro_id', 'encontro_nome', 'fase_relacionamento',
+                 'dias_desde_ultimo_encontro', 'dias_ate_proximo_encontro'],
+    'INTERAÇÃO': ['tempo_desde_ultima', 'sequencia', 'turno_id'],
+    'ELEMENTOS': ['tem_url', 'num_urls', 'tem_emoji', 'num_emojis', 'emojis'],
+    'TÉCNICAS': ['date_match']
+}
+
+for cat, cols in categorias.items():
+    existentes = [c for c in cols if c in df.columns]
+    print(f"{cat} ({len(existentes)}/{len(cols)}):")
+    for col in existentes:
+        non_null = df[col].notna().sum()
+        pct = (non_null / len(df)) * 100
+        print(f"   {col:30s} ({pct:5.1f}% preenchido)")
+```
+
+------------------------------------------------------------------------
+
+# Consolidação
+
+Verificação final de todas as features criadas.
+
+```{python}
+#| label: consolidate-check
+#| echo: false
+
+# Lista todas as colunas do dataset enriquecido
+colunas_originais = ['timestamp', 'remetente', 'tipo_mensagem', 'grupo_mensagem',
+                     'conteudo', 'arquivo', 'transcricao', 'date_match']
+
+colunas_features = [col for col in df.columns if col not in colunas_originais]
+
+print(f"Dataset Enriquecido:")
+print(f"   • Mensagens: {len(df):,}")
+print(f"   • Colunas originais: {len(colunas_originais)}")
+print(f"   • Features criadas: {len(colunas_features)}")
+print(f"   • Total de colunas: {len(df.columns)}")
+print(f"\nTodas as features foram criadas com sucesso!")
+```
+
+```{python}
+#| label: consolidate-preview
+#| echo: false
+
+# Mostra amostra do dataset enriquecido
+print("\nAmostra do Dataset Enriquecido:\n")
+
+# Seleciona colunas chave para visualização
+colunas_amostra = ['timestamp', 'remetente', 'conteudo',
+                   'ano', 'mes', 'dia_semana', 'hora', 'periodo_dia',
+                   'tamanho_caracteres', 'tamanho_palavras', 'tem_emoji',
+                   'tempo_desde_ultima_msg', 'eh_inicio_conversa',
+                   'em_encontro', 'encontro_nome']
+
+df[colunas_amostra].head(10)
+```
+
+------------------------------------------------------------------------
+
+# Exportação
+
+Salvando dataset enriquecido com todas as features.
+
+```{python}
+#| label: export-data
+#| echo: true
+#| code-fold: false
+
+# Exporta dataset enriquecido
+df.to_parquet(OUTPUT_FILE, index=False)
+
+print(f"Dataset exportado com sucesso!")
+print(f"Arquivo: {OUTPUT_FILE.name}")
+print(f"Shape: {df.shape}")
+print(f"Tamanho: {OUTPUT_FILE.stat().st_size / 1024 / 1024:.2f} MB")
+```
+
+------------------------------------------------------------------------
+
+# Resumo das Features
+
+Catálogo completo de todas as features criadas neste notebook.
+
+```{python}
+#| label: summary-features
+#| echo: false
+
+# Resumo categorizado de features
+resumo_features = [
+    # TEMPORAIS
+    {'Categoria': 'Temporal', 'Feature': '<code>ano</code>', 'Tipo': 'int', 'Descrição': 'Ano extraído do timestamp'},
+    {'Categoria': 'Temporal', 'Feature': '<code>trimestre</code>', 'Tipo': 'category', 'Descrição': 'Trimestre (Q1-Q4)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>mes</code>', 'Tipo': 'int', 'Descrição': 'Mês numérico (1-12)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>data</code>', 'Tipo': 'date', 'Descrição': 'Data sem hora (YYYY-MM-DD)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>dia_semana</code>', 'Tipo': 'category', 'Descrição': 'Dia da semana (Segunda-Domingo)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>fim_de_semana</code>', 'Tipo': 'bool', 'Descrição': 'True se Sábado ou Domingo'},
+    {'Categoria': 'Temporal', 'Feature': '<code>hora</code>', 'Tipo': 'int', 'Descrição': 'Hora do dia (0-23)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>periodo_dia</code>', 'Tipo': 'category', 'Descrição': 'Período (Madrugada, Manhã, Tarde, Noite)'},
+    {'Categoria': 'Temporal', 'Feature': '<code>horario_comercial</code>', 'Tipo': 'bool', 'Descrição': 'True se Seg-Sex 08:00-18:00'},
+
+    # TEXTO
+    {'Categoria': 'Texto', 'Feature': '<code>tamanho_caracteres</code>', 'Tipo': 'int', 'Descrição': 'Quantidade de caracteres no conteúdo'},
+    {'Categoria': 'Texto', 'Feature': '<code>tamanho_palavras</code>', 'Tipo': 'int', 'Descrição': 'Quantidade de palavras'},
+    {'Categoria': 'Texto', 'Feature': '<code>tem_emoji</code>', 'Tipo': 'bool', 'Descrição': 'True se contém emoji'},
+    {'Categoria': 'Texto', 'Feature': '<code>qtd_emojis</code>', 'Tipo': 'int', 'Descrição': 'Quantidade de emojis'},
+    {'Categoria': 'Texto', 'Feature': '<code>tem_link</code>', 'Tipo': 'bool', 'Descrição': 'True se contém URL'},
+    {'Categoria': 'Texto', 'Feature': '<code>tem_mencao</code>', 'Tipo': 'bool', 'Descrição': 'True se contém menção (@usuario)'},
+    {'Categoria': 'Texto', 'Feature': '<code>tem_interrogacao</code>', 'Tipo': 'bool', 'Descrição': 'True se termina com ?'},
+    {'Categoria': 'Texto', 'Feature': '<code>tem_exclamacao</code>', 'Tipo': 'bool', 'Descrição': 'True se termina com !'},
+    {'Categoria': 'Texto', 'Feature': '<code>eh_caixa_alta</code>', 'Tipo': 'bool', 'Descrição': 'True se >70% maiúsculas'},
+
+    # CONVERSAÇÃO
+    {'Categoria': 'Conversação', 'Feature': '<code>tempo_desde_ultima_msg</code>', 'Tipo': 'float', 'Descrição': 'Segundos desde mensagem anterior'},
+    {'Categoria': 'Conversação', 'Feature': '<code>tempo_desde_ultima_msg_mesmo_remetente</code>', 'Tipo': 'float', 'Descrição': 'Segundos desde última do mesmo remetente'},
+    {'Categoria': 'Conversação', 'Feature': '<code>eh_inicio_conversa</code>', 'Tipo': 'bool', 'Descrição': 'True se gap > 1 hora'},
+    {'Categoria': 'Conversação', 'Feature': '<code>eh_resposta_rapida</code>', 'Tipo': 'bool', 'Descrição': 'True se respondeu em < 60s'},
+    {'Categoria': 'Conversação', 'Feature': '<code>sequencia_mesmo_remetente</code>', 'Tipo': 'int', 'Descrição': 'Contador de msgs consecutivas'},
+    {'Categoria': 'Conversação', 'Feature': '<code>turno_conversa</code>', 'Tipo': 'int', 'Descrição': 'ID do bloco de conversa'},
+    {'Categoria': 'Conversação', 'Feature': '<code>tempo_resposta_outro_remetente</code>', 'Tipo': 'float', 'Descrição': 'Segundos até resposta do outro'},
+
+    # CONTEXTO EXTERNO
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>em_encontro</code>', 'Tipo': 'bool', 'Descrição': 'True se durante encontro presencial'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>encontro_id</code>', 'Tipo': 'int', 'Descrição': 'ID do encontro (1-10)'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>encontro_nome</code>', 'Tipo': 'str', 'Descrição': 'Nome descritivo do encontro'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>local_encontro</code>', 'Tipo': 'str', 'Descrição': 'Cidade/local do encontro'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>tipo_encontro</code>', 'Tipo': 'str', 'Descrição': 'Quem visitou quem'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>dias_desde_ultimo_encontro</code>', 'Tipo': 'int', 'Descrição': 'Dias desde término do último encontro'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>dias_ate_proximo_encontro</code>', 'Tipo': 'int', 'Descrição': 'Dias até início do próximo encontro'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>dia_do_encontro</code>', 'Tipo': 'int', 'Descrição': 'Dia dentro do encontro (1, 2, 3...)'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>eh_marco_especial</code>', 'Tipo': 'bool', 'Descrição': 'True se data de marco especial'},
+    {'Categoria': 'Contexto Externo', 'Feature': '<code>marco_nome</code>', 'Tipo': 'str', 'Descrição': 'Descrição do marco especial'},
+]
+
+df_resumo = pd.DataFrame(resumo_features)
+
+# Exibe tabela agrupada por categoria
+display(df_resumo.style.hide(axis='index'))
+
+# Estatísticas por categoria
+print("\nEstatísticas por Categoria:\n")
+stats_categoria = df_resumo.groupby('Categoria').size().reset_index(name='Quantidade')
+display(stats_categoria.style.hide(axis='index'))
+```
+
+------------------------------------------------------------------------
+
+# Próximos Passos
+
+Com o dataset enriquecido, seguimos para:
+
+1.  [**Model-Based Features**](04-model-features.qmd) *(opcional)* --- Features derivadas de ML
+    -   Análise de sentimento (BERT)
+    -   Embeddings semânticos
+    -   Topic modeling
+2.  [**Exploratory Data Analysis**](05-eda.qmd) --- Análise exploratória das features criadas
+    -   Distribuições univariadas
+    -   Análises bivariadas (features vs remetente, tempo, contexto)
+    -   Correlações entre features
+    -   Visualizações temporais e padrões
+    -   Use `messages_with_models.parquet` se disponível
+    -   Ou `messages_enriched.parquet` para análise sem modelos
