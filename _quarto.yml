@@ -141,7 +141,7 @@ format:
     highlight-style: github
 
 execute:
-  freeze: auto
+  freeze: true
   warning: false
   message: false
   echo: true
