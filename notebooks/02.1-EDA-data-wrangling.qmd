@@ -474,7 +474,7 @@ fig.show()
 
 **Implicação:** A feature `grupo_mensagem` combinada com `remetente` tem **poder discriminatório** - P1 e P2 têm estilos de comunicação distintos (P1 = mais áudio, P2 = mais texto).
 
----
+***
 
 **Proporções gerais:**
 - **P1:** 70.8% texto | 26.1% mídia (áudio/vídeo/imagem)
@@ -727,7 +727,7 @@ else:
 - ✅ Feature `hora` sozinha já captura o padrão (universal para ambos)
 - 🎯 Relacionamento sincronizado - conversam nos mesmos horários
 
----
+***
 **Paradoxo estatístico:**
 - Chi-square: **p < 0.001** → Estatisticamente diferente
 - **MAS** efeito prático é **mínimo** (curvas visualmente sobrepostas)
@@ -804,7 +804,7 @@ fig.show()
 - ⚠️ `dia_semana` (7 níveis): manter por completude
 - ❌ `fim_de_semana` (booleana): **baixíssimo poder** (desconsiderar)
 
----
+***
 
 **Uniformidade visual total:**
 - P1 e P2: ~12-15% em todos os dias (barras alinhadas)
@@ -1153,7 +1153,7 @@ print(f"• Período do dia mais ativo: {periodo_pico} ({msgs_por_periodo[period
 - 🔍 Validar se gaps coincidem com datas de encontros
 :::
 
----
+***
 
 ::: {.callout-important}
 ### 🔍 Nota Importante - Limitação da Análise Atual
@@ -1181,7 +1181,7 @@ Esta análise exploratória identificou **padrões temporais fortes** (hora do d
 ------------------------------------------------------------------------
 
 
----
+***
 
 # Resumo Executivo - EDA Data Wrangling
 
@@ -1194,7 +1194,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 - **8 colunas básicas:** timestamp, remetente, tipo_mensagem, grupo_mensagem, conteudo, arquivo, transcricao, date_match
 - **2 remetentes:** P1 (51.1%) e P2 (48.9%) - distribuição equilibrada
 
----
+***
 
 ## Tabela Resumo - Análises Realizadas
 
@@ -1211,7 +1211,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 | **P1 vs P2 - Hora** | Pico idêntico (19h para ambos) <br> Curvas sobrepostas | Chi²: p<0.001 mas efeito prático mínimo | ❌ Evitar: `hora × remetente` (rotinas sincronizadas) <br> 📚 Lição: significância ≠ relevância prática |
 | **P1 vs P2 - Dia** | Distribuição uniforme para ambos (12-15% todos os dias) | Chi²: p=0.027 mas efeito prático mínimo | ❌ Evitar: `dia_semana × remetente` (padrões idênticos) |
 
----
+***
 
 ## Achados Críticos
 
@@ -1234,7 +1234,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 
 **Ação obrigatória:** Integrar dados de encontros ANTES de continuar EDA
 
----
+***
 
 ## Features Recomendadas para FE
 
@@ -1264,7 +1264,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 |---------|------------|
 | `dia_semana` | Variação existe (p<0.001) mas não sistemática |
 
----
+***
 
 ## Contexto Externo - Próximos Passos
 
@@ -1286,7 +1286,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
    - Padrões de interação (com/sem encontros)
 6. **Feature Engineering** completo
 
----
+***
 
 ## Lições Aprendidas
 
@@ -1306,13 +1306,13 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
    - Heatmap sugeria padrão alternado (visual)
    - Testes mostraram p=0.75 (ruído aleatório)
 
----
+***
 
 **Dataset exportado:** `messages.parquet` (91.924 × 8 colunas)  
 **Próximo arquivo:** `02.2-adicionar-contexto-externo.qmd`
 
 
----
+***
 # Análise de Conteúdo
 
 ## Mensagens com Texto
