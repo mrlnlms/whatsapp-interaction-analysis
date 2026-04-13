@@ -2,6 +2,8 @@
 
 > End-to-end data science pipeline for WhatsApp conversation analysis — profiling, cleaning, sentiment analysis, embeddings, clustering.
 
+**[Ver site publicado](https://mrlnlms.github.io/whatsapp-interaction-analysis/)**
+
 ## About
 
 Pipeline completo de Data Science para análise de conversas do WhatsApp. O caso de estudo é um export com ~92.000 mensagens ao longo de 1 ano.
@@ -89,7 +91,7 @@ whatsapp-interaction-analysis/
 
 ## Notebooks
 
-### Preparation
+### Preparação
 
 | # | Notebook | Descrição |
 |---|---------|-----------|
@@ -97,9 +99,12 @@ whatsapp-interaction-analysis/
 | 00 | [Data Profiling](notebooks/00-data-profiling.qmd) | Investigação sistemática |
 | 01 | [Data Cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | 02 | [Data Wrangling](notebooks/02-data-wrangling.qmd) | Parsing, mídia, transcrição |
-| 03 | [Feature Engineering](notebooks/03-feature-engineering.qmd) | Criação de 35+ variáveis |
+| 02.1 | [EDA — Data Wrangling](notebooks/02.1-EDA-data-wrangling.qmd) | EDA pós-wrangling |
+| 02.3 | [EDA — Conteúdo e Interação](notebooks/02.3-EDA-conteudo-interacao.qmd) | Análise de conteúdo |
+| 03 | [Contexto Externo](notebooks/03-contexto-externo.qmd) | Integração de dados externos e fases do relacionamento |
+| 04 | [Feature Engineering](notebooks/04-feature-engineering.qmd) | Criação de 35+ variáveis derivadas |
 
-### Model Features (opcional)
+### Modelos (opcional)
 
 | # | Notebook | Descrição |
 |---|---------|-----------|
@@ -114,20 +119,14 @@ whatsapp-interaction-analysis/
 | 04h | [Embeddings — DistilUSE](notebooks/04h-embeddings-distiluse.qmd) | distiluse-base-multilingual |
 | 04i | [Embeddings — Comparison](notebooks/04i-embeddings-comparison.qmd) | Comparação entre modelos |
 
-### Analysis
+### Análise
 
 | # | Notebook | Descrição |
 |---|---------|-----------|
-| 02.1 | [EDA — Data Wrangling](notebooks/02.1-EDA-data-wrangling.qmd) | EDA pós-wrangling |
-| 02.2 | [Contexto Externo](notebooks/02.2-adicionar-contexto-externo.qmd) | Integração de dados externos |
-| 02.3 | [EDA — Conteúdo e Interação](notebooks/02.3-EDA-conteudo-interacao.qmd) | Análise de conteúdo |
-| 03 | [Contexto Externo](notebooks/03-contexto-externo.qmd) | Pipeline de contexto |
-| 04 | [EDA — Overview](notebooks/04-eda-overview.qmd) | Visão geral da EDA |
-| 04.1 | [EDA — Temporal](notebooks/04.1-eda-temporal.qmd) | Padrões temporais |
-| 04.2 | [EDA — Interação](notebooks/04.2-eda-interacao.qmd) | Dinâmicas de interação |
-| 04.3 | [EDA — Conteúdo](notebooks/04.3-eda-conteudo.qmd) | Análise de conteúdo |
-| 05 | [EDA](notebooks/05-eda.qmd) | Análise exploratória geral |
-| 05 | [Feature Engineering](notebooks/05-feature-engineering.qmd) | Feature engineering final |
+| 05 | [EDA — Overview](notebooks/05-eda-overview.qmd) | Análise exploratória com contexto |
+| 05.1 | [EDA — Temporal](notebooks/05.1-eda-temporal.qmd) | Padrões temporais |
+| 05.2 | [EDA — Interação](notebooks/05.2-eda-interacao.qmd) | Dinâmicas de interação |
+| 05.3 | [EDA — Conteúdo](notebooks/05.3-eda-conteudo.qmd) | Análise de conteúdo |
 | 06 | [Advanced Analysis](notebooks/06-advanced-analysis.qmd) | Clustering semântico, N-Grams, TF-IDF |
 
 ## Quick Start
@@ -207,7 +206,7 @@ pip install pytest
 pytest tests/ -v
 ```
 
-75 testes cobrindo o pipeline de limpeza (cleaning.py), parsing/classificação (wrangling.py) e CLI. CI roda automaticamente via GitHub Actions em Python 3.11 e 3.12.
+149 testes cobrindo o pipeline de limpeza (cleaning.py), parsing/classificação (wrangling.py) e CLI. CI roda automaticamente via GitHub Actions em Python 3.11 e 3.12.
 
 ## Tech Stack
 
