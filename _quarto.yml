@@ -6,17 +6,18 @@ project:
     - "notebooks/*.qmd"
     - "docs/*.md"
     - "!docs/archive/**"
+    - "!notebooks/archive/**"
 
 website:
   title: "WhatsApp DS Analytics"
   description: "Pipeline de Data Science para análise de conversas do WhatsApp"
-  
+
   navbar:
     title: "WhatsApp DS Analytics"
     left:
       - href: index.qmd
         text: Home
-      - text: "Notebooks"
+      - text: Preparação
         menu:
           - href: notebooks/00-data-discovery.qmd
             text: "00 - Data Discovery"
@@ -26,40 +27,103 @@ website:
             text: "01 - Data Cleaning"
           - href: notebooks/02-data-wrangling.qmd
             text: "02 - Data Wrangling"
-          - href: notebooks/03-feature-engineering.qmd
-            text: "03 - Feature Engineering"
+          - href: notebooks/02.1-EDA-data-wrangling.qmd
+            text: "02.1 - EDA Data Wrangling"
+          - href: notebooks/02.3-EDA-conteudo-interacao.qmd
+            text: "02.3 - EDA Conteúdo e Interação"
+          - href: notebooks/03-contexto-externo.qmd
+            text: "03 - Contexto Externo"
+          - href: notebooks/04-feature-engineering.qmd
+            text: "04 - Feature Engineering"
+      - text: Modelos
+        menu:
           - href: notebooks/04-model-features.qmd
-            text: "04 - Model Features"
-          - href: notebooks/05-eda.qmd
-            text: "05 - EDA"
+            text: "Modelos — Overview"
+          - text: "---"
+          - text: "Sentiment Analysis"
+          - href: notebooks/04a-sentiment-roberta.qmd
+            text: "04a - RoBERTa"
+          - href: notebooks/04b-sentiment-distilbert.qmd
+            text: "04b - DistilBERT"
+          - href: notebooks/04c-sentiment-deberta.qmd
+            text: "04c - DeBERTa"
+          - href: notebooks/04d-sentiment-comparison.qmd
+            text: "04d - Comparação"
+          - href: notebooks/04e-sentiment-ensemble.qmd
+            text: "04e - Ensemble"
+          - text: "---"
+          - text: "Embeddings"
+          - href: notebooks/04f-embeddings-mpnet.qmd
+            text: "04f - MPNet"
+          - href: notebooks/04g-embeddings-minilm.qmd
+            text: "04g - MiniLM"
+          - href: notebooks/04h-embeddings-distiluse.qmd
+            text: "04h - DistilUSE"
+          - href: notebooks/04i-embeddings-comparison.qmd
+            text: "04i - Comparação"
+      - text: Análise
+        menu:
+          - href: notebooks/05-eda-overview.qmd
+            text: "05 - EDA Overview"
+          - href: notebooks/05.1-eda-temporal.qmd
+            text: "05.1 - EDA Temporal"
+          - href: notebooks/05.2-eda-interacao.qmd
+            text: "05.2 - EDA Interação"
+          - href: notebooks/05.3-eda-conteudo.qmd
+            text: "05.3 - EDA Conteúdo"
           - href: notebooks/06-advanced-analysis.qmd
-            text: "06 - Advanced Analysis"
-      - href: docs/data-dictionary.md
-        text: "Dicionário de Dados"
-    
+            text: "06 - Análise Avançada"
+      - text: Referência
+        menu:
+          - href: docs/data-dictionary.md
+            text: "Dicionário de Dados"
+          - href: docs/pipeline.md
+            text: "Pipeline"
     tools:
       - icon: github
         href: https://github.com/mrlnlms/whatsapp-interaction-analysis
 
   sidebar:
-    style: "docked"
+    style: docked
     search: true
     contents:
       - section: "Projeto"
         contents:
           - index.qmd
           - docs/data-dictionary.md
-      - section: "Data Preparation"
+          - docs/pipeline.md
+      - section: "Preparação"
         contents:
           - notebooks/00-data-discovery.qmd
           - notebooks/00-data-profiling.qmd
           - notebooks/01-data-cleaning.qmd
           - notebooks/02-data-wrangling.qmd
-          - notebooks/03-feature-engineering.qmd
-      - section: "Data Analysis"
+          - notebooks/02.1-EDA-data-wrangling.qmd
+          - notebooks/02.3-EDA-conteudo-interacao.qmd
+          - notebooks/03-contexto-externo.qmd
+          - notebooks/04-feature-engineering.qmd
+      - section: "Modelos"
         contents:
           - notebooks/04-model-features.qmd
-          - notebooks/05-eda.qmd
+          - section: "Sentiment"
+            contents:
+              - notebooks/04a-sentiment-roberta.qmd
+              - notebooks/04b-sentiment-distilbert.qmd
+              - notebooks/04c-sentiment-deberta.qmd
+              - notebooks/04d-sentiment-comparison.qmd
+              - notebooks/04e-sentiment-ensemble.qmd
+          - section: "Embeddings"
+            contents:
+              - notebooks/04f-embeddings-mpnet.qmd
+              - notebooks/04g-embeddings-minilm.qmd
+              - notebooks/04h-embeddings-distiluse.qmd
+              - notebooks/04i-embeddings-comparison.qmd
+      - section: "Análise"
+        contents:
+          - notebooks/05-eda-overview.qmd
+          - notebooks/05.1-eda-temporal.qmd
+          - notebooks/05.2-eda-interacao.qmd
+          - notebooks/05.3-eda-conteudo.qmd
           - notebooks/06-advanced-analysis.qmd
 
   page-footer:
@@ -77,9 +141,9 @@ format:
     highlight-style: github
 
 execute:
+  freeze: auto
   warning: false
   message: false
   echo: true
-  freeze: false
   jupyter: whatsapp-ds
   daemon: false
