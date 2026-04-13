@@ -42,6 +42,13 @@ analysis = [
 test = [
     "pytest>=7.0.0",
 ]
+notebooks = [
+    "whatsapp-interaction-analysis[viz,jupyter,analysis]",
+    "scipy>=1.10.0",
+    "scikit-learn>=1.3.0",
+    "statsmodels>=0.14.0",
+    "emoji>=2.8.0",
+]
 all = [
     "whatsapp-interaction-analysis[ml,viz,jupyter,transcription,analysis,test]",
 ]

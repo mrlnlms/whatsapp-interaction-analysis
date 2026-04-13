@@ -56,7 +56,7 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 
 | Script | Descrição |
 |-------------------------------|-----------------------------------------|
-| [transcribe_media.py](scripts/README.md) | Transcrição de áudios/vídeos via Groq/Whisper API |
+| [transcribe_media.py](docs/pipeline.md) | Transcrição de áudios/vídeos via Groq/Whisper API |
 
 ## Documentos úteis
 
