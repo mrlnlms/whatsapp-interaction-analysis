@@ -13,6 +13,7 @@ format:
 execute:
   warning: false
   echo: true
+  freeze: true
 ---
 
 # Introdução

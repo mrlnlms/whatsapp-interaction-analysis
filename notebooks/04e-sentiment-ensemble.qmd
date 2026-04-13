@@ -4,6 +4,8 @@ format:
   html:
     code-fold: true
     code-summary: "Mostrar código"
+execute:
+  freeze: true
 ---
 
 ```{python}

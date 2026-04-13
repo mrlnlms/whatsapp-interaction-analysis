@@ -1,3 +1,20 @@
+---
+title: "EDA - Padrões Temporais"
+subtitle: "Análise de hora do dia, dia da semana e evolução temporal"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
 # Introdução
 
 Este notebook analisa **padrões temporais** da comunicação digital no relacionamento.
