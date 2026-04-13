@@ -24,6 +24,9 @@ scripts/
 │   ├── compare_embeddings_models.py → gera JSON consumido por 04i-embeddings-comparison.qmd
 │   └── compare_embedding_dimensions.py → análise de redução de dimensionalidade
 │
+├── Visualização
+│   └── generate_timeline_chart.py  → gera assets/images/timeline-ultimate.png
+│
 └── Dados
     └── generate_sample_data.py      → gera dataset sintético em data/raw/sample/
 ```
@@ -41,6 +44,9 @@ scripts/
 | `generate_embeddings_distiluse.py` | `04h-embeddings-distiluse.qmd` | `message_embeddings_distiluse.npy` |
 | `compare_embeddings_models.py` | `04i-embeddings-comparison.qmd` | `embeddings_comparison.json` |
 | `transcribe_media.py` | `02-data-wrangling.qmd` | `transcriptions.csv` |
+| `generate_timeline_chart.py` | `index.qmd` (imagem estática) | `assets/images/timeline-ultimate.png` |
+
+> **Nota:** Em abril/2026, 3 pares de notebooks foram consolidados: `03-contexto-externo` (ex 02.2 + 03), `04-feature-engineering` (ex 03-FE + 05-FE), `05-eda-overview` (ex 04-eda + 05-eda). Os EDAs dimensionais foram renumerados de 04.x para 05.x. Originais em `notebooks/archive/`.
 
 Os scripts de comparação (`compare_*`) são executados manualmente — não fazem parte do CLI. Os notebooks leem os artefatos que eles geram.
 
