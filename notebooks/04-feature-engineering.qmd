@@ -198,9 +198,10 @@ print(f"\nGrupos de mensagem: {df['grupo_mensagem'].nunique()} únicos")
 print(df['grupo_mensagem'].value_counts())
 print(f"\nDistribuição remetente:")
 print(df['remetente'].value_counts())
-print(f"\nContexto:")
-print(f"  Em encontro: {df['em_encontro'].sum():,} ({df['em_encontro'].sum()/len(df)*100:.1f}%)")
-print(f"  Separados: {(~df['em_encontro']).sum():,} ({(~df['em_encontro']).sum()/len(df)*100:.1f}%)")
+if 'em_encontro' in df.columns:
+    print(f"\nContexto:")
+    print(f"  Em encontro: {df['em_encontro'].sum():,} ({df['em_encontro'].sum()/len(df)*100:.1f}%)")
+    print(f"  Separados: {(~df['em_encontro']).sum():,} ({(~df['em_encontro']).sum()/len(df)*100:.1f}%)")
 ```
 :::
 
