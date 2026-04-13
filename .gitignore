@@ -52,3 +52,6 @@ setup-project*.txt
 parking-lot.md
 docs/development/specs/
 whatsapp_interaction_analysis.egg-info/
+
+/.quarto/
+**/*.quarto_ipynb
