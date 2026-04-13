@@ -36,13 +36,15 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 ## Pipeline Principal
 
 | Fase | Documento | Descrição |
-|-------------------|---------------------------|---------------------------|
-| Exploration | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo bruto |
+|------|-----------|-----------|
+| Discovery | [00-data-discovery](notebooks/00-data-discovery.qmd) | Exploração inicial do arquivo bruto |
+| Profiling | [00-data-profiling](notebooks/00-data-profiling.qmd) | Investigação da estrutura do arquivo |
 | Cleaning | [01-data-cleaning](notebooks/01-data-cleaning.qmd) | Limpeza e normalização |
 | Wrangling | [02-data-wrangling](notebooks/02-data-wrangling.qmd) | Parsing, vinculação de mídia, transcrição |
-| Features | [03-feature-engineering](notebooks/03-feature-engineering.qmd) | Criação de variáveis derivadas |
-| Analysis | [04-eda](notebooks/04-eda.qmd) | Descritivos das variáveis, tabelas e gráficos |
-| Analysis | [05-advanced-analysis](notebooks/05-advanced-analysis.qmd) | Clustering, MCA, séries temporais |
+| Contexto | [03-contexto-externo](notebooks/03-contexto-externo.qmd) | Integração de contexto externo |
+| Features | [04-feature-engineering](notebooks/04-feature-engineering.qmd) | Criação de 35+ variáveis derivadas |
+| EDA | [05-eda-overview](notebooks/05-eda-overview.qmd) | Análise exploratória com contexto |
+| Advanced | [06-advanced-analysis](notebooks/06-advanced-analysis.qmd) | Clustering, N-Grams, TF-IDF |
 
 ## Scripts Utilitários
 
@@ -62,12 +64,16 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 
 O projeto segue uma arquitetura modular que separa **lógica** de **apresentação**:
 
-```         
-src/                          # Lógica (módulos Python)
+```
+whatsapp/pipeline/            # Lógica (módulos Python)
+├── config.py                 # Configurações (lê do .env)
 ├── cleaning.py               # Pipeline de limpeza (7 etapas)
 ├── wrangling.py              # Pipeline de wrangling (6 etapas)
-├── features.py               # Feature engineering
-└── utils/audit.py            # Sistema de auditoria
+└── utils/                    # Utilitários
+    ├── audit.py              # Sistema de auditoria
+    ├── dataframe_helpers.py  # Helpers para DataFrames
+    ├── file_helpers.py       # Helpers para arquivos
+    └── text_helpers.py       # Helpers para texto
 
 notebooks/                    # Apresentação (Quarto)
 ├── 01-data-cleaning.qmd      # Configura e executa cleaning
@@ -89,29 +95,34 @@ scripts/                      # Executáveis standalone
 
 # Estrutura do Projeto
 
-```         
+```
 whatsapp-interaction-analysis/
 ├── index.qmd                 # Este documento
+├── _quarto.yml               # Configuração do site Quarto
 ├── .env                      # Configuração local (não versionado)
 │
-├── src/                      # Módulos Python
-│   ├── config.py             # Paths e configurações
-│   ├── cleaning.py           # Pipeline de limpeza
-│   ├── wrangling.py          # Pipeline de wrangling
-│   ├── features.py           # Feature engineering
-│   └── utils/
-│       └── audit.py          # Auditoria de transformações
+├── whatsapp/                 # Pacote principal
+│   ├── cli/                  # CLI (whatsapp-interaction)
+│   └── pipeline/             # Módulos do pipeline
+│       ├── config.py         # Configurações
+│       ├── cleaning.py       # Pipeline de limpeza
+│       ├── wrangling.py      # Pipeline de wrangling
+│       └── utils/            # Utilitários
 │
 ├── scripts/                  # Scripts standalone
 │   └── transcribe_media.py   # Transcrição de mídias
 │
 ├── notebooks/                # Documentos Quarto
+│   ├── 00-data-discovery.qmd
 │   ├── 00-data-profiling.qmd
 │   ├── 01-data-cleaning.qmd
 │   ├── 02-data-wrangling.qmd
-│   ├── 03-feature-engineering.qmd
-│   ├── 04-eda.qmd
-│   └── 05-advanced-analysis.qmd
+│   ├── 03-contexto-externo.qmd
+│   ├── 04-feature-engineering.qmd
+│   ├── 04a-04i (modelos)
+│   ├── 05-eda-overview.qmd
+│   ├── 05.1-05.3 (EDAs)
+│   └── 06-advanced-analysis.qmd
 │
 ├── data/                     # Dados (não versionado)
 │   ├── raw/                  # Exports brutos
