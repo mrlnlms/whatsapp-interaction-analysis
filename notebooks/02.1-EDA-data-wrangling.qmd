@@ -1270,7 +1270,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 
 ### 🎯 **ANTES de continuar EDA:**
 
-1. **Criar** `02.2-adicionar-contexto-externo.qmd`
+1. **Criar** `03-contexto-externo.qmd`
 2. **Integrar** dados de encontros presenciais:
    - `em_encontro` (bool)
    - `encontro_id` (int)
@@ -1309,7 +1309,7 @@ Este notebook realizou análise exploratória dos dados **pós-wrangling**, ante
 ***
 
 **Dataset exportado:** `messages.parquet` (91.924 × 8 colunas)  
-**Próximo arquivo:** `02.2-adicionar-contexto-externo.qmd`
+**Próximo arquivo:** `03-contexto-externo.qmd`
 
 
 ***
@@ -1762,7 +1762,7 @@ Total estimado: 23-30 features
 
 # Próximos Passos
 
-1.  **Feature Engineering** (`03-feature-engineering.qmd`)
+1.  **Feature Engineering** (`04-feature-engineering.qmd`)
     -   Criar features identificadas nesta análise
     -   Documentar motivação de cada feature
     -   Validar criação com estatísticas descritivas

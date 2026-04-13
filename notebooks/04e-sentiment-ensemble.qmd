@@ -534,6 +534,6 @@ Próximos passos para validar a performance do ensemble:
 
 **Status:** 🚧 Aguardando implementação do script `sentiment_ensemble.py`
 
-**Próximo passo:** [Usar ensemble no EDA](../05-eda.qmd)
+**Próximo passo:** [Usar ensemble no EDA](05-eda-overview.qmd)
 
 ------------------------------------------------------------------------

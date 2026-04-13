@@ -418,7 +418,7 @@ display(stats.style.hide(axis='index'))
 
 Com as features de modelos (opcionais) criadas, seguimos para:
 
-1.  [**Exploratory Data Analysis**](05-eda.qmd) — Análise exploratória
+1.  [**Exploratory Data Analysis**](05-eda-overview.qmd) — Análise exploratória
     -   Use `messages_with_models.parquet` se disponível
     -   Ou `messages_enriched.parquet` para análise sem modelos
 
