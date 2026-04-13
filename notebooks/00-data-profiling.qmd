@@ -18,23 +18,17 @@ execute:
 #| label: setup
 #| code-fold: false
 
-import sys
-from dotenv import load_dotenv
-import os
 import pandas as pd
-# Carrega .env e adiciona src ao path
-load_dotenv()
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PROJECT_ROOT, PATHS
 from pathlib import Path
 
-from utils.dataframe_helpers import multi_position_preview_dataframe
-from utils.file_helpers import get_file_overview
+from whatsapp.pipeline.config import PROJECT_ROOT, PATHS
 
-from utils import get_file_overview, format_file_overview_table
-from utils import get_file_density_stats, format_density_stats_table
-from profiling import get_file_overview, get_lines_at_position, get_lines_containing, get_lines_matching, count_pattern
+from whatsapp.pipeline.utils.dataframe_helpers import multi_position_preview_dataframe
+from whatsapp.pipeline.utils.file_helpers import get_file_overview
+
+from whatsapp.pipeline.utils import get_file_overview, format_file_overview_table
+from whatsapp.pipeline.utils import get_file_density_stats, format_density_stats_table
+from whatsapp.pipeline.profiling import get_file_overview, get_lines_at_position, get_lines_containing, get_lines_matching, count_pattern
 
 # Define arquivo raw como variável global do notebook
 RAW_FILE = PATHS['raw']

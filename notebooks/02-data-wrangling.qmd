@@ -18,17 +18,12 @@ execute:
 #| label: setup
 #| code-fold: false
 
-import sys
 import os
-from dotenv import load_dotenv
 from pathlib import Path
 import pandas as pd
 
-load_dotenv()
-sys.path.insert(0, os.getenv('PROJECT_ROOT') + '/src')
-
-from config import PROJECT_ROOT, PATHS
-from wrangling import run_wrangling_pipeline, WRANGLING_STEPS
+from whatsapp.pipeline.config import PROJECT_ROOT, PATHS
+from whatsapp.pipeline.wrangling import run_wrangling_pipeline, WRANGLING_STEPS
 ```
 
 📁 Projeto: `{python} PROJECT_ROOT.name`
