@@ -244,7 +244,7 @@ print(f"  Separados: {(~df['em_encontro']).sum():,} ({(~df['em_encontro']).sum()
 :::
 
 ::: {.callout-important}
-### Features Criadas em 05-eda-interacao.qmd
+### Features Criadas em 05.2-eda-interacao.qmd
 
 **Features de interação e sequenciamento:**
 
@@ -1518,11 +1518,7 @@ for cat, cols in categorias.items():
         print(f"   {col:30s} ({pct:5.1f}% preenchido)")
 ```
 
-------------------------------------------------------------------------
-
-# Consolidação
-
-Verificação final de todas as features criadas.
+## Verificação Final
 
 ```{python}
 #| label: consolidate-check
@@ -1656,7 +1652,7 @@ Com o dataset enriquecido, seguimos para:
     -   Análise de sentimento (BERT)
     -   Embeddings semânticos
     -   Topic modeling
-2.  [**Exploratory Data Analysis**](05-eda.qmd) --- Análise exploratória das features criadas
+2.  [**Exploratory Data Analysis**](05-eda-overview.qmd) --- Análise exploratória das features criadas
     -   Distribuições univariadas
     -   Análises bivariadas (features vs remetente, tempo, contexto)
     -   Correlações entre features

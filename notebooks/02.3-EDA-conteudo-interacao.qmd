@@ -23,7 +23,7 @@ Este notebook realiza a **análise exploratória DEFINITIVA** dos dados, integra
 
 **Diferença dos notebooks anteriores:**
 - **02.1-EDA-data-wrangling.qmd:** Análises temporais PURAS (sem contexto externo)
-- **02.2-adicionar-contexto-externo.qmd:** Criação e validação das features de encontros
+- **03-contexto-externo.qmd:** Criação e validação das features de encontros
 - **02.3-EDA-conteudo-interacao.qmd (ESTE):** Análises temporais COM contexto (versão final)
 
 **Objetivo:**
@@ -2324,7 +2324,7 @@ for _, row in trans_por_tipo.head(5).iterrows():
 
 ## Evolução ao Longo do Tempo
 
-*Nota: Timeline com encontros marcados já foi gerado no notebook 02.2-adicionar-contexto-externo.qmd*
+*Nota: Timeline com encontros marcados já foi gerado no notebook 03-contexto-externo.qmd*
 
 ## Distribuição por Hora do Dia
 
@@ -4813,7 +4813,7 @@ Estabilização (30+ dias) → Preparação/Antecipação (últimos 7 dias) → 
 
 ***
 
-**Próximo passo:** Feature Engineering (03-feature-engineering.qmd) integrando features de contexto externo
+**Próximo passo:** Feature Engineering (04-feature-engineering.qmd) integrando features de contexto externo
 :::
 
 

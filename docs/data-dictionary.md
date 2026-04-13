@@ -227,7 +227,7 @@ Features derivadas de modelos de Machine Learning. Disponíveis em `messages_wit
 
 ### Processamento
 
-Todas as features estruturais foram criadas em `03-feature-engineering.qmd` usando: - Pandas para manipulação de dados - Operações vetorizadas para performance - `pd.merge_asof` para cálculo eficiente de tempo de resposta
+Todas as features estruturais foram criadas em `04-feature-engineering.qmd` usando: - Pandas para manipulação de dados - Operações vetorizadas para performance - `pd.merge_asof` para cálculo eficiente de tempo de resposta
 
 ### Features de Modelos
 

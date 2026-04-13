@@ -1,24 +1,23 @@
 ---
-title: "Contexto Externo — Encontros Presenciais e Fases do Relacionamento"
+title: "Contexto Externo"
+subtitle: "Integração de variáveis críticas - Encontros presenciais"
 author: "Marlon"
 date: today
 format:
   html:
     toc: true
     toc-depth: 3
+    theme: cosmo
     code-fold: show
     code-tools: true
-    df-print: paged
-    theme: cosmo
-    number-sections: true
 execute:
   warning: false
-  message: false
+  echo: true
 ---
 
 # Introdução
 
-Este notebook integra **dados de encontros presenciais** ao dataset de mensagens.
+Este notebook integra **dados de encontros presenciais** ao dataset de mensagens. 
 
 A análise temporal anterior identificou que **contexto externo** (presença física vs distância) é uma **variável crítica** para entender padrões de comunicação em relacionamentos à distância.
 
@@ -80,8 +79,6 @@ print(f"📅 Período: {df['timestamp'].min().date()} → {df['timestamp'].max()
 print(f"👥 Remetentes: {df['remetente'].unique().tolist()}")
 ```
 
----
-
 # Definição dos Encontros
 
 ## Datas dos Encontros Presenciais
@@ -92,7 +89,7 @@ Relacionamento à distância **SP ↔ BSB** com encontros regulares ao longo de 
 # Define cores para visualizações
 COLORS = {
     'P1': '#3498db',
-    'P2': '#e74c3c',
+    'P2': '#e74c3c', 
     'neutral': '#95a5a6',
     'juntos': '#2ecc71'
 }
@@ -151,7 +148,7 @@ encontros = [
         'nome': 'Letícia Sorocaba',
         'inicio': '2025-05-17',
         'fim': '2025-05-24',
-        'tipo': 'Letícia @ Sorocaba',
+        'tipo': 'Letícia @ SP',
         'local': 'Sorocaba',
         'marco_especial': None,
         'marco_nome': None
@@ -221,7 +218,7 @@ total_dias_dataset = (periodo_fim - periodo_inicio).days + 1
 
 # Encontros dentro do período do dataset
 encontros_no_dataset = encontros_df[
-    (encontros_df['inicio'].dt.date >= periodo_inicio) &
+    (encontros_df['inicio'].dt.date >= periodo_inicio) & 
     (encontros_df['inicio'].dt.date <= periodo_fim)
 ]
 
@@ -254,9 +251,6 @@ print(encontros_df['tipo'].value_counts().to_string())
 
 print("\n" + "="*80)
 ```
-
-
-::: {.callout-warning}
 
 ## 💡 Insight - Encontros Presenciais
 
@@ -309,14 +303,14 @@ print("✅ Colunas inicializadas")
 for _, encontro in encontros_df.iterrows():
     # Mascara de mensagens neste encontro
     mask = (df['data_msg'] >= encontro['inicio'].date()) & (df['data_msg'] <= encontro['fim'].date())
-
+    
     # Atribui features básicas
     df.loc[mask, 'em_encontro'] = True
     df.loc[mask, 'encontro_id'] = encontro['encontro_id']
     df.loc[mask, 'encontro_nome'] = encontro['nome']
     df.loc[mask, 'local_encontro'] = encontro['local']
     df.loc[mask, 'tipo_encontro'] = encontro['tipo']
-
+    
     # Calcula dia do encontro (1, 2, 3...)
     df.loc[mask, 'dia_do_encontro'] = (
         pd.to_datetime(df.loc[mask, 'data_msg']) - encontro['inicio']
@@ -358,14 +352,14 @@ encontros_ord = encontros_df.sort_values('inicio')
 for idx, encontro in encontros_ord.iterrows():
     # Período APÓS este encontro até o próximo (ou fim do dataset)
     fim_encontro = encontro['fim'].date()
-
+    
     # Encontra próximo encontro
     proximos = encontros_ord[encontros_ord['inicio'] > encontro['fim']]
     if len(proximos) > 0:
         inicio_proximo = proximos.iloc[0]['inicio'].date()
     else:
         inicio_proximo = df['data_msg'].max()
-
+    
     # Mensagens no período de separação
     mask = (df['data_msg'] > fim_encontro) & (df['data_msg'] < inicio_proximo)
     df.loc[mask, 'dias_desde_ultimo_encontro'] = (
@@ -390,14 +384,14 @@ df['dias_ate_proximo_encontro'] = None
 for idx, encontro in encontros_ord.iterrows():
     # Encontra período ANTES deste encontro (desde o anterior)
     inicio_encontro = encontro['inicio'].date()
-
+    
     # Encontra encontro anterior
     anteriores = encontros_ord[encontros_ord['fim'] < encontro['inicio']]
     if len(anteriores) > 0:
         fim_anterior = anteriores.iloc[-1]['fim'].date()
     else:
         fim_anterior = df['data_msg'].min()
-
+    
     # Mensagens no período de separação antes deste encontro
     mask = (df['data_msg'] > fim_anterior) & (df['data_msg'] < inicio_encontro)
     df.loc[mask, 'dias_ate_proximo_encontro'] = (
@@ -478,6 +472,7 @@ print("\n✅ Integração validada!")
 :::
 
 ---
+
 
 # Validação da Hipótese
 
@@ -687,25 +682,54 @@ else:
 - Relacionamento à distância tem dinâmica própria - não pode ser analisado sem contexto físico
 :::
 
----
+## Impacto nos Padrões Temporais
 
-# Impacto nos Padrões Temporais
-
-## Hora do Dia: Junto vs Separado
+### Hora do Dia: Junto vs Separado
 
 ```{python}
-#| label: fig-hora-contexto
-#| fig-cap: "Distribuição por hora: junto vs separado"
+# ============================================================================
+# VALIDAÇÃO 3: Impacto no Padrão Horário
+# ============================================================================
 
-# Calcula distribuição por hora e contexto
+print("\n" + "="*80)
+print("🔍 VALIDAÇÃO 3 - Padrão Horário: Junto vs Separado")
+print("="*80)
+
+# Adiciona hora
 df['hora'] = df['timestamp'].dt.hour
 
+# Distribuição por hora e contexto
 hora_junto = df[df['em_encontro']].groupby('hora').size()
 hora_separado = df[~df['em_encontro']].groupby('hora').size()
 
-# Normaliza (proporção)
+# Normaliza para porcentagem
 hora_junto_pct = (hora_junto / hora_junto.sum() * 100).reindex(range(24), fill_value=0)
 hora_separado_pct = (hora_separado / hora_separado.sum() * 100).reindex(range(24), fill_value=0)
+
+# Identifica picos
+pico_junto = hora_junto_pct.idxmax()
+pico_separado = hora_separado_pct.idxmax()
+
+print(f"\n📊 Picos de comunicação:")
+print(f"   • Juntos: {pico_junto}h ({hora_junto_pct[pico_junto]:.1f}%)")
+print(f"   • Separados: {pico_separado}h ({hora_separado_pct[pico_separado]:.1f}%)")
+
+# Teste estatístico
+from scipy.stats import chi2_contingency
+
+contingency = pd.crosstab(df['hora'], df['em_encontro'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"\n📊 Teste Chi-square:")
+print(f"   χ² = {chi2:.2f}")
+print(f"   p-value = {p_val:.6e}")
+
+if p_val < 0.001:
+    print(f"   ✅ Padrões horários SÃO ALTAMENTE DIFERENTES (p < 0.001)")
+elif p_val < 0.05:
+    print(f"   ✅ Padrões horários SÃO DIFERENTES (p < 0.05)")
+else:
+    print(f"   ❌ Padrões horários SÃO SIMILARES (p >= 0.05)")
 
 # Visualização
 fig = go.Figure()
@@ -716,7 +740,9 @@ fig.add_trace(go.Scatter(
     mode='lines+markers',
     name='Separados',
     line=dict(color=COLORS['neutral'], width=2),
-    marker=dict(size=6)
+    marker=dict(size=6),
+    fill='tozeroy',
+    fillcolor='rgba(99, 110, 250, 0.2)'
 ))
 
 fig.add_trace(go.Scatter(
@@ -725,168 +751,194 @@ fig.add_trace(go.Scatter(
     mode='lines+markers',
     name='Juntos',
     line=dict(color=COLORS['juntos'], width=2),
-    marker=dict(size=6)
+    marker=dict(size=6),
+    fill='tozeroy',
+    fillcolor='rgba(0, 204, 150, 0.2)'
 ))
 
 fig.update_layout(
-    title='Distribuição por Hora do Dia: Junto vs Separado (%)',
+    title='Validação 3: Padrão Horário - Junto vs Separado',
     xaxis_title='Hora do Dia',
-    yaxis_title='Proporção de Mensagens (%)',
-    height=800,
+    yaxis_title='% de Mensagens',
+    height=400,
     hovermode='x unified',
     xaxis=dict(tickmode='linear', tick0=0, dtick=1)
 )
 
 fig.show()
 
-# Teste estatístico
-from scipy.stats import chi2_contingency
-
-contingency = pd.crosstab(df['hora'], df['em_encontro'])
-chi2, p_val, dof, expected = chi2_contingency(contingency)
-
-print(f"\n📊 Teste Chi-square (padrão horário junto vs separado):")
-print(f"   p-value: {p_val:.6f}")
-if p_val < 0.05:
-    print(f"   ✅ Padrões horários SÃO diferentes quando juntos vs separados")
-else:
-    print(f"   ❌ Padrões horários SÃO similares independente do contexto")
+print("="*80)
 ```
 
-## Dia da Semana: Junto vs Separado
+::: {.callout-note}
+### 💡 Validação 3 - Padrão Horário Inverte Completamente
+
+**Picos de comunicação:**
+- **Separados:** 19h (10.7%) - Pico NOTURNO
+- **Juntos:** 12h (11.0%) - Pico DIURNO
+- **Diferença:** ~7 horas de shift!
+
+**Teste Chi-square:**
+- χ² = 5.467,15 (GIGANTESCO!)
+- p-value ≈ 0 (probabilidade ZERO de ser acaso)
+- **Conclusão:** Padrões são RADICALMENTE diferentes
+
+**Interpretação:**
+
+**Quando SEPARADOS:**
+- Comunicação NOTURNA (pico 19h = pós-trabalho)
+- Padrão típico: Chegam em casa → conversam intensamente
+- Noite é momento de conexão emocional
+- Provavelmente: Contam sobre o dia, compartilham, planejam
+
+**Quando JUNTOS:**
+- Comunicação DIURNA (pico 12h = meio-dia)
+- Padrão: Coordenação prática durante o dia
+- Possíveis mensagens: "Vou almoçar onde?", "Precisa comprar X"
+- Noite é convívio presencial (menos celular)
+
+**Implicação:**
+> Contexto físico não apenas REDUZ volume (-68%), mas também **MUDA O TIMING** da comunicação. Separados = canal emocional noturno. Juntos = ferramenta diurna de coordenação.
+:::
+
+### Dia da Semana: Junto vs Separado
 
 ```{python}
-#| label: fig-dia-contexto
-#| fig-cap: "Distribuição por dia da semana: junto vs separado"
+# ============================================================================
+# VALIDAÇÃO 4: Impacto no Padrão Semanal
+# ============================================================================
 
-# Calcula distribuição por dia e contexto
-df['dia_semana_num'] = df['timestamp'].dt.dayofweek
-dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-df['dia_semana'] = df['dia_semana_num'].apply(lambda x: dias_semana[x])
+print("\n" + "="*80)
+print("🔍 VALIDAÇÃO 4 - Padrão Semanal: Junto vs Separado")
+print("="*80)
 
-dia_junto = df[df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
-dia_separado = df[~df['em_encontro']].groupby('dia_semana').size().reindex(dias_semana, fill_value=0)
+# Adiciona dia da semana
+df['dia_semana'] = df['timestamp'].dt.day_name()
+
+# Ordem correta
+ordem_dias = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+nomes_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+# Distribuição por dia e contexto
+dia_junto = df[df['em_encontro']]['dia_semana'].value_counts()
+dia_separado = df[~df['em_encontro']]['dia_semana'].value_counts()
 
 # Normaliza
-dia_junto_pct = (dia_junto / dia_junto.sum() * 100)
-dia_separado_pct = (dia_separado / dia_separado.sum() * 100)
+dia_junto_pct = (dia_junto / dia_junto.sum() * 100).reindex(ordem_dias, fill_value=0)
+dia_separado_pct = (dia_separado / dia_separado.sum() * 100).reindex(ordem_dias, fill_value=0)
+
+print(f"\n📊 Distribuição semanal:")
+print(f"\n{'Dia':<10} {'Separados':>12} {'Juntos':>12} {'Diferença':>12}")
+print("="*50)
+for i, dia_en in enumerate(ordem_dias):
+    dia_pt = nomes_pt[i]
+    sep = dia_separado_pct[dia_en]
+    jun = dia_junto_pct[dia_en]
+    diff = jun - sep
+    print(f"{dia_pt:<10} {sep:>11.1f}% {jun:>11.1f}% {diff:>+11.1f}pp")
+
+# Teste estatístico
+contingency = pd.crosstab(df['dia_semana'], df['em_encontro'])
+chi2, p_val, dof, expected = chi2_contingency(contingency)
+
+print(f"\n📊 Teste Chi-square:")
+print(f"   χ² = {chi2:.2f}")
+print(f"   p-value = {p_val:.6e}")
+
+if p_val < 0.001:
+    print(f"   ✅ Padrões semanais SÃO ALTAMENTE DIFERENTES (p < 0.001)")
+elif p_val < 0.05:
+    print(f"   ✅ Padrões semanais SÃO DIFERENTES (p < 0.05)")
+else:
+    print(f"   ❌ Padrões semanais SÃO SIMILARES (p >= 0.05)")
 
 # Visualização
 fig = go.Figure()
 
 fig.add_trace(go.Bar(
-    x=dias_semana,
-    y=dia_separado_pct,
+    x=nomes_pt,
+    y=dia_separado_pct.values,
     name='Separados',
     marker_color=COLORS['neutral'],
-    text=dia_separado_pct.round(1),
+    text=dia_separado_pct.values.round(1),
+    texttemplate='%{text}%',
     textposition='outside'
 ))
 
 fig.add_trace(go.Bar(
-    x=dias_semana,
-    y=dia_junto_pct,
+    x=nomes_pt,
+    y=dia_junto_pct.values,
     name='Juntos',
     marker_color=COLORS['juntos'],
-    text=dia_junto_pct.round(1),
+    text=dia_junto_pct.values.round(1),
+    texttemplate='%{text}%',
     textposition='outside'
 ))
 
 fig.update_layout(
-    title='Distribuição por Dia da Semana: Junto vs Separado (%)',
-    yaxis_title='Proporção de Mensagens (%)',
+    title='Validação 4: Padrão Semanal - Junto vs Separado',
+    xaxis_title='Dia da Semana',
+    yaxis_title='% de Mensagens',
     height=400,
     barmode='group'
 )
 
 fig.show()
 
-# Teste estatístico
-contingency_dia = pd.crosstab(df['dia_semana'], df['em_encontro'])
-chi2_dia, p_val_dia, dof_dia, expected_dia = chi2_contingency(contingency_dia)
-
-print(f"\n📊 Teste Chi-square (padrão semanal junto vs separado):")
-print(f"   p-value: {p_val_dia:.6f}")
-if p_val_dia < 0.05:
-    print(f"   ✅ Padrões semanais SÃO diferentes quando juntos vs separados")
-else:
-    print(f"   ❌ Padrões semanais SÃO similares independente do contexto")
+print("="*80)
 ```
 
-::: {.callout-warning}
-### 💡 Insight - Padrão Horário: Junto vs Separado
+::: {.callout-note}
+#### 💡 Validação 4 - Segunda Explode, Fim de Semana Some
 
-**Mudança DRÁSTICA no comportamento (p < 0.001):**
+**Distribuição semanal - INVERSÃO DRAMÁTICA:**
 
-**Quando SEPARADOS (cinza - padrão unimodal):**
-- Pico único às **19h** (10.5%) - após expediente de trabalho
-- Crescimento gradual ao longo do dia
-- Comunicação concentrada no período **noturno** (18h-23h)
-- Madrugada praticamente vazia
+| Dia | Separados | Juntos | Diferença | Interpretação |
+|-----|-----------|--------|-----------|---------------|
+| **Segunda** | 11.8% | **26.8%** | **+15.1pp** 🔥 | EXPLOSÃO quando juntos! |
+| Terça-Quinta | 13-15% | 17-18% | +2-4pp | Levemente maior |
+| Sexta | 14.2% | 9.7% | -4.5pp | Começa a cair |
+| **Sábado** | 13.7% | **3.3%** | **-10.4pp** 🔥 | COLAPSO quando juntos! |
+| **Domingo** | 16.3% | **7.4%** | **-8.9pp** | Muito baixo |
 
-**Quando JUNTOS (verde - padrão bimodal):**
-- **Primeiro pico:** 12h-13h (11.5%) - horário de almoço/pausa 🍽️
-- **Segundo pico:** 18h (7.5%) - fim de expediente
-- Comunicação mais **distribuída** ao longo do dia
-- Inicio mais cedo (atividade desde 8h-9h)
-
-**Contexto explicativo:**
-- **Pico 12h-13h:** Momento em que ela consegue responder (trabalho puxado, pausa do almoço é janela de disponibilidade)
-- **Padrão bimodal:** Reflete rotina de trabalho - conversam nas "brechas" (almoço + fim do expediente)
-- Quando separados: Conversam após trabalho (noite livre)
-- Quando juntos: Conversam durante pausas do trabalho (presença física não impede rotina profissional)
+**Teste Chi-square:**
+- χ² = 3.866,97 (ENORME!)
+- p-value ≈ 0
+- **Conclusão:** Padrões semanais são COMPLETAMENTE diferentes
 
 **Interpretação:**
-- Presença física NÃO elimina comunicação digital, mas **reorganiza** horários
-- Quando juntos, usam WhatsApp para **coordenação diária** (trabalho, logística)
-- Pico noturno desaparece - substituído por convívio presencial
-- Manhã/tarde ganham relevância - comunicação utilitária, não emocional
 
-**Implicação para FE:**
-- Feature `hora` interage FORTEMENTE com `em_encontro`
-- Criar `periodo_dia × em_encontro` será útil
-- Padrão horário sozinho tem poder limitado sem contexto
+**Quando SEPARADOS:**
+- Distribuição **UNIFORME** (11-16% cada dia)
+- Fim de semana não muda padrão (13.7% sábado, 16.3% domingo)
+- **Conclusão:** Comunicam IGUALMENTE todos os dias (saudade constante)
+
+**Quando JUNTOS:**
+- **Segunda = 26.8%** (MAIS QUE O DOBRO!)
+  - Possível razão: Início de encontro? Retorno de final de semana?
+  - Coordenação intensa no primeiro dia
+- **Fim de semana = COLAPSO** (3.3% + 7.4% = 11% total!)
+  - Sábado-Domingo: Convívio presencial, quase sem celular
+  - Total imersão na presença física
+
+**Descoberta CRÍTICA:**
+
+**"Paradoxo da Segunda-feira":**
+> Quando juntos, Segunda tem **8x MAIS** mensagens que Sábado (26.8% vs 3.3%)!
+
+**Possíveis explicações:**
+1. **Início de encontro:** Muitos encontros começam final de semana → Segunda é "primeiro dia útil juntos"
+2. **Coordenação intensa:** Organizando rotina da semana juntos
+3. **Retorno ao trabalho:** Mesmo juntos, precisam coordenar logística
+
+**Validação anterior confirmada:**
+- Vimos p=0.96 (uniforme) quando separados
+- Agora vemos **INVERSÃO** quando juntos (segunda ALTA, fim de semana BAIXO)
+- **Contexto inverte completamente o padrão semanal**
+
+**Implicação para modelagem:**
+> Feature `dia_semana` × `em_encontro` é **ESSENCIAL**. Segunda quando junto ≠ Segunda quando separado. São protocolos COMPLETAMENTE diferentes.
 :::
-
-
-::: {.callout-warning}
-### 💡 Insight - Padrão Semanal: Junto vs Separado
-
-**INVERSÃO completa do padrão (p < 0.001):**
-
-**Quando SEPARADOS (cinza - uniforme):**
-- Distribuição relativamente equilibrada (12-16%)
-- Levemente maior aos domingos (16.3%)
-- Sem padrão claro útil/FDS
-
-**Quando JUNTOS (verde - concentração em dias úteis):**
-- **Segunda DISPARA:** 26.8% - quase 1/3 da comunicação! 📈
-- Terça-Quinta: 15-18% (dias úteis normais)
-- **Sábado/Domingo CAEM:** 3.3% e 7.4% - quase desaparecem
-
-**Contexto explicativo:**
-- **Segunda alta (26.8%):** Discussões/ajuda sobre trabalho dela no início da semana
-- **FDS baixo:** Aproveitam presença física sem celular (lazer presencial)
-- Dias úteis: WhatsApp usado para **suporte profissional** e **coordenação logística**
-
-**Padrão identificado:**
-- Quando **juntos**: WhatsApp = ferramenta de **trabalho/coordenação** (dias úteis)
-- Quando **separados**: WhatsApp = ferramenta de **conexão emocional** (todos os dias)
-- FDS juntos: Presença física substitui comunicação digital
-
-**Interpretação:**
-- Relacionamento tem **dois modos** de operação claramente distintos
-- **Modo distância:** Comunicação constante (todos os dias ~igual)
-- **Modo presença:** Comunicação utilitária (concentrada em dias úteis, segundas especialmente)
-- Segunda = dia de "resolver coisas" - trabalho dela, planejamento da semana
-
-**Implicação para FE:**
-- Feature `dia_semana` interage FORTEMENTE com `em_encontro`
-- Quando separados: `dia_semana` tem pouco poder (uniforme)
-- Quando juntos: `dia_semana` vira discriminador forte (segunda vs FDS)
-- Criar `eh_segunda × em_encontro` pode ser útil
-:::
-
 
 ::: {.callout-important}
 ## 🎯 SÍNTESE - Contexto Externo é VARIÁVEL DOMINANTE
@@ -925,9 +977,7 @@ else:
 - ✅ EDA detalhada com protocolos validados
 :::
 
----
-
-# Descoberta: Período Pré-Relacionamento
+# Período Pré-Relacionamento
 
 ```{python}
 # ============================================================================
@@ -1002,9 +1052,7 @@ print(f"   • ⚠️ MISTURAR os dois períodos = VIÉS INEVITÁVEL")
 - Ganho: Pureza analítica (crítico!)
 :::
 
----
-
-# Validação: "Nunca Ficaram Sem Falar"
+# VALIDAÇÃO: "Nunca Ficaram Sem Falar"
 
 ```{python}
 # ============================================================================
@@ -1034,37 +1082,37 @@ print(f"   • Dias SEM mensagem: {len(dias_sem_msg)} ({len(dias_sem_msg)/len(to
 # Verifica se dias sem msg estão em encontros
 if len(dias_sem_msg) > 0:
     print(f"\n📅 Dias SEM mensagem ({len(dias_sem_msg)}):")
-
+    
     dias_sem_msg_info = []
     for dia in dias_sem_msg:
         em_encontro = False
         encontro_nome = None
-
+        
         for _, enc in encontros_df.iterrows():
             if enc['inicio'].date() <= dia <= enc['fim'].date():
                 em_encontro = True
                 encontro_nome = enc['nome']
                 break
-
+        
         dias_sem_msg_info.append({
             'Data': dia,
             'Em Encontro': em_encontro,
             'Encontro': encontro_nome if em_encontro else 'Separados'
         })
-
+    
     df_sem_msg = pd.DataFrame(dias_sem_msg_info)
     print(df_sem_msg.to_string(index=False))
-
+    
     # Resumo
     total_sem_msg = len(dias_sem_msg)
     sem_msg_em_encontro = df_sem_msg['Em Encontro'].sum()
     sem_msg_separados = total_sem_msg - sem_msg_em_encontro
-
+    
     print(f"\n📊 RESUMO:")
     print(f"   • Total de dias sem mensagem: {total_sem_msg}")
     print(f"   • Durante encontros: {sem_msg_em_encontro} ({sem_msg_em_encontro/total_sem_msg*100:.1f}%)")
     print(f"   • Quando separados: {sem_msg_separados} ({sem_msg_separados/total_sem_msg*100:.1f}%)")
-
+    
     if sem_msg_separados == 0:
         print(f"\n✅ HIPÓTESE VALIDADA: 100% dos dias sem mensagem = Durante encontros!")
         print(f"   → NUNCA ficaram sem falar quando separados")
@@ -1126,10 +1174,7 @@ else:
 - Relacionamento tem dois modos: Conexão digital constante ↔ Convívio presencial
 :::
 
----
-
-# Decisão Metodológica: Marcação de Períodos
-
+# Filtrar para Relacionamento (pós 16/dez/2024)
 ```{python}
 # ============================================================================
 # DECISÃO: Filtrar para Relacionamento (pós 16/dez/2024)
@@ -1197,9 +1242,9 @@ print(f"\n✅ Filtro aplicado - dados prontos para exportação")
 
 **Decisão tomada:**
 > ✅ **MARCAR período** com feature `fase_relacionamento` (Amizade | Relacionamento)
->
+> 
 > ✅ **EXPORTAR dataset COMPLETO** (91.924 mensagens)
->
+> 
 > ✅ **Notebooks individuais decidem** se filtram ou não
 
 **Razão da estratégia:**
@@ -1215,7 +1260,7 @@ print(f"\n✅ Filtro aplicado - dados prontos para exportação")
 # Notebook 04 (temporal) - FILTRA
 df_rel = df[df['fase_relacionamento'] == 'Relacionamento']
 
-# Notebook 05 (interação) - FILTRA
+# Notebook 05 (interação) - FILTRA  
 df_rel = df[df['fase_relacionamento'] == 'Relacionamento']
 
 # Notebook 06 (conteúdo) - USA TUDO
@@ -1223,8 +1268,8 @@ df_rel = df[df['fase_relacionamento'] == 'Relacionamento']
 ```
 
 **Notebooks que FILTRARÃO:**
-- ✅ 05.1-eda-temporal.qmd (padrões temporais puros)
-- ✅ 05.2-eda-interacao.qmd (turnos/sequências puros)
+- ✅ 04-eda-temporal.qmd (padrões temporais puros)
+- ✅ 05-eda-interacao.qmd (turnos/sequências puros)
 
 **Notebooks que USARÃO TUDO:**
 - ✅ 03-eda-overview.qmd (pode decidir por seção)
@@ -1239,7 +1284,6 @@ df_rel = df[df['fase_relacionamento'] == 'Relacionamento']
 4. Feature permite flexibilidade total
 :::
 
----
 
 # Export Final
 
@@ -1485,7 +1529,6 @@ print(f"   → Decisão de filtro: Por notebook")
 print("="*80)
 ```
 
----
 
 # Conclusões
 
@@ -1569,8 +1612,8 @@ print("="*80)
 **Estratégia de uso por notebook:**
 
 **Notebooks que FILTRARÃO para relacionamento:**
-- 📊 05.1-eda-temporal.qmd (padrões horários, evolução temporal - precisa pureza)
-- 💬 05.2-eda-interacao.qmd (turnos, sequências - precisa consistência)
+- 📊 04-eda-temporal.qmd (padrões horários, evolução temporal - precisa pureza)
+- 💬 05-eda-interacao.qmd (turnos, sequências - precisa consistência)
 
 **Notebooks que USARÃO dataset completo:**
 - 📋 03-eda-overview.qmd (pode decidir por seção - volume filtra, tipos usa tudo)
@@ -1634,9 +1677,10 @@ Relacionamento: 290 msgs/dia
 
 
 TL;DR:
->
-> - Presença física = -68% mensagens.
-> - WhatsApp quando separados = conexão emocional noturna.
-> - WhatsApp quando juntos = coordenação diurna.
+> 
+> - Presença física = -68% mensagens. 
+> - WhatsApp quando separados = conexão emocional noturna. 
+> - WhatsApp quando juntos = coordenação diurna. 
 > - Nunca ficaram sem falar quando longe. 🔥
 >
+

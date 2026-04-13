@@ -60,8 +60,8 @@ python scripts/transcribe_media.py
 # 2. Pipeline completo
 quarto render notebooks/01-data-cleaning.qmd
 quarto render notebooks/02-data-wrangling.qmd
-quarto render notebooks/03-feature-engineering.qmd  # BERT usa cache aqui
-quarto render notebooks/04-eda.qmd
+quarto render notebooks/04-feature-engineering.qmd  # BERT usa cache aqui
+quarto render notebooks/05-eda-overview.qmd
 ```
 
 ------------------------------------------------------------------------
