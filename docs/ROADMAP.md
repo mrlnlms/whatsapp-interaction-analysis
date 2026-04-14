@@ -9,18 +9,30 @@
 - Advanced analysis (clustering semântico, N-Grams, TF-IDF)
 - CLI unificado (`whatsapp-interaction`) — [#3](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/3)
 - Dataset sintético de exemplo — [#1](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/1)
-- **Reorganização do pacote Python** — pacote unificado `whatsapp/`, imports absolutos, zero sys.path hacks
-- **Project hardening** — 147 testes (config, utils, cleaning, wrangling, CLI), schema validation, path traversal fix, exceções específicas, dependências pinadas, docs consolidados
+- Reorganização do pacote Python — pacote unificado `whatsapp/`, imports absolutos, zero sys.path hacks
+- Project hardening — 149 testes, schema validation, path traversal fix, exceções específicas, dependências pinadas, docs consolidados
+- **Quarto website no GitHub Pages** — [#2](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/2) (13/abr/2026)
+- **Camada de findings** (13/abr/2026) — 5 notebooks de síntese (07-11) cobrindo overview, dinâmica, sentimento, temas e estilos; seção "Principais Descobertas" na homepage
 
 ## Próximo
 
-1. **Quarto website no GitHub Pages** — [#2](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/2)
-   Pipeline inteiro como site navegável. Já tem `_quarto.yml` e `index.qmd`. Precisa: workflow de deploy, ajustar notebooks pra renderizar com dataset sample.
+1. **DVC para dados processados** — [#4](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/4)
+   Avaliar quando houver múltiplos exports — permite comparar períodos e versionar datasets.
 
-## Futuro
+## Follow-ups técnicos
 
-2. **DVC para dados processados** — [#4](https://github.com/mrlnlms/whatsapp-interaction-analysis/issues/4)
-   Avaliar quando houver múltiplos exports.
+- **Integrar transcrições** de áudio/vídeo à análise semântica
+  25% das mensagens (mídia) hoje ficam de fora do clustering e do sentiment analysis porque não têm embedding. As transcrições existem em `transcriptions.csv` — precisariam ser injetadas no corpus textual antes de recalcular embeddings.
 
-3. **Testes de integração E2E**
-   Testar pipeline completo de ponta a ponta (clean → wrangle → export). Requer dataset sample como fixture. Não testar scripts de ML (dependem de torch/transformers).
+- **Modelo de sentimento em português (BERTimbau)**
+  Os 3 modelos atuais foram treinados em inglês. Um modelo PT-BR validaria a estabilidade de tom encontrada nos findings (58% neutro / 27% pos / 15% neg, constante no ano).
+
+- **Micro-histórias dos extremos**
+  Examinar qualitativamente os dias de pico (ex: 22/jun/2025 com 1.288 msgs) e os vales para enriquecer a interpretação narrativa.
+
+- **Testes de integração E2E**
+  Testar pipeline completo de ponta a ponta (clean → wrangle → export) usando o dataset sample como fixture.
+
+## Entregáveis paralelos
+
+- **Presente pessoal** (fora do escopo deste repo) — versão narrativa dos findings sem jargão técnico, reaproveitando timeline e visualizações. Agora que a camada de análise fechou, é o próximo entregável natural — formato (single-page, PDF, slides) ainda em aberto.
