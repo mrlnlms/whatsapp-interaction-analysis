@@ -50,6 +50,7 @@ CLAUDE.md
 setup-project*.txt
 parking-lot.md
 docs/development/specs/
+docs/development/plans/
 whatsapp_interaction_analysis.egg-info/
 
 /.quarto/

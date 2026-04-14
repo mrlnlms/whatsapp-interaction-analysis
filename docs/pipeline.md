@@ -120,3 +120,17 @@ python scripts/generate_sample_data.py
 ```
 
 Output: `data/raw/sample/raw-data.txt` (seed=42, determinístico)
+
+## Camada de findings (07-11)
+
+Os notebooks `07-11` na seção **Descobertas** do site consolidam os achados em prose interpretativa. Eles **não dependem de novos scripts** — carregam os artefatos já produzidos pelos scripts acima:
+
+| Notebook | Fontes de dados consumidas |
+|----------|---------------------------|
+| `07-findings-overview.qmd` | `messages_with_models.parquet`, `messages_with_context.parquet` |
+| `08-findings-dinamica.qmd` | `messages_enriched.parquet`, `messages_with_context.parquet` |
+| `09-findings-sentimento.qmd` | `messages_with_models.parquet` (colunas `sentimento_*`) |
+| `10-findings-temas.qmd` | `message_embeddings_mpnet.npy` + K-Means (computado no notebook), UMAP 2D |
+| `11-findings-estilos.qmd` | `messages_enriched.parquet` (features de emoji/pontuação/tamanho) |
+
+O `10-findings-temas.qmd` roda clustering semântico (K-Means k=10) e UMAP 2D diretamente — os artefatos auxiliares (`cluster_labels_mpnet_k10.npy`, `umap_coords_sample.npy`) ficam em `data/processed/{export}/` para reaproveitamento.

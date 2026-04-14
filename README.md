@@ -24,6 +24,7 @@ O projeto foi desenvolvido para ser **reprodutível** — permite rodar o pipeli
 | | Model Features | Sentiment analysis multi-modelo, embeddings |
 | **Analysis** | EDA | Análise exploratória por dimensão (temporal, interação, conteúdo) |
 | | Advanced Analysis | Clustering semântico, PCA, MCA, N-Grams, TF-IDF |
+| **Findings** | Descobertas consolidadas | Overview, dinâmica, sentimento, temas e estilos — findings escritos em prose |
 
 ## Structure
 
@@ -128,6 +129,18 @@ whatsapp-interaction-analysis/
 | 05.2 | [EDA — Interação](notebooks/05.2-eda-interacao.qmd) | Dinâmicas de interação |
 | 05.3 | [EDA — Conteúdo](notebooks/05.3-eda-conteudo.qmd) | Análise de conteúdo |
 | 06 | [Advanced Analysis](notebooks/06-advanced-analysis.qmd) | Clustering semântico, N-Grams, TF-IDF |
+
+### Descobertas (findings)
+
+Camada de síntese em prose — consolida os achados do pipeline em conclusões interpretativas.
+
+| # | Notebook | Descrição |
+|---|---------|-----------|
+| 07 | [Findings — Overview](notebooks/07-findings-overview.qmd) | Panorama do ano + síntese dos 4 eixos |
+| 08 | [Findings — Dinâmica](notebooks/08-findings-dinamica.qmd) | Volume, ritmo e padrões temporais |
+| 09 | [Findings — Sentimento](notebooks/09-findings-sentimento.qmd) | Tom dominante e evolução emocional |
+| 10 | [Findings — Temas](notebooks/10-findings-temas.qmd) | Clustering semântico (k=10) e caracterização |
+| 11 | [Findings — Estilos](notebooks/11-findings-estilos.qmd) | P1 vs P2: vocabulário, emojis, pontuação |
 
 ## Quick Start
 
