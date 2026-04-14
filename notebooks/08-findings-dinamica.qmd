@@ -1,0 +1,282 @@
+---
+title: "Findings - Dinâmica da Conversa"
+subtitle: "Volume, ritmo e padrões temporais ao longo de um ano"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
+# Resumo
+
+Ao longo dos **308 dias** em que P1 e P2 namoraram (16/dez/2024 a 20/out/2025), foram trocadas **89.336 mensagens** — uma média de **297 mensagens por dia**, com picos que passam de 1.200. Esta análise consolida o *quando* da conversa: volume total, evolução mensal, padrões de dia da semana e hora do dia, e o efeito de estarem juntos ou separados.
+
+A curva do ano não é linear — ela tem um pico pronunciado no inverno (jun–jul/2025) e uma queda brusca nas últimas semanas.
+
+---
+
+# Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+from whatsapp.pipeline.config import DATA_FOLDER
+DATA_DIR = Path("../data/processed") / DATA_FOLDER
+
+df = pd.read_parquet(DATA_DIR / 'messages_enriched.parquet')
+dfc = pd.read_parquet(DATA_DIR / 'messages_with_context.parquet')
+df['fase_relacionamento'] = dfc['fase_relacionamento']
+
+# Foco na fase Relacionamento (pós 16/dez/2024)
+df = df[df['fase_relacionamento'] == 'Relacionamento'].copy()
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+df['data'] = pd.to_datetime(df['data'])
+
+print(f"Mensagens: {len(df):,}")
+print(f"Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+print(f"Duração: {(df['timestamp'].max() - df['timestamp'].min()).days} dias")
+```
+
+---
+
+# Escala
+
+::: {.columns}
+
+::: {.column width="48%"}
+### Números-chave
+
+- **89.336** mensagens
+- **308 dias** de relacionamento
+- **297** msgs/dia (média)
+- **228** msgs/dia (mediana)
+- **1.288** msgs no dia de pico (22/jun/2025)
+
+:::
+
+::: {.column width="4%"}
+:::
+
+::: {.column width="48%"}
+### Encontros
+
+- **110/301 dias juntos** (36,5%)
+- **191/301 dias separados** (63,5%)
+- **121** msgs/dia em encontro
+- **398** msgs/dia separados (**~3×** mais)
+
+:::
+
+:::
+
+O fato mais contraintuitivo: **separados mandam 3× mais mensagens por dia do que juntos**. Isso não significa que juntos se falam menos — significa que parte do que seria conversa escrita vira conversa presencial.
+
+---
+
+# Evolução mensal — o arco do ano
+
+```{python}
+#| label: volume-mensal
+mensal = df.groupby(df['timestamp'].dt.to_period('M')).size().reset_index(name='msgs')
+mensal['periodo'] = mensal['timestamp'].astype(str)
+mensal['dias_no_mes'] = df.groupby(df['timestamp'].dt.to_period('M'))['data'].nunique().values
+mensal['media_diaria'] = (mensal['msgs'] / mensal['dias_no_mes']).round(0)
+
+fig = make_subplots(specs=[[{"secondary_y": True}]])
+fig.add_trace(
+    go.Bar(x=mensal['periodo'], y=mensal['msgs'], name='Total do mês',
+           marker_color='#4C78A8', opacity=0.8,
+           text=mensal['msgs'].apply(lambda x: f'{x:,}'), textposition='outside')
+)
+fig.add_trace(
+    go.Scatter(x=mensal['periodo'], y=mensal['media_diaria'],
+               name='Média diária', mode='lines+markers',
+               line=dict(color='#F58518', width=3),
+               marker=dict(size=10)),
+    secondary_y=True
+)
+
+fig.update_layout(
+    height=450,
+    title_text="Volume mensal — total e média diária",
+    xaxis_title="Mês",
+    hovermode='x unified'
+)
+fig.update_yaxes(title_text="Total de mensagens", secondary_y=False)
+fig.update_yaxes(title_text="Média diária", secondary_y=True)
+fig.show()
+```
+
+**Leitura:**
+
+- O relacionamento começa forte (**janeiro/2025 = 9.240 msgs**), esfria em abril (queda pra 4.041), e então **explode em jun–jul (14k e 17.4k)**. É o ápice de volume do ano.
+- Agosto ainda é intenso (12.8k), mas a partir de **setembro cai bruscamente** (3.2k) e outubro encerra em 3.1k — queda de ~75% frente ao pico.
+- Essa queda final pode refletir estarem mais juntos fisicamente, menor necessidade de texto, ou mudança na dinâmica (ver notebook de sentimento para cross-check).
+
+---
+
+# Padrões diários — hora do dia e dia da semana
+
+```{python}
+#| label: heatmap
+# Garantir ordem PT-BR
+ordem_dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+df['dia_semana_ord'] = pd.Categorical(df['dia_semana'], categories=ordem_dias, ordered=True)
+
+heat = df.groupby(['dia_semana_ord', 'hora'], observed=True).size().reset_index(name='msgs')
+pivot = heat.pivot(index='dia_semana_ord', columns='hora', values='msgs').fillna(0)
+pivot = pivot.reindex(ordem_dias)
+
+fig = go.Figure(data=go.Heatmap(
+    z=pivot.values,
+    x=pivot.columns,
+    y=pivot.index,
+    colorscale='Blues',
+    colorbar=dict(title="Msgs"),
+    hovertemplate='%{y} %{x}h: %{z:,} msgs<extra></extra>'
+))
+fig.update_layout(
+    height=400,
+    title_text="Heatmap: dia da semana × hora do dia",
+    xaxis_title="Hora do dia",
+    yaxis_title="",
+    xaxis=dict(tickmode='linear', tick0=0, dtick=2)
+)
+fig.show()
+```
+
+**Leitura do heatmap:**
+
+- **Zonas mortas (0–7h)**: conversa dorme. Exceção leve na madrugada de sex→sáb (tem alguma atividade nas primeiras horas).
+- **Crescimento suave ao longo do dia**: volume aumenta a partir das 9h, se estabiliza alto entre 10h–22h.
+- **Pico forte entre 17h–20h**, com máximo às 19h. Conversa "depois do trabalho" é o momento mais intenso.
+- **Finais de semana são mais intensos que dias úteis** em horário noturno — especialmente domingo à noite.
+
+---
+
+# Distribuição por hora (visão agregada)
+
+```{python}
+#| label: distribuicao-hora
+hora = df.groupby('hora').size().reset_index(name='msgs')
+
+fig = go.Figure()
+fig.add_trace(go.Bar(
+    x=hora['hora'], y=hora['msgs'],
+    marker_color='#4C78A8',
+    text=hora['msgs'], textposition='outside'
+))
+fig.update_layout(
+    height=380,
+    title_text="Mensagens por hora do dia (total do período)",
+    xaxis_title="Hora",
+    yaxis_title="Mensagens",
+    xaxis=dict(tickmode='linear', tick0=0, dtick=1)
+)
+fig.show()
+```
+
+O ritmo é o de um casal com vida ativa: conversa acorda junto com a manhã, ganha força entre 11h e 13h (almoço), sobe de novo entre 15h e 20h (final da tarde/início da noite), e decai gradualmente.
+
+---
+
+# Juntos vs. separados — quanto pesa a distância?
+
+```{python}
+#| label: juntos-vs-separados
+comp = df.groupby('em_encontro').agg(
+    total_msgs=('timestamp', 'count'),
+    dias_distintos=('data', 'nunique')
+).reset_index()
+comp['rotulo'] = comp['em_encontro'].map({True: 'Juntos', False: 'Separados'})
+comp['msgs_por_dia'] = (comp['total_msgs'] / comp['dias_distintos']).round(0)
+
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Total de mensagens', 'Média por dia'),
+)
+fig.add_trace(
+    go.Bar(x=comp['rotulo'], y=comp['total_msgs'],
+           marker_color=['#2ECC71', '#E74C3C'],
+           text=comp['total_msgs'].apply(lambda x: f'{x:,}'),
+           textposition='outside', showlegend=False),
+    row=1, col=1
+)
+fig.add_trace(
+    go.Bar(x=comp['rotulo'], y=comp['msgs_por_dia'],
+           marker_color=['#2ECC71', '#E74C3C'],
+           text=comp['msgs_por_dia'].apply(lambda x: f'{int(x):,}'),
+           textposition='outside', showlegend=False),
+    row=1, col=2
+)
+fig.update_layout(height=400, title_text="Volume: juntos vs. separados")
+fig.show()
+```
+
+**Leitura:**
+
+- Apesar de estarem juntos em **36,5%** dos dias, apenas **15%** das mensagens aconteceram nesses dias. A conversa escrita é majoritariamente um substituto para presença.
+- Mesmo juntos, mandam **121 mensagens/dia em média** — ou seja, conversa por texto não desaparece totalmente quando estão no mesmo lugar (vídeos, memes, tarefas logísticas, links).
+
+---
+
+# Picos e vales
+
+```{python}
+#| label: picos
+diario = df.groupby('data').size().reset_index(name='msgs')
+diario = diario.sort_values('msgs', ascending=False)
+
+# Top 5 e bottom 5 (só dias com >=1 msg)
+top = diario.head(5).copy()
+bot = diario.tail(5).copy()
+top['tipo'] = 'Top 5'
+bot['tipo'] = 'Menores 5'
+picos_df = pd.concat([top, bot])
+picos_df['data_str'] = picos_df['data'].dt.strftime('%Y-%m-%d')
+
+print("Top 5 dias de maior volume:")
+print(top[['data', 'msgs']].to_string(index=False))
+print("\nMenores 5 dias:")
+print(bot[['data', 'msgs']].to_string(index=False))
+```
+
+O pico absoluto é **22/jun/2025 com 1.288 mensagens** — um domingo. Olhar o que aconteceu nesses picos/vales específicos pode render microhistórias (ver notebook de temas e sentimento).
+
+---
+
+# Conclusões
+
+1. **O relacionamento gerou ~89 mil mensagens em ~10 meses** — equivalente a ~297 msgs/dia de média, com mediana em 228. A conversa é de alta frequência.
+
+2. **O arco do ano tem forma clara:** começa forte (dez–jan), dá uma respirada em abril, explode no inverno (jun–jul foi o ápice com 17k msgs em julho), e **cai drasticamente nas últimas semanas** (setembro e outubro com ~3k cada).
+
+3. **Distância alimenta o texto.** Quando separados, mandam ~**3× mais mensagens por dia** do que quando juntos — a conversa escrita é, fundamentalmente, um preenchimento da ausência.
+
+4. **A conversa tem um ritmo diário estável.** Picos entre 17h–20h, menor atividade de madrugada. Finais de semana à noite são os momentos mais carregados.
+
+5. **Juntos ≠ silêncio.** Mesmo presencialmente, mandam ~121 msgs/dia — vídeos, tarefas, logística. Texto coexiste com presença.
+
+::: {.callout-tip}
+## Ver também
+- [09 - Findings Sentimento](09-findings-sentimento.qmd) — a queda de setembro-outubro significou o quê em termos de *tom*?
+- [10 - Findings Temas](10-findings-temas.qmd) — o que se falava nos picos de jun–jul?
+- [05.1 - EDA Temporal](05.1-eda-temporal.qmd) — versão técnica/exploratória dessa análise.
+:::

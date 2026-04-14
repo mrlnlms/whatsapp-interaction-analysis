@@ -73,6 +73,18 @@ website:
             text: "05.3 - EDA Conteúdo"
           - href: notebooks/06-advanced-analysis.qmd
             text: "06 - Análise Avançada"
+      - text: Descobertas
+        menu:
+          - href: notebooks/07-findings-overview.qmd
+            text: "07 - Overview"
+          - href: notebooks/08-findings-dinamica.qmd
+            text: "08 - Dinâmica"
+          - href: notebooks/09-findings-sentimento.qmd
+            text: "09 - Sentimento"
+          - href: notebooks/10-findings-temas.qmd
+            text: "10 - Temas"
+          - href: notebooks/11-findings-estilos.qmd
+            text: "11 - Estilos"
       - text: Referência
         menu:
           - href: docs/data-dictionary.md
@@ -125,6 +137,13 @@ website:
           - notebooks/05.2-eda-interacao.qmd
           - notebooks/05.3-eda-conteudo.qmd
           - notebooks/06-advanced-analysis.qmd
+      - section: "Descobertas"
+        contents:
+          - notebooks/07-findings-overview.qmd
+          - notebooks/08-findings-dinamica.qmd
+          - notebooks/09-findings-sentimento.qmd
+          - notebooks/10-findings-temas.qmd
+          - notebooks/11-findings-estilos.qmd
 
   page-footer:
     center: |

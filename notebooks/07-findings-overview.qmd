@@ -1,0 +1,183 @@
+---
+title: "Findings - Overview"
+subtitle: "O que os dados dizem sobre um ano de conversa"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
+# Um ano em dados
+
+Entre **19 de outubro de 2024** e **20 de outubro de 2025**, P1 e P2 trocaram **91.924 mensagens** no WhatsApp. Dessas, **89.336 pertencem à fase de Relacionamento** (a partir de 16 de dezembro de 2024, quando eles começaram a namorar).
+
+Este projeto transformou esse corpus em uma pipeline de Data Science — limpeza, wrangling, feature engineering, modelos de sentimento, embeddings semânticos e análise exploratória — com **20+ notebooks documentados**. O site inteiro é a prova de trabalho: cada transformação, cada decisão, cada gráfico aberto ao escrutínio.
+
+Esta seção — **Descobertas** — fecha o loop. Ao invés de mais pipeline, aqui são os findings: o que os dados, depois de tudo isso, *dizem*.
+
+::: {.callout-tip}
+**Como ler este panorama:** cada seção abaixo consolida um eixo analítico e linka para o notebook detalhado. Você pode ler só essa página e ter o retrato geral, ou descer pelos notebooks específicos quando algo chamar atenção.
+:::
+
+---
+
+# Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+from whatsapp.pipeline.config import DATA_FOLDER
+DATA_DIR = Path("../data/processed") / DATA_FOLDER
+
+df = pd.read_parquet(DATA_DIR / 'messages_with_models.parquet')
+dfc = pd.read_parquet(DATA_DIR / 'messages_with_context.parquet')
+df['fase_relacionamento'] = dfc['fase_relacionamento']
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+df_total = df
+df_rel = df[df['fase_relacionamento'] == 'Relacionamento'].copy()
+```
+
+---
+
+# Escala e escopo
+
+```{python}
+#| label: escala
+resumo = {
+    'Total de mensagens': f"{len(df_total):,}",
+    'Período completo': f"{df_total['timestamp'].min().strftime('%d/%m/%Y')} → {df_total['timestamp'].max().strftime('%d/%m/%Y')}",
+    'Duração': f"{(df_total['timestamp'].max() - df_total['timestamp'].min()).days} dias",
+    'Fase Relacionamento (msgs)': f"{len(df_rel):,}",
+    'Fase Relacionamento (dias)': f"{df_rel['timestamp'].dt.date.nunique()} dias",
+    'Média msgs/dia (Relacionamento)': f"{len(df_rel)/df_rel['timestamp'].dt.date.nunique():.0f}",
+    'Mensagens P1': f"{(df_rel['remetente']=='P1').sum():,} ({(df_rel['remetente']=='P1').mean()*100:.1f}%)",
+    'Mensagens P2': f"{(df_rel['remetente']=='P2').sum():,} ({(df_rel['remetente']=='P2').mean()*100:.1f}%)",
+    'Mensagens só com mídia': f"{(df_rel['conteudo'].isna() | (df_rel['conteudo']=='')).sum():,}",
+    'Dias juntos': f"{df_rel.groupby(df_rel['timestamp'].dt.date)['em_encontro'].any().sum()} ({df_rel.groupby(df_rel['timestamp'].dt.date)['em_encontro'].any().mean()*100:.1f}%)",
+}
+pd.DataFrame(list(resumo.items()), columns=['Métrica', 'Valor'])
+```
+
+**Contexto anterior:** as 2.588 mensagens pré-16/dez/2024 estão rotuladas como fase "Amizade" e ficam fora da maioria das análises — o escopo dos findings é o ano de **namoro**.
+
+---
+
+# Os quatro eixos
+
+Os findings estão organizados em quatro dimensões, cada uma com seu próprio notebook. Abaixo, a síntese de cada um — o que ler se tiver 2 minutos.
+
+## 1. Dinâmica — [[08 - Findings Dinâmica](08-findings-dinamica.qmd)]
+
+Volume, frequência e padrões temporais. O arco do ano tem forma clara: **começa forte** (jan/2025 com 9k msgs), **explode no inverno** (julho com 17k — o ápice), e **cai drasticamente no fim** (set–out com ~3k cada, queda de 75% frente ao pico).
+
+**Finding central:** a **distância alimenta o texto**. Quando separados, mandam **~3× mais mensagens por dia** (398/dia) do que quando juntos (121/dia). O texto escrito é, funcionalmente, um preenchimento da ausência.
+
+Outros achados:
+
+- Pico diário: 22/jun/2025 com 1.288 mensagens em um único dia.
+- Conversa se intensifica entre 17h–20h; zona morta 0–7h.
+- Finais de semana à noite são os momentos mais carregados.
+
+## 2. Sentimento — [[09 - Findings Sentimento](09-findings-sentimento.qmd)]
+
+Três modelos (RoBERTa, DistilBERT, DeBERTa) + ensemble foram aplicados a cada mensagem textual. A maior surpresa: **o tom é notavelmente estável ao longo do ano**.
+
+**Finding central:** **58% neutro, 27% positivo, 15% negativo**. Positivas pesam ~1,8× mais que negativas. Não é uma conversa de adjetivos amorosos todo o tempo — é cotidiana com viés afetuoso. E essa proporção mal se move mês a mês, mesmo com o volume oscilando 3×.
+
+Outros achados:
+
+- **A queda de volume do fim não foi queda de tom.** Setembro/outubro tiveram menos mensagens, mas o sentimento permaneceu dentro do padrão anual.
+- P1 é **marginalmente mais positivo** (29,8% vs. 24,8%); P2 mais neutro/negativo — coerente com o estilo de emojis.
+- **Juntos = mais neutro; separados = mais positivo (no texto).** Quando presentes, o texto vira operacional; separados, é o canal principal de afeto verbal.
+
+::: {.callout-warning title="Caveat"}
+Os 3 modelos foram treinados majoritariamente em inglês; a conversa é em português coloquial. Leia proporções e tendências, não valores absolutos.
+:::
+
+## 3. Temas — [[10 - Findings Temas](10-findings-temas.qmd)]
+
+Embeddings (768d) + K-Means (k=10) + TF-IDF produziram **dez famílias de mensagens** com identidades claras:
+
+| Cluster | Tema | Tamanho |
+|---------|------|---------|
+| C1 | Reações e confirmações | 12.744 (19%) |
+| C5 | Expressões importadas e links | 10.555 (16%) |
+| C9 | Planos e vontades | 9.459 (14%) |
+| C2 | Afeto explícito | 7.279 (11%) |
+| C8 | Frustrações e negatividade | 5.951 (9%) |
+| C6 | Rotina diária (dormir/acordar) | 5.876 (9%) |
+| C4 | Comida, desejo e apelidos | 4.844 (7%) |
+| C7 | Conversas sobre terceiros | 4.684 (7%) |
+| C3 | Risadas (kkkk) | 3.055 (5%) |
+| C0 | Saudações e agradecimentos | 2.296 (3%) |
+
+**Finding central:** **o miolo da conversa é reativo/confirmatório, não afetivo.** C1 + C5 + C9 somam quase metade. Só ~11% das mensagens são afeto explícito (C2).
+
+Outros achados:
+
+- **P1 é reativo-carinhoso; P2 é propositivo-desejoso.** P1 lidera em saudações e reações curtas. P2 lidera em risadas, comida/desejo e planos/vontades.
+- **Afeto explícito (C2) cresceu nos primeiros meses** — de 6% em dez/2024 para 11% em mar/2025 e estabilizou.
+- **Frustrações (C8) têm canal preferencial: separados** (−1,6pp quando juntos). Desabafos pesados usam o texto, não a presença.
+
+## 4. Estilos de escrita — [[11 - Findings Estilos](11-findings-estilos.qmd)]
+
+Como cada um se expressa. Volume é quase equilibrado (51/49), mas estilo é *bem* assimétrico.
+
+**Finding central:** **P1 é emoji-diverso; P2 é emoji-fiel.** P1 rotaciona entre 😍 😂 😘 🥰 🖤 🫶. P2 carimba 💚 em praticamente toda mensagem com emoji (**1.504 vezes** — mais do que todos os top-emojis de P1 combinados). É uma assinatura pessoal forte, quase exclusiva.
+
+Outros achados:
+
+- **P2 é visivelmente mais enfático na escrita** — quase 4× mais exclamações. "P1 pontua, P2 explode."
+- **Apelidos simétricos:** P1 chama P2 de "gata"; P2 chama P1 de "gato".
+- P1 verbaliza com carinho ("linda", "baby", "hahaha"); P2 abrevia e narra ("mto", "queria", "kkkkkk").
+- **Ambos escrevem em rajadas curtas** — mediana de 3–4 palavras por mensagem, 81% são resposta rápida.
+
+---
+
+# Principais descobertas em uma frase cada
+
+1. A conversa tem ~89 mil mensagens em 10 meses, com uma **curva que explode no inverno e cai no fim**.
+2. **Distância alimenta texto.** Separados mandam 3× mais mensagens por dia.
+3. O tom é **58% neutro, 27% positivo, 15% negativo — e absurdamente estável ao longo do ano**.
+4. **Só 11% das mensagens são afeto explícito**; o miolo é reativo/operacional.
+5. **P1 é emoji-diverso e reativo-carinhoso; P2 é emoji-fiel (💚) e propositivo-desejoso.**
+6. Quando **juntos**, texto vira logística. **Separados**, vira afeto e desabafos.
+
+---
+
+# Limitações e caveats
+
+- **Modelos de sentimento foram treinados em inglês.** Português coloquial + emojis reduz precisão. Leia tendências, não valores absolutos.
+- **Embeddings cobrem só mensagens textuais** (66,7k de 89,3k); 25% dos dados — áudios, vídeos, stickers — ficou de fora da análise semântica. Transcrições automáticas existem mas não foram integradas aos embeddings.
+- **É uma conversa, dois interlocutores.** Padrões são específicos desse par e não generalizam.
+- **O "fim" do recorte é artificial.** Os dados terminam em 20/out/2025 porque foi até aí que o export chegou. A queda de volume no fim pode ser fenômeno real da conversa ou simplesmente truncamento do corpus.
+- **Clustering com k=10** foi escolha pragmática. Clusterings alternativos (k menor, HDBSCAN, etc.) poderiam rearranjar as famílias.
+
+---
+
+# Próximos passos
+
+- **Integrar transcrições de áudio/vídeo** à análise semântica — hoje ficam de fora do clustering e do sentimento.
+- **Modelo de sentimento em português** (ex: BERTimbau com fine-tuning) para validar a estabilidade de tom encontrada.
+- **Micro-histórias**: examinar os dias de pico (22/jun/2025 com 1.288 msgs) e os vales para entender qualitativamente o que aconteceu.
+- **Segundo export** para comparar períodos e validar tendências observadas (uma das *oportunidades futuras* em aberto no projeto).
+
+::: {.callout-tip}
+## Ver o raw
+O site inteiro é auditável — entre em [Preparação](../notebooks/00-data-discovery.qmd), [Modelos](../notebooks/04-model-features.qmd) ou [Análise](../notebooks/05-eda-overview.qmd) para ver como cada número acima foi derivado, com código e decisão documentados.
+:::
