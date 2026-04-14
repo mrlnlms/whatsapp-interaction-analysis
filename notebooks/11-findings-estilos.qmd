@@ -1,0 +1,314 @@
+---
+title: "Findings - Estilos de Escrita"
+subtitle: "Como P1 e P2 se expressam por escrito — vocabulário, pontuação, emojis"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
+# Resumo
+
+Cada pessoa escreve de um jeito. Esta análise compara os estilos de P1 e P2 ao longo dos ~10 meses de relacionamento (dez/2024–out/2025, 89.336 mensagens com conteúdo textual).
+
+O padrão que emerge é claro e, curiosamente, **assimétrico**: P1 e P2 não escrevem o mesmo tanto, não usam os mesmos símbolos e não acentuam o mesmo tipo de emoção.
+
+::: {.callout-note}
+**P1 e P2** são identificadores anônimos dos dois remetentes da conversa. A atribuição foi feita pelo pipeline; nenhuma mensagem crua é exposta aqui sem filtro manual.
+:::
+
+---
+
+# Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+from collections import Counter
+import re
+import emoji
+import warnings
+warnings.filterwarnings('ignore')
+
+from whatsapp.pipeline.config import DATA_FOLDER
+DATA_DIR = Path("../data/processed") / DATA_FOLDER
+
+# Carrega dados enriquecidos + contexto de fase
+df = pd.read_parquet(DATA_DIR / 'messages_enriched.parquet')
+dfc = pd.read_parquet(DATA_DIR / 'messages_with_context.parquet')
+df['fase_relacionamento'] = dfc['fase_relacionamento']
+
+# Foco no período de Relacionamento (pós 16/dez/2024)
+df = df[df['fase_relacionamento'] == 'Relacionamento'].copy()
+df_texto = df[df['conteudo'].notna() & (df['conteudo'] != '')].copy()
+
+print(f"Mensagens analisadas: {len(df):,}")
+print(f"Com conteúdo textual: {len(df_texto):,}")
+print(f"Período: {df['timestamp'].min().date()} → {df['timestamp'].max().date()}")
+```
+
+---
+
+# Volume e frequência
+
+P1 envia **51,0%** das mensagens; P2 envia **49,0%**. A divisão é quase equilibrada, mas há assimetrias no *como*.
+
+```{python}
+#| label: volume-por-remetente
+vol = df.groupby('remetente').size().reset_index(name='msgs')
+vol['pct'] = vol['msgs'] / vol['msgs'].sum() * 100
+vol
+```
+
+Ambos respondem rápido: **81%** das mensagens de P1 e **81%** das mensagens de P2 são classificadas como "resposta rápida" (< 5 minutos da mensagem anterior da outra pessoa). A conversa é fluida nos dois lados.
+
+---
+
+# Tamanho das mensagens
+
+A mediana é parecida — ~17 caracteres — mas P1 tem cauda mais longa (mensagem mais extensa chega a **8.561 caracteres**, contra 3.030 de P2).
+
+```{python}
+#| label: tamanho-painel
+fig = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Distribuição do tamanho (caracteres, cap em 200)',
+                    'Tamanho médio em palavras'),
+    column_widths=[0.7, 0.3]
+)
+
+# Histograma por remetente
+for who, cor in [('P1', '#4C78A8'), ('P2', '#F58518')]:
+    sub = df_texto[(df_texto['remetente'] == who) & (df_texto['tamanho_caracteres'] <= 200)]
+    fig.add_trace(
+        go.Histogram(x=sub['tamanho_caracteres'], name=who, opacity=0.7,
+                     marker_color=cor, nbinsx=50),
+        row=1, col=1
+    )
+
+# Média palavras
+palavras = df_texto[df_texto['tamanho_palavras'] > 0].groupby('remetente')['tamanho_palavras'].mean().reset_index()
+fig.add_trace(
+    go.Bar(x=palavras['remetente'], y=palavras['tamanho_palavras'],
+           marker_color=['#4C78A8', '#F58518'], showlegend=False,
+           text=palavras['tamanho_palavras'].round(1), textposition='outside'),
+    row=1, col=2
+)
+
+fig.update_layout(
+    height=400, barmode='overlay',
+    title_text="Tamanho de mensagens — P1 vs P2",
+    showlegend=True
+)
+fig.update_xaxes(title_text="Caracteres", row=1, col=1)
+fig.update_yaxes(title_text="Frequência", row=1, col=1)
+fig.update_yaxes(title_text="Palavras (média)", row=1, col=2)
+fig.show()
+```
+
+**Leitura:** mensagens curtas (<50 caracteres) dominam em ambos. A grande maioria da conversa é trocada em rajadas curtas, não em parágrafos longos. P2 tem ligeira preferência por mensagens um pouco maiores em número de palavras (média 5,1 palavras vs. 5,4 de P1, mas mediana 4 vs. 3).
+
+---
+
+# Emojis — o sinal mais claro de identidade
+
+A maior surpresa da análise: emojis separam bem mais P1 e P2 do que o texto em si.
+
+## Quem usa mais emoji
+
+```{python}
+#| label: emojis-stats
+emoji_stats = df_texto.groupby('remetente').agg(
+    pct_msgs_com_emoji=('tem_emoji', lambda x: x.mean() * 100),
+    total_emojis=('qtd_emojis', 'sum'),
+    media_quando_usa=('qtd_emojis', lambda x: x[x > 0].mean())
+).round(2)
+emoji_stats
+```
+
+**P1 usa emoji com o dobro de frequência** — em ~7,6% das mensagens contra ~3,1% de P2. Mas quando P2 usa, tende a mandar mais emojis por mensagem (1,4 vs. 1,1 de P1).
+
+## Assinaturas de emoji
+
+Aqui a divisão é quase caricata. Cada pessoa tem uma "assinatura" dominante.
+
+```{python}
+#| label: top-emojis
+def extract_emojis(text):
+    return [c for c in str(text) if c in emoji.EMOJI_DATA]
+
+top_emojis = {}
+for who in ['P1', 'P2']:
+    sub = df_texto[df_texto['remetente'] == who]
+    all_e = []
+    for t in sub['conteudo']:
+        all_e.extend(extract_emojis(t))
+    # Filtra modificadores de pele (que vêm sozinhos como 🏻🏼)
+    filtered = [e for e in all_e if e not in {'🏻', '🏼', '🏽', '🏾', '🏿', '▪'}]
+    top_emojis[who] = Counter(filtered).most_common(10)
+
+fig = make_subplots(rows=1, cols=2, subplot_titles=('Top emojis — P1', 'Top emojis — P2'))
+
+for i, who in enumerate(['P1', 'P2'], start=1):
+    items = top_emojis[who]
+    emojis_list = [x[0] for x in items]
+    counts = [x[1] for x in items]
+    fig.add_trace(
+        go.Bar(x=counts, y=emojis_list, orientation='h',
+               marker_color='#4C78A8' if who == 'P1' else '#F58518',
+               text=counts, textposition='outside', showlegend=False),
+        row=1, col=i
+    )
+
+fig.update_layout(height=450, title_text="Top emojis por pessoa")
+fig.update_xaxes(title_text="Ocorrências")
+fig.update_yaxes(autorange='reversed')
+fig.show()
+```
+
+**Leitura:**
+
+- **P1** distribui entre vários emojis românticos/carinhosos e risadas: 😍 (632), 😂 (451), 😘 (323), 🥰 (297), 🖤 (214), 🫶 (206).
+- **P2** é radicalmente concentrado: **💚 aparece 1.504 vezes** — mais do que todos os emojis mais usados de P1 combinados. É uma assinatura pessoal forte, quase exclusiva (💚 é o emoji "verde" — possível referência à cor favorita ou apelido interno).
+
+A diferença não é apenas de volume: é de **variedade**. P1 rotaciona entre carinhos; P2 repete o mesmo símbolo como carimbo.
+
+---
+
+# Pontuação — "P1 pontua, P2 explode"
+
+A forma como cada pessoa pontua também diverge:
+
+```{python}
+#| label: pontuacao
+pont = df_texto.groupby('remetente').agg(
+    pct_interrogacao=('tem_interrogacao', lambda x: x.mean() * 100),
+    pct_exclamacao=('tem_exclamacao', lambda x: x.mean() * 100),
+    pct_caixa_alta=('eh_caixa_alta', lambda x: x.mean() * 100)
+).round(1)
+pont
+```
+
+**P2 usa quase 4x mais exclamações** (4,0% das mensagens vs. 1,1% de P1). P1 e P2 perguntam em taxas semelhantes (~5% cada). Caixa alta também é mais frequente em P2 (2,7% vs. 2,2%).
+
+Isso confirma o achado do notebook de EDA (`05.3-eda-conteudo`): **P1 pontua, P2 explode.** Onde P1 escreve calmo e pausado, P2 escreve com intensidade visível — exclamações, letras maiúsculas, kkkkk mais longos.
+
+---
+
+# Vocabulário — o que cada um fala
+
+```{python}
+#| label: vocabulario
+# Stopwords + ruído do WhatsApp
+stops = {'a','o','e','de','da','do','que','é','em','um','uma','para','com','não',
+         'por','os','as','no','na','se','mais','eu','te','tá','pra','ja','ai','aí',
+         'mas','só','ta','q','vc','já','aqui','vai','ser','tem','como','bem','muito',
+         'meu','minha','sim','tbm','nao','eh','pq','né','era','tava','esse','essa',
+         'isso','la','foi','estava','entao','então','vou','quando','sei','nem','ao',
+         'das','dos','tudo','teu','tua','tu','vcs','porque','to','estou','ne','oi',
+         'oie','sou','message','this','edited','deleted'}
+
+def top_words(textos, n=20):
+    all_words = []
+    for t in textos:
+        text = ''.join(c for c in str(t).lower() if c not in emoji.EMOJI_DATA)
+        text = re.sub(r'[^a-záàâãéêíóôõúüç\s]', ' ', text)
+        words = [w for w in text.split() if len(w) >= 3 and w not in stops]
+        all_words.extend(words)
+    return Counter(all_words), len(all_words)
+
+words_p1, total_p1 = top_words(df_texto[df_texto['remetente']=='P1']['conteudo'])
+words_p2, total_p2 = top_words(df_texto[df_texto['remetente']=='P2']['conteudo'])
+
+print(f"P1: {len(words_p1):,} palavras únicas | {total_p1:,} tokens")
+print(f"P2: {len(words_p2):,} palavras únicas | {total_p2:,} tokens")
+print(f"\nDiversidade (únicas/tokens): P1={len(words_p1)/total_p1*100:.1f}% | P2={len(words_p2)/total_p2*100:.1f}%")
+```
+
+**P1 tem vocabulário mais amplo** (12.179 palavras únicas vs. 10.695 de P2), mas a densidade relativa é parecida. A diferença qualitativa está *quais* palavras dominam.
+
+```{python}
+#| label: top-palavras-plot
+TOP_N = 15
+tp1 = words_p1.most_common(TOP_N)
+tp2 = words_p2.most_common(TOP_N)
+
+fig = make_subplots(rows=1, cols=2, subplot_titles=(f'Top {TOP_N} palavras — P1', f'Top {TOP_N} palavras — P2'))
+
+for i, (who, items) in enumerate([('P1', tp1), ('P2', tp2)], start=1):
+    words = [x[0] for x in items]
+    counts = [x[1] for x in items]
+    fig.add_trace(
+        go.Bar(x=counts, y=words, orientation='h',
+               marker_color='#4C78A8' if who == 'P1' else '#F58518',
+               text=counts, textposition='outside', showlegend=False),
+        row=1, col=i
+    )
+
+fig.update_layout(height=550, title_text="Palavras mais usadas (sem stopwords)")
+fig.update_xaxes(title_text="Ocorrências")
+fig.update_yaxes(autorange='reversed')
+fig.show()
+```
+
+**Palavras em comum (top 15):** `amor`, `bom`, `dia`, `acho`, `demais`, `ver`, `amo`. O núcleo afetivo e cotidiano é compartilhado.
+
+**Distintivas de cada um:**
+
+- **P1:** `gata`, `baby`, `linda`, `hahaha`, `nossa`, `você` (com acento). Vocabulário mais verbalizado, com apelidos carinhosos.
+- **P2:** `gato`, `mto` (muito abreviado), `ele/ela`, `queria`, `gostoso`, `kkkkk` (em diferentes comprimentos), `agora`. Mais abreviado, mais temporal ("agora"), mais narrativo sobre terceiros ("ele/ela").
+
+Curiosidade: os apelidos se espelham — **P1 chama P2 de "gata"; P2 chama P1 de "gato"**.
+
+---
+
+# Ritmo — como cada um quebra pensamento
+
+```{python}
+#| label: sequencia
+seq = df_texto.groupby('remetente')['sequencia_mesmo_remetente'].agg(
+    media_seq='mean',
+    max_seq='max'
+).round(2)
+seq
+```
+
+A coluna `sequencia_mesmo_remetente` mede quantas mensagens consecutivas a mesma pessoa envia antes da outra responder. Valores maiores indicam hábito de "mandar em rajadas" em vez de consolidar numa mensagem só.
+
+Ambos têm padrão similar — escrevem em pensamentos curtos enviados em sequência, não em textões.
+
+---
+
+# Conclusões
+
+1. **Volume é equilibrado, mas estilo é assimétrico.** 51% vs. 49% de mensagens, com divergências visíveis em todo o resto.
+
+2. **P1 é o "emoji-diverso"; P2 é o "emoji-fiel".** P1 rotaciona entre 😍 😂 😘 🥰 🖤 🫶; P2 carimba 💚 em praticamente toda mensagem com emoji (1.504 usos — um volume de assinatura única).
+
+3. **P2 é visivelmente mais enfático na escrita.** Quase 4x mais exclamações e uso mais frequente de caixa alta. "P1 pontua, P2 explode."
+
+4. **Vocabulário compartilha o núcleo afetivo, diverge na textura.** `amor`, `bom`, `dia` em comum; P1 verbaliza com apelidos ("gata", "linda", "baby"), P2 abrevia e narra ("mto", "queria", "agora").
+
+5. **Apelidos simétricos.** P1 chama P2 de "gata"; P2 chama P1 de "gato".
+
+6. **Ambos escrevem em rajadas curtas, não em textões.** Mediana de 3-4 palavras por mensagem, 81% das mensagens são resposta rápida.
+
+::: {.callout-tip}
+## Ver também
+- [09 - Findings Sentimento](09-findings-sentimento.qmd) — como o *tom emocional* se distribui entre P1 e P2.
+- [05.3 - EDA Conteúdo](05.3-eda-conteudo.qmd) — versão técnica/exploratória dessa análise.
+:::

@@ -31,6 +31,24 @@ Outros incrementos foram desenvolvidos para agregar a estes dados ainda mais riq
 
 ------------------------------------------------------------------------
 
+# Principais Descobertas
+
+Depois de toda a pipeline (limpeza, wrangling, feature engineering, modelos de sentimento, embeddings semânticos, clustering), as **89.336 mensagens** trocadas ao longo do namoro responderam com padrões claros:
+
+-   **Distância alimenta texto.** Separados, mandam **~3× mais mensagens por dia** do que juntos — o texto é, funcionalmente, o preenchimento da ausência. [→ Dinâmica da conversa](notebooks/08-findings-dinamica.qmd)
+
+-   **O tom é 58% neutro, 27% positivo, 15% negativo — e absurdamente estável ao longo do ano.** Nem o pico de volume (jul/2025) nem a queda do fim (set–out) mudou esse equilíbrio. [→ Sentimento](notebooks/09-findings-sentimento.qmd)
+
+-   **Só 11% das mensagens são afeto explícito.** O miolo da conversa é reativo/confirmatório ("entendi", "hahaha", planos, logística) — não uma troca contínua de declarações. [→ Temas](notebooks/10-findings-temas.qmd)
+
+-   **P1 é emoji-diverso; P2 é emoji-fiel.** P1 rotaciona entre 😍 😂 😘 🥰. P2 carimba 💚 **1.504 vezes** — uma assinatura pessoal quase exclusiva. [→ Estilos de escrita](notebooks/11-findings-estilos.qmd)
+
+-   **P1 é reativo-carinhoso; P2 é propositivo-desejoso.** P1 lidera em saudações e reações curtas. P2 lidera em risadas, comida/desejo e planos/vontades. Apelidos simétricos: "gato" e "gata".
+
+[**Leia o panorama completo →**](notebooks/07-findings-overview.qmd)
+
+------------------------------------------------------------------------
+
 # Timeline: Um Ano em Dados
 
 ![Timeline Ultimate — volume de mensagens por pessoa e tipo de mídia, com viagens marcadas e % de dias juntos por mês.](./assets/images/timeline-ultimate.png){fig-align="center"}

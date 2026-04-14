@@ -1,0 +1,303 @@
+---
+title: "Findings - Temas da Conversa"
+subtitle: "Clustering semântico: sobre o que P1 e P2 falam"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
+# Resumo
+
+Os notebooks 04f–04i geraram **embeddings** (representações numéricas de 768 dimensões) para cada mensagem textual da conversa, usando o modelo **paraphrase-multilingual-mpnet-base-v2** — multilíngue, adequado para português.
+
+Este notebook faz o que esses embeddings foram pensados pra fazer: **encontrar temas recorrentes** através de clustering. Rodamos K-Means com **k=10** sobre as 66.743 mensagens textuais da fase de Relacionamento e caracterizamos cada cluster por seu vocabulário distintivo (TF-IDF).
+
+O resultado: **dez "famílias" de mensagens** com identidades bem claras — saudações, piadas, afeto explícito, rotina, planos, frustrações e mais.
+
+::: {.callout-note}
+Mensagens apenas de mídia (áudios, vídeos, stickers omitidos) não têm embedding — o clustering só cobre as 66.743 mensagens com conteúdo textual, de um total de 89.336 no período de Relacionamento.
+:::
+
+---
+
+# Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+from whatsapp.pipeline.config import DATA_FOLDER
+DATA_DIR = Path("../data/processed") / DATA_FOLDER
+
+df = pd.read_parquet(DATA_DIR / 'messages_with_models.parquet')
+dfc = pd.read_parquet(DATA_DIR / 'messages_with_context.parquet')
+df['fase_relacionamento'] = dfc['fase_relacionamento']
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+# Máscaras alinhadas ao array de embeddings (ordem do df original)
+mask_has_emb = df['similaridade_anterior'].notna()
+mask_rel = df['fase_relacionamento'] == 'Relacionamento'
+mask_both = mask_has_emb & mask_rel
+
+labels = np.load(DATA_DIR / 'cluster_labels_mpnet_k10.npy')
+df_c = df[mask_both].copy()
+df_c['cluster'] = labels
+
+print(f"Mensagens clusterizadas: {len(df_c):,}")
+print(f"Clusters: {df_c['cluster'].nunique()}")
+```
+
+---
+
+# Os 10 temas
+
+O clustering produziu grupos semanticamente coerentes. Nomeei cada um com base nas palavras dominantes e em inspeção amostral:
+
+```{python}
+#| label: nomes-clusters
+nomes_clusters = {
+    0: 'Saudações e agradecimentos',
+    1: 'Reações e confirmações',
+    2: 'Afeto explícito',
+    3: 'Risadas (kkkk)',
+    4: 'Comida, desejo e apelidos',
+    5: 'Expressões importadas e links',
+    6: 'Rotina diária (dormir/acordar)',
+    7: 'Conversas sobre terceiros',
+    8: 'Frustrações e negatividade',
+    9: 'Planos e vontades',
+}
+
+palavras_clusters = {
+    0: ['bom', 'dia', 'obrigada', 'obrigado', 'boa', 'coisa', 'hahaha'],
+    1: ['entendi', 'hahaha', 'boa', 'mesmo', 'coisa', 'demais', 'linda', 'agora'],
+    2: ['amo', 'vida', 'demais', 'linda', 'lindo', 'paixão', 'adoro'],
+    3: ['kkkkkkk', 'kkkk', 'kkkkk', 'kkkkkkkkkkkk'],
+    4: ['gato', 'gostoso', 'gata', 'gostosa', 'delícia', 'comer', 'fome', 'café'],
+    5: ['was', 'https', 'baby', 'pqp', 'socorro', 'mto', 'vdd', 'spotify', 'mara'],
+    6: ['dormir', 'acordei', 'dormi', 'saudade', 'casa', 'amanhã', 'noite'],
+    7: ['ele', 'ela', 'dele', 'queria', 'falou', 'olivia', 'disse'],
+    8: ['nada', 'sem', 'ainda', 'nunca', 'ruim', 'desculpa', 'foda', 'merda'],
+    9: ['quero', 'agora', 'ver', 'fazer', 'casa', 'queria', 'bolar', 'chegar'],
+}
+
+size_cluster = df_c['cluster'].value_counts().sort_index()
+resumo = pd.DataFrame({
+    'Cluster': [f"C{c}" for c in range(10)],
+    'Nome': [nomes_clusters[c] for c in range(10)],
+    'N msgs': [f"{size_cluster.get(c, 0):,}" for c in range(10)],
+    'Palavras-chave': [', '.join(palavras_clusters[c][:6]) for c in range(10)]
+})
+resumo
+```
+
+**Os maiores clusters** (>9k msgs cada):
+
+- **C1 — Reações e confirmações** (12.744): o "entendi/hahaha/boa" — o lubrificante conversacional da troca.
+- **C5 — Expressões importadas e links** (10.555): `pqp`, `socorro`, `mto`, `vdd`, links, palavras em inglês (`was`, `baby`). Reações em expressões geracionais.
+- **C9 — Planos e vontades** (9.459): `quero`, `agora`, `ver`, `fazer`, `casa`. O operacional do dia.
+
+**Os clusters mais "carregados emocionalmente"**:
+
+- **C2 — Afeto explícito** (7.279): "amo, paixão, adoro, linda".
+- **C4 — Comida, desejo e apelidos** (4.844): "gato, gostoso, gata, comer, fome". Desejo + comida colados.
+- **C8 — Frustrações e negatividade** (5.951): único cluster negativo — "ruim, desculpa, foda, merda".
+
+---
+
+# Mapa visual dos temas (UMAP 2D)
+
+Redução dos embeddings de 768 dimensões para 2D via UMAP (amostra de 5.000 mensagens).
+
+```{python}
+#| label: umap-plot
+coords = np.load(DATA_DIR / 'umap_coords_sample.npy')
+labels_sample = np.load(DATA_DIR / 'umap_labels_sample.npy')
+
+df_umap = pd.DataFrame({
+    'x': coords[:, 0],
+    'y': coords[:, 1],
+    'cluster': labels_sample,
+    'nome': [nomes_clusters[c] for c in labels_sample]
+})
+
+fig = px.scatter(
+    df_umap, x='x', y='y', color='nome',
+    hover_data=['cluster'],
+    height=550,
+    title="Mapa 2D dos temas (UMAP — 5.000 msgs amostradas)",
+    color_discrete_sequence=px.colors.qualitative.Set3
+)
+fig.update_traces(marker=dict(size=5, opacity=0.7))
+fig.update_layout(
+    xaxis=dict(showticklabels=False, title=""),
+    yaxis=dict(showticklabels=False, title=""),
+    legend=dict(title="Tema", orientation="v", yanchor="top", y=1, xanchor="left", x=1.02)
+)
+fig.show()
+```
+
+O mapa mostra clusters bem separados — especialmente **C3 (risadas)** e **C0 (saudações)** tendem a formar ilhas próprias, enquanto **C1 (reações)** e **C9 (planos)** ocupam o núcleo denso por serem os mais genéricos.
+
+---
+
+# Quem fala mais de cada tema?
+
+```{python}
+#| label: cluster-por-remetente
+ct = pd.crosstab(df_c['cluster'], df_c['remetente'], normalize='columns') * 100
+ct['nome'] = [nomes_clusters[c] for c in ct.index]
+
+fig = go.Figure()
+for who, cor in [('P1', '#4C78A8'), ('P2', '#F58518')]:
+    fig.add_trace(go.Bar(
+        y=ct['nome'], x=ct[who],
+        name=who, orientation='h', marker_color=cor,
+        text=ct[who].round(1).astype(str) + '%',
+        textposition='inside'
+    ))
+
+fig.update_layout(
+    barmode='group', height=500,
+    title_text="Distribuição de temas por remetente (%)",
+    xaxis_title="% das mensagens da pessoa",
+    yaxis_title=""
+)
+fig.show()
+```
+
+**Leituras:**
+
+- **C0 (saudações) e C1 (reações) são mais P1** — 5,0% vs. 1,9% e 21,4% vs. 16,9%. P1 responde mais vezes com reações curtas e dá mais "bom dia".
+- **C3 (risadas kkkk) é mais P2** — 5,3% vs. 3,8%. P2 ri mais explicitamente.
+- **C4 (comida/desejo) é mais P2** — 8,2% vs. 6,3%.
+- **C9 (planos e vontades) é bem mais P2** — 16,9% vs. 11,3%. P2 verbaliza vontades e planos com muito mais frequência.
+
+Combinado com os [estilos](11-findings-estilos.qmd): **P1 reage e sauda; P2 ri, deseja e planeja.** A divisão faz sentido — P1 é mais reativo/carinhoso, P2 é mais propositivo/verbal sobre vontades.
+
+---
+
+# Evolução temporal — os temas mudaram?
+
+```{python}
+#| label: heatmap-temporal
+df_c['ym'] = df_c['timestamp'].dt.to_period('M').astype(str)
+monthly = pd.crosstab(df_c['ym'], df_c['cluster'], normalize='index') * 100
+
+# Mantém ordem crono
+monthly = monthly.sort_index()
+# Renomeia colunas com nomes de clusters
+monthly.columns = [f"C{c}: {nomes_clusters[c][:18]}" for c in monthly.columns]
+
+fig = go.Figure(data=go.Heatmap(
+    z=monthly.values,
+    x=monthly.columns,
+    y=monthly.index,
+    colorscale='Viridis',
+    colorbar=dict(title="%"),
+    hovertemplate='%{y}<br>%{x}: %{z:.1f}%<extra></extra>'
+))
+fig.update_layout(
+    height=500,
+    title_text="Composição mensal dos temas (% por mês)",
+    xaxis_title="",
+    yaxis_title="Mês",
+    xaxis=dict(tickangle=-30)
+)
+fig.show()
+```
+
+**Tendências visíveis:**
+
+- **C2 (afeto explícito)** cresce de **6,1% em dez/2024 → 12,8% em mar/2025** e estabiliza em ~11% nos meses seguintes. Afeto verbal ganhou espaço nos primeiros meses e virou padrão.
+- **C5 (expressões importadas e links)** cai gradualmente: 18,8% em dez/2024 → 13,0% em out/2025. Pode refletir amadurecimento do vocabulário compartilhado (menos importação externa, mais repertório interno).
+- **C6 (rotina)** tem um pulo no **último mês** (13,1% em out/2025 vs. ~8% nos anteriores) — pode indicar mais conversa sobre descansar/dormir numa fase de mais cansaço ou menor volume.
+- **C9 (planos)** tem pico em **setembro/2025 (17,4%)** — período de queda de volume mas de *mais vontades verbalizadas*.
+- **C1 (reações)** é notavelmente estável em ~18–21% todo o ano.
+
+---
+
+# Juntos vs. separados
+
+```{python}
+#| label: cluster-juntos-separados
+ct = pd.crosstab(df_c['cluster'], df_c['em_encontro'], normalize='columns') * 100
+ct.columns = ['Separados', 'Juntos']
+ct['diff'] = ct['Juntos'] - ct['Separados']
+ct['nome'] = [nomes_clusters[c] for c in ct.index]
+ct = ct.sort_values('diff', ascending=False)
+
+fig = go.Figure()
+fig.add_trace(go.Bar(
+    y=ct['nome'], x=ct['diff'],
+    marker_color=['#2ECC71' if v > 0 else '#E74C3C' for v in ct['diff']],
+    orientation='h',
+    text=[f'+{v:.1f}pp' if v > 0 else f'{v:.1f}pp' for v in ct['diff']],
+    textposition='outside',
+    showlegend=False
+))
+fig.update_layout(
+    height=450,
+    title_text="Diferença juntos − separados (pontos percentuais)",
+    xaxis_title="Diferença (juntos − separados) em p.p.",
+    yaxis_title=""
+)
+fig.add_vline(x=0, line_dash="dash", line_color="gray")
+fig.show()
+```
+
+**Temas que crescem quando estão juntos:**
+
+- **C9 (planos/vontades)** — +3,4pp. Faz sentido: "vamos fazer X?", "e agora?", decisões em tempo real.
+- **C6 (rotina)** — +1,0pp.
+- **C4 (comida/desejo)** — +1,0pp. Também óbvio: comer juntos vira tema.
+
+**Temas que caem quando estão juntos:**
+
+- **C8 (frustrações)** — −1,6pp. Possível interpretação: queixas pesadas são para quando está separado e há mais distância/espaço para desabafar.
+- **C2 (afeto explícito)** — −1,3pp. O afeto por texto substitui a presença; quando junto, é dito em pessoa.
+- **C0 (saudações)** — −0,6pp. Menos "bom dia" via texto quando se acorda do lado.
+
+Padrão coerente: **texto substitui presença para afeto e saudações; juntos, o texto vira canal de planejamento e cuidado operacional.**
+
+---
+
+# Conclusões
+
+1. **Dez famílias de mensagens aparecem com boa separação.** O clustering semântico produziu grupos coerentes: saudações, reações, afeto, risadas, comida/desejo, expressões importadas, rotina, terceiros, frustrações, planos.
+
+2. **O "miolo" da conversa é reativo/confirmatório.** C1 (Reações — 19%) + C5 (Expressões importadas — 16%) + C9 (Planos — 14%) já totalizam quase metade das mensagens. A conversa é predominantemente operacional e de lubrificação social.
+
+3. **Só ~11% das mensagens são afeto explícito.** C2 ("amo, paixão, adoro"). Não é uma conversa de "eu te amo o dia todo" — é cotidiana com afeto concentrado em momentos.
+
+4. **P1 é reativo-carinhoso; P2 é propositivo-desejoso.** P1 lidera em saudações e reações curtas. P2 lidera em risadas, comida/desejo e planos/vontades.
+
+5. **Afeto explícito cresceu nos primeiros meses e estabilizou.** De ~6% em dez/2024 para ~11% em mar/2025 — aumento de 2× na primeira metade do ano.
+
+6. **Quando juntos, o texto vira logística; separados, vira afeto.** +3,4pp de planos juntos; +1,3pp de afeto explícito separados.
+
+7. **Frustrações têm canal preferencial: separados.** C8 cai 1,6pp quando juntos — sinal de que desabafos pesados usam o texto, não a presença.
+
+::: {.callout-tip}
+## Ver também
+- [08 - Findings Dinâmica](08-findings-dinamica.qmd) — *quando* cada tema acontece.
+- [09 - Findings Sentimento](09-findings-sentimento.qmd) — *tom* vs. *tema*.
+- [06 - Análise Avançada](06-advanced-analysis.qmd) — versão técnica/exploratória do clustering.
+:::

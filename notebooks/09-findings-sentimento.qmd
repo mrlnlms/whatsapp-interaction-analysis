@@ -1,0 +1,324 @@
+---
+title: "Findings - Sentimento"
+subtitle: "Qual o tom dominante e como ele evoluiu ao longo do ano"
+author: "Marlon"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+execute:
+  warning: false
+  echo: true
+  freeze: true
+---
+
+# Resumo
+
+Três modelos de análise de sentimento foram rodados sobre a conversa (**RoBERTa**, **DistilBERT**, **DeBERTa**) e um **ensemble** consolidou os resultados. Esta análise responde duas perguntas:
+
+1. **Qual modelo devemos confiar mais?**
+2. **O que ele diz sobre a conversa — tom dominante, evolução mensal, diferenças entre P1 e P2?**
+
+A resposta curta: o tom é **dominantemente neutro (58%)**, com forte viés positivo quando pende (27%) e minoria negativa (15%). Essa distribuição é extraordinariamente estável ao longo do ano — quase não se move mês a mês.
+
+::: {.callout-warning title="Caveat importante"}
+Os 3 modelos foram treinados majoritariamente em **inglês**. A conversa é em **português** coloquial, com gírias, abreviações (`mto`, `q`, `pq`, `kkkkk`) e emojis. A análise é indicativa, não definitiva. Valores absolutos devem ser lidos com cautela; **mudanças relativas** e padrões são mais confiáveis.
+:::
+
+---
+
+# Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+from whatsapp.pipeline.config import DATA_FOLDER
+DATA_DIR = Path("../data/processed") / DATA_FOLDER
+
+df = pd.read_parquet(DATA_DIR / 'messages_with_models.parquet')
+dfc = pd.read_parquet(DATA_DIR / 'messages_with_context.parquet')
+df['fase_relacionamento'] = dfc['fase_relacionamento']
+df = df[df['fase_relacionamento'] == 'Relacionamento'].copy()
+df = df[df['conteudo'].notna() & (df['conteudo'] != '')]
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+print(f"Mensagens analisadas: {len(df):,}")
+```
+
+---
+
+# Os 3 modelos têm "personalidades" diferentes
+
+Antes de escolher um, vale entender por que eles **discordam tanto**.
+
+```{python}
+#| label: personalidades
+def _norm(x):
+    if pd.isna(x): return None
+    x = str(x).lower()
+    if 'pos' in x: return 'pos'
+    if 'neg' in x: return 'neg'
+    if 'neu' in x: return 'neu'
+    return x
+
+for col in ['sentimento_roberta_label', 'sentimento_distilbert_label', 'sentimento_deberta_label']:
+    df[col+'_norm'] = df[col].apply(_norm)
+
+models = ['roberta', 'distilbert', 'deberta', 'ensemble']
+dist_rows = []
+for m in models:
+    counts = df[f'sentimento_{m}_label'].value_counts(normalize=True)
+    for label in ['positive', 'neutral', 'negative']:
+        dist_rows.append({
+            'modelo': m.capitalize(),
+            'classe': label,
+            'pct': counts.get(label, 0) * 100
+        })
+dist = pd.DataFrame(dist_rows)
+
+fig = px.bar(
+    dist, x='modelo', y='pct', color='classe',
+    color_discrete_map={'positive': '#2ECC71', 'neutral': '#95A5A6', 'negative': '#E74C3C'},
+    barmode='stack', text=dist['pct'].round(1),
+    height=400,
+    title="Distribuição de sentimento por modelo"
+)
+fig.update_layout(yaxis_title="% de mensagens", xaxis_title="")
+fig.update_traces(textposition='inside', textfont_size=11)
+fig.show()
+```
+
+**Leitura:**
+
+- **DeBERTa** é um **"neutralizador"**: rotula ~94% como neutras. Quase não enxerga emoção no texto.
+- **DistilBERT** é um **"polarizador"**: rotula ~62% como positivas, 33% como negativas e praticamente zera o neutro. Força uma categorização binária.
+- **RoBERTa** é **balanceado**: ~49% neutras, 29% positivas, 23% negativas. Tem nuance.
+- **Ensemble** (voto majoritário dos 3) fica **próximo do RoBERTa** mas com mais neutros (58%) — os "empates" vão pro meio.
+
+## Concordância entre modelos
+
+```{python}
+#| label: concordancia
+unanime = (df['sentimento_roberta_label_norm']==df['sentimento_distilbert_label_norm']) & \
+          (df['sentimento_roberta_label_norm']==df['sentimento_deberta_label_norm'])
+pct_unanime = unanime.mean() * 100
+
+def _maioria(row):
+    from collections import Counter
+    vals = [row['sentimento_roberta_label_norm'], row['sentimento_distilbert_label_norm'], row['sentimento_deberta_label_norm']]
+    if any(v is None for v in vals): return 0
+    return Counter(vals).most_common(1)[0][1]
+
+maj = df.apply(_maioria, axis=1)
+pct_maj = (maj >= 2).mean() * 100
+
+print(f"Unanimidade (3/3 concordam): {pct_unanime:.1f}%")
+print(f"Pelo menos 2/3 concordam:    {pct_maj:.1f}%")
+```
+
+Apenas **6,2% das mensagens têm 3/3 de concordância** — reforço de que os modelos "veem coisas diferentes". Em **87,9%** das mensagens pelo menos 2 modelos concordam, o que dá solidez ao ensemble.
+
+---
+
+# Qual modelo adotar?
+
+Uso o **Ensemble** como referência para findings por três razões:
+
+1. **Robusto a ruído individual**: se um modelo tem personalidade extrema (DeBERTa), o voto majoritário mitiga.
+2. **Concordância de maioria cobre ~88% dos casos** — não é base frágil.
+3. **Mantém a categoria "neutra" rica**, reconhecendo que conversa real tem muito texto sem carga emocional explícita (logística, confirmações, memes).
+
+A partir daqui, todas as análises usam `sentimento_ensemble_label`.
+
+---
+
+# Tom dominante
+
+```{python}
+#| label: distribuicao-geral
+dist = df['sentimento_ensemble_label'].value_counts(normalize=True).reset_index()
+dist.columns = ['classe', 'pct']
+dist['pct'] = dist['pct'] * 100
+dist['classe_pt'] = dist['classe'].map({'positive': 'Positivo', 'neutral': 'Neutro', 'negative': 'Negativo'})
+
+fig = go.Figure(data=[go.Pie(
+    labels=dist['classe_pt'],
+    values=dist['pct'],
+    hole=0.5,
+    marker_colors=['#95A5A6' if c=='Neutro' else '#2ECC71' if c=='Positivo' else '#E74C3C' for c in dist['classe_pt']],
+    text=dist['pct'].round(1).astype(str) + '%',
+    textinfo='label+text',
+    textfont_size=14
+)])
+fig.update_layout(
+    height=400,
+    title_text="Distribuição global do sentimento (ensemble)",
+    annotations=[dict(text='89k<br>msgs', x=0.5, y=0.5, font_size=16, showarrow=False)]
+)
+fig.show()
+```
+
+A composição é:
+
+- **58% neutras** — a maioria do que trocamos não carrega emoção clara detectável (logística, confirmações, pequenas observações cotidianas).
+- **27% positivas** — humor, carinho, entusiasmo, piada.
+- **15% negativas** — frustrações, queixas, dias difíceis.
+
+**Pender é positivo, na proporção ~1,8 : 1** (positivas vs. negativas). Não é uma conversa dominada por afeto explícito — é uma conversa **cotidiana com viés afetuoso**.
+
+---
+
+# P1 vs. P2 — diferença de tom
+
+```{python}
+#| label: por-remetente
+por_rem = df.groupby(['remetente', 'sentimento_ensemble_label']).size().unstack(fill_value=0)
+por_rem_pct = por_rem.div(por_rem.sum(axis=1), axis=0) * 100
+
+fig = go.Figure()
+cores = {'positive': '#2ECC71', 'neutral': '#95A5A6', 'negative': '#E74C3C'}
+rotulos = {'positive': 'Positivo', 'neutral': 'Neutro', 'negative': 'Negativo'}
+
+for classe in ['positive', 'neutral', 'negative']:
+    if classe in por_rem_pct.columns:
+        fig.add_trace(go.Bar(
+            name=rotulos[classe],
+            x=por_rem_pct.index,
+            y=por_rem_pct[classe],
+            marker_color=cores[classe],
+            text=por_rem_pct[classe].round(1).astype(str) + '%',
+            textposition='inside'
+        ))
+
+fig.update_layout(
+    barmode='stack',
+    height=400,
+    title_text="Distribuição do sentimento por remetente",
+    yaxis_title="% de mensagens",
+    xaxis_title=""
+)
+fig.show()
+```
+
+Diferenças sutis mas consistentes:
+
+- **P1 é ligeiramente mais positivo**: 29,8% vs. 24,8% de P2.
+- **P2 é marginalmente mais negativo**: 15,8% vs. 13,7% de P1.
+- **P2 é mais neutro**: 59,4% vs. 56,5% — comentários cotidianos "frios" pesam um pouco mais no estilo de P2.
+
+Isso cruza com o notebook de estilos: P1 é o que usa **mais emoji afetivos variados** (😍 😘 🥰) e apelidos ("linda", "baby") — o que é capturado como "positivo". P2 é mais abreviado e temporal, o que aparece como neutro para os modelos.
+
+---
+
+# Evolução mensal — o tom mudou?
+
+```{python}
+#| label: evolucao-mensal
+df['ym'] = df['timestamp'].dt.to_period('M').astype(str)
+mensal = df.groupby(['ym', 'sentimento_ensemble_label']).size().unstack(fill_value=0)
+mensal_pct = mensal.div(mensal.sum(axis=1), axis=0) * 100
+
+fig = go.Figure()
+for classe, cor, rot in [('positive', '#2ECC71', 'Positivo'),
+                          ('neutral', '#95A5A6', 'Neutro'),
+                          ('negative', '#E74C3C', 'Negativo')]:
+    if classe in mensal_pct.columns:
+        fig.add_trace(go.Scatter(
+            x=mensal_pct.index, y=mensal_pct[classe],
+            mode='lines+markers',
+            name=rot, line=dict(color=cor, width=3),
+            marker=dict(size=8)
+        ))
+
+fig.update_layout(
+    height=420,
+    title_text="Sentimento mensal — evolução (%)",
+    xaxis_title="Mês",
+    yaxis_title="% das mensagens do mês",
+    hovermode='x unified'
+)
+fig.show()
+```
+
+**Este é o finding mais surpreendente da análise.**
+
+O tom é **absurdamente estável**:
+
+- Neutras ficam sempre entre **53,8% e 65,1%**.
+- Positivas entre **23,3% e 29,7%**.
+- Negativas entre **11,6% e 17,7%**.
+
+Nenhum mês se destaca dramaticamente. Mesmo com o volume mensal tendo oscilado de 3k a 17k mensagens, a *proporção* de positivo/neutro/negativo mal se mexe.
+
+**Pontos de atenção pequenos:**
+
+- **Setembro/2025** é o mês mais neutro (65,1%) e o menos positivo (23,3%) — pode refletir a queda geral de volume no mesmo mês.
+- **Outubro/2025** tem o pico de negativas (17,7%) — maior do ano, mas ainda dentro do padrão.
+
+A hipótese natural ("conversa esfriou no fim do relacionamento") **não aparece claramente no sentimento** — aparece no **volume** (ver [08 - Dinâmica](08-findings-dinamica.qmd)) mas não no tom.
+
+---
+
+# Efeito de estarem juntos vs. separados
+
+```{python}
+#| label: juntos-vs-separados
+por_enc = df.groupby(['em_encontro', 'sentimento_ensemble_label']).size().unstack(fill_value=0)
+por_enc_pct = por_enc.div(por_enc.sum(axis=1), axis=0) * 100
+por_enc_pct.index = por_enc_pct.index.map({True: 'Juntos', False: 'Separados'})
+
+fig = go.Figure()
+cores = {'positive': '#2ECC71', 'neutral': '#95A5A6', 'negative': '#E74C3C'}
+rot = {'positive': 'Positivo', 'neutral': 'Neutro', 'negative': 'Negativo'}
+
+for classe in ['positive', 'neutral', 'negative']:
+    if classe in por_enc_pct.columns:
+        fig.add_trace(go.Bar(
+            name=rot[classe], x=por_enc_pct.index, y=por_enc_pct[classe],
+            marker_color=cores[classe],
+            text=por_enc_pct[classe].round(1).astype(str) + '%',
+            textposition='inside'
+        ))
+
+fig.update_layout(barmode='stack', height=380,
+                  title_text="Sentimento: juntos vs. separados",
+                  yaxis_title="%")
+fig.show()
+```
+
+Quando **juntos**, a conversa é mais **neutra (62,5%)** e **um pouco menos positiva (24,5%)** do que quando separados (57,1% neutro, 27,7% positivo). Isso faz sentido com a hipótese do notebook anterior: quando juntos, o texto é mais **operacional/logístico** (vídeos, memes, tarefas); a carga afetiva acontece presencialmente.
+
+---
+
+# Conclusões
+
+1. **O tom dominante é neutro com viés positivo.** 58% neutro, 27% positivo, 15% negativo — positivas pesam cerca de **1,8×** mais que negativas. Não é uma conversa de adjetivos amorosos todo o tempo; é cotidiana com afeto pontual.
+
+2. **P1 é marginalmente mais "afetuoso" na escrita.** Mais positivas (29,8% vs. 24,8%), menos negativas (13,7% vs. 15,8%). Coerente com o estilo de emojis e apelidos identificado em [11 - Estilos](11-findings-estilos.qmd).
+
+3. **O tom é notavelmente estável ao longo do ano.** Diferente do volume (que oscila 3×), a proporção de cada classe mal se move. Nem o pico de volume (jun–jul) nem a queda do fim (set–out) produzem mudança grande de tom.
+
+4. **A queda final de volume não é uma queda de tom.** Setembro/outubro têm menos mensagens, mas o sentimento nelas permanece dentro do padrão. O sinal está no *quanto se fala*, não no *como se fala*.
+
+5. **Juntos = mais neutro; separados = mais positivo (no texto).** Quando juntos, o texto é operacional; separados, é o canal principal de afeto.
+
+6. **Modelos desacordam bastante em valores absolutos** (unanimidade em só 6,2% das mensagens), mas o **ensemble é robusto** (concordância de maioria em ~88%). Leia proporções e tendências, não números exatos.
+
+::: {.callout-tip}
+## Ver também
+- [08 - Findings Dinâmica](08-findings-dinamica.qmd) — o volume *caiu* no fim, mas o tom não.
+- [10 - Findings Temas](10-findings-temas.qmd) — onde está o afeto *explícito* vs. operacional?
+- [04d - Sentiment Comparison](04d-sentiment-comparison.qmd) e [04e - Sentiment Ensemble](04e-sentiment-ensemble.qmd) — detalhe técnico dos modelos.
+:::
