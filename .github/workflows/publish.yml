@@ -36,13 +36,13 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |
-            any::tidyverse
-            any::gganimate
-            any::ggbump
-            any::ggtext
-            any::ggwordcloud
-            any::plotly
-            any::reticulate
+            tidyverse
+            gganimate
+            ggbump
+            ggtext
+            ggwordcloud
+            plotly
+            reticulate
 
       - name: Install dependencies
         run: |
