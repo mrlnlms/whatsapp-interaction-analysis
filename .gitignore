@@ -33,6 +33,9 @@ venv/
 # Sistema
 .DS_Store
 
+# Arquivos locais (originais, fontes pesadas, scratch)
+local/
+
 # Notas pessoais (nao commitar)
 Clustering Analysis/
 notebooks/*.txt
