@@ -34,16 +34,13 @@ jobs:
           r-version: '4.5'
           use-public-rspm: true
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          packages: |
-            tidyverse
-            gganimate
-            ggbump
-            ggtext
-            ggwordcloud
-            plotly
-            reticulate
+      - name: Install R packages
+        shell: Rscript {0}
+        run: |
+          install.packages(c(
+            "tidyverse", "gganimate", "ggbump", "ggtext",
+            "ggwordcloud", "plotly", "reticulate"
+          ))
 
       - name: Install dependencies
         run: |
