@@ -87,6 +87,27 @@ website:
             text: "10 - Temas"
           - href: notebooks/11-findings-estilos.qmd
             text: "11 - Estilos"
+      - text: Lab
+        menu:
+          - text: "R + Python"
+          - href: notebooks/data-viz-experiments/galeria-whatsapp-completa.qmd
+            text: "Galeria de Visualizações"
+          - href: notebooks/data-viz-experiments/r-graficos-legais.qmd
+            text: "Gráficos em R"
+          - href: notebooks/data-viz-experiments/r-test-snippet.qmd
+            text: "Snippets R"
+          - href: notebooks/data-viz-experiments/python-r-test.qmd
+            text: "Python ↔ R (reticulate)"
+          - text: "---"
+          - text: "Variantes Python"
+          - href: notebooks/experiments/01-data-cleaning_static.qmd
+            text: "Cleaning — Static"
+          - href: notebooks/experiments/01-data-cleaning_harded.qmd
+            text: "Cleaning — Hardened"
+          - href: notebooks/experiments/02-data-wrangling__.qmd
+            text: "Wrangling — v1"
+          - href: notebooks/experiments/02-data-wrangling_bkp.qmd
+            text: "Wrangling — Backup"
       - text: Referência
         menu:
           - href: docs/data-dictionary.md
@@ -146,6 +167,28 @@ website:
           - notebooks/09-findings-sentimento.qmd
           - notebooks/10-findings-temas.qmd
           - notebooks/11-findings-estilos.qmd
+      - section: "Lab"
+        contents:
+          - section: "R + Python"
+            contents:
+              - text: "Galeria de Visualizações"
+                href: notebooks/data-viz-experiments/galeria-whatsapp-completa.qmd
+              - text: "Gráficos em R"
+                href: notebooks/data-viz-experiments/r-graficos-legais.qmd
+              - text: "Snippets R"
+                href: notebooks/data-viz-experiments/r-test-snippet.qmd
+              - text: "Python ↔ R (reticulate)"
+                href: notebooks/data-viz-experiments/python-r-test.qmd
+          - section: "Variantes Python"
+            contents:
+              - text: "Cleaning — Static"
+                href: notebooks/experiments/01-data-cleaning_static.qmd
+              - text: "Cleaning — Hardened"
+                href: notebooks/experiments/01-data-cleaning_harded.qmd
+              - text: "Wrangling — v1"
+                href: notebooks/experiments/02-data-wrangling__.qmd
+              - text: "Wrangling — Backup"
+                href: notebooks/experiments/02-data-wrangling_bkp.qmd
 
   page-footer:
     center: |
