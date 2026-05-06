@@ -7,6 +7,8 @@ project:
     - "docs/*.md"
     - "!docs/archive/**"
     - "!notebooks/archive/**"
+    - "!notebooks/experiments/teste.qmd"
+    - "!local/**"
 
 website:
   title: "WhatsApp DS Analytics"
