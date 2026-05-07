@@ -84,7 +84,9 @@ display(df_density.style.hide(axis='index'))
 
 Após importar a fonte de dados para a pipeline e extrair os metadados, vamos examinar o conteúdo para entender **a natureza dos dados que estamos lidando**. O formato segue uma estrutura semi-estruturada aparentemente simples: `[DD/MM/YY, HH:MM:SS] Remetente: Mensagem`.
 
-![](../assets/images/data-overview_2025-11-21%2010.35.55.gif)
+<video autoplay loop muted playsinline width="100%">
+  <source src="../assets/images/data-overview.mp4" type="video/mp4">
+</video>
 
 > *Dados brutos exportados do WhatsApp — histórico de \~1 ano visualizado no Positron.*
 
