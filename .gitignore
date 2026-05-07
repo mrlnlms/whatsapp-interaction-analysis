@@ -8,6 +8,7 @@ data/
 !data/raw/sample/
 !data/processed/sample/
 !data/interim/sample/
+!data/external/encontros.csv
 
 # Analysis placeholders
 analysis/
