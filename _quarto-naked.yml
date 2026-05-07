@@ -1,6 +1,0 @@
-format:
-  html:
-    theme: default
-    toc: false
-    code-fold: false
-    code-tools: false

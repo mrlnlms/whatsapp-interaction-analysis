@@ -36,6 +36,10 @@ venv/
 # Arquivos locais (originais, fontes pesadas, scratch)
 local/
 
+# Perfis alternativos do Quarto (scratch de layout/tema, uso local)
+_quarto-naked.yml
+_quarto-playground.yml
+
 # Notas pessoais (nao commitar)
 Clustering Analysis/
 notebooks/*.txt
