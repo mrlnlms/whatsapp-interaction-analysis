@@ -1,5 +1,11 @@
 # WhatsApp Interaction Analysis
 
+[![Tests](https://github.com/mrlnlms/whatsapp-interaction-analysis/actions/workflows/tests.yml/badge.svg)](https://github.com/mrlnlms/whatsapp-interaction-analysis/actions/workflows/tests.yml)
+[![Quarto Publish](https://github.com/mrlnlms/whatsapp-interaction-analysis/actions/workflows/publish.yml/badge.svg)](https://github.com/mrlnlms/whatsapp-interaction-analysis/actions/workflows/publish.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![R 4.5](https://img.shields.io/badge/R-4.5-276DC3.svg?logo=r)](https://cran.r-project.org/)
+[![Quarto](https://img.shields.io/badge/Quarto-website-39729E.svg?logo=quarto)](https://quarto.org/)
+
 > End-to-end data science pipeline for WhatsApp conversation analysis — profiling, cleaning, sentiment analysis, embeddings, clustering. Python + R, Quarto-rendered, CI/CD-deployed.
 
 **[View the live site](https://mrlnlms.github.io/whatsapp-interaction-analysis/)**
