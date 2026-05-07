@@ -4,12 +4,58 @@ Histórico das fases do projeto. Não segue SemVer — projeto pré-release sem 
 
 ## Não publicado
 
-### 2026-05-06 — Lab R+Python
+### 2026-05-06/07 — Archeology v3 + manutenção
 
-- Adicionada seção **Lab** no navbar e sidebar do site Quarto com experimentos R+Python
-- Workflow de deploy fixado em R 4.5 (binários RSPM) — uso direto de `install.packages` em vez de `setup-r-dependencies` (pak)
+Reconstrução completa do histórico git e bloco de manutenção em sequência.
+
+**Archeology v3:**
+- 28 arquivos preservados que estavam fora do histórico antigo (variantes de cleaning/wrangling, R experiments, notas .md de fases pré-projeto, precursores)
+- 105 → 139 commits backdated, heatmap do GitHub corrigido (08/dez pintado, densidade 24-26/nov)
+- Pasta canonical antiga renomeada → backup → Trash; v3 virou canonical
+- Plano completo em `docs/development/plans/2026-05-06-archeology-v3.md`
+
+**Segurança:**
+- Chave Groq antiga (hardcoded em `scripts/transcribe_media.py:42` no commit `43c92ab`) removida do histórico via `git filter-repo --replace-text` em todos os blobs afetados
+- Chave rotacionada no Groq Console e atualizada no `.env` local
+- Tag local `pre-secret-cleanup` preservada como segurança caso queira reverter
+
+**CI/CD:**
+- Workflow `publish.yml` ganhou setup R 4.5 (binários RSPM) + 7 pacotes: `tidyverse`, `gganimate`, `ggbump`, `ggtext`, `ggwordcloud`, `plotly`, `reticulate`
+- Migração `setup-r-dependencies` (pak) → `install.packages` direto após bug de "dependency conflict" do pak v0.x com Ubuntu noble
+- Actions bumpadas pro Node.js 24: `checkout@v6`, `setup-python@v6`, `deploy-pages@v5`, `upload-pages-artifact@v5`
+
+**Site Quarto:**
+- Seção **Lab** no navbar e sidebar com 8 experimentos R+Python preservados:
+  - R + Python: Galeria de Visualizações, Gráficos R, Snippets R, Python ↔ R (reticulate)
+  - Variantes Python: Cleaning Static/Hardened, Wrangling v1/Backup
+- `notebooks/experiments/teste.qmd` excluído do render (imports legacy `from src.config` quebrados)
+- Link `04-sentiment-ensemble.qmd` → `04e-sentiment-ensemble.qmd` corrigido em `04d-sentiment-comparison.qmd` e `docs/notes/6.4-Comparação...`
+
+**README:**
+- Traduzido para inglês
+- **R 4.5** adicionado no Tech Stack com pacotes listados
+- Seção Lab listando os 8 experimentos R+Python
+- Seção CI/CD dedicada explicando os 2 workflows (tests + publish)
+- Quick Start corrigido (extra `[all]` inexistente → recomendação `[notebooks]` modular)
+- Badges: Tests, Quarto Publish, Python 3.11+, R 4.5, Quarto
+
+**Mídia:**
+- `data-overview` GIF (75MB, 256 cores) → MP4 H.264 (13.7MB, 16M cores) via `ffmpeg -crf 20`, redução de 82%
+- `<img>` → `<video autoplay loop muted playsinline>` em `00-data-discovery.qmd`
+- GIF original 80MB preservado em `local/` (gitignored)
+
+**Versionamento:**
+- `data/external/encontros.csv` (1KB, marcos do relacionamento — referenciado em `04-feature-engineering` e `02.3-EDA-conteudo-interacao`) versionado com exception no `.gitignore`
+- `_quarto-naked.yml` e `_quarto-playground.yml` untracked do git, mantidos no FS local como scratch de layout
 - Restauração de `.gitkeep` em `analysis/` e `data/integrated/`
-- `local/` adicionado ao gitignore (originais, fontes pesadas, scratch)
+- `local/` adicionado ao `.gitignore` (originais, fontes pesadas, scratch)
+
+**Cleanup local (~3 GB liberados):**
+- `local-workbench/REVIEW/Backup/`: 2 pastas (`whatsapp-ds-analytics 2/3`) + 24 .qmd/.md/.py soltos + 2 zips + Gemini image
+- `local-workbench/REVIEW/QUARTO Studies/`: 4 variantes experimentais + zip precursor `whatsapp-analysis-v2`
+- `local-workbench/REVIEW/QUALIA SURVEY BACKUPS/backup QMD AND QUALIA/`: subpastas `src/`, `utils/`, `notebooks/` + `_quarto.yml`
+- `Môre/onboarding Môre Smiles/WhatsAPP DS/`: pasta inteira (19 .md, 5 .txt, 10 imagens — tudo já incorporado em `docs/notes/` e `local/`)
+- `whatsapp-interaction-analysis-OLD-pre-v3/`: backup local pré-swap (2.7 GB)
 
 ### 2026-04-13 — Camada de findings + site Quarto público
 
